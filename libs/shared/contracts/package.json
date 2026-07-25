@@ -1,0 +1,31 @@
+{
+  "name": "@ft/shared-contracts",
+  "version": "0.0.1",
+  "private": true,
+  "type": "module",
+  "main": "./dist/index.js",
+  "module": "./dist/index.js",
+  "types": "./dist/index.d.ts",
+  "exports": {
+    "./package.json": "./package.json",
+    ".": {
+      "@ft/source": "./src/index.ts",
+      "types": "./dist/index.d.ts",
+      "import": "./dist/index.js",
+      "default": "./dist/index.js"
+    }
+  },
+  "nx": {
+    "name": "shared-contracts",
+    "tags": [
+      "scope:shared",
+      "type:contracts",
+      "platform:agnostic"
+    ]
+  },
+  "dependencies": {
+    "@ts-rest/core": "3.52.1",
+    "tslib": "^2.3.0",
+    "zod": "3.25.76"
+  }
+}
