@@ -2,7 +2,7 @@ import { Table, TableForeignKey, TableIndex, TableUnique } from 'typeorm';
 import type { Migration } from './migration.interface.js';
 
 export const createAuthTables: Migration = {
-  name: '001-create-auth-tables',
+  name: '20260725193215-create-auth-tables',
 
   async up({ context: queryRunner }) {
     // users.email is citext — TypeORM would create this automatically on connect if any
