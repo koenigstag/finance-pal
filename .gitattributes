@@ -1,0 +1,5 @@
+# Keep LF in the repository regardless of the contributor's OS.
+* text=auto eol=lf
+
+# Generated files: exclude from diffs and language stats.
+pnpm-lock.yaml -diff linguist-generated
