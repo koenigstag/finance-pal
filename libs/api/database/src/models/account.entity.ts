@@ -64,8 +64,9 @@ export class Account {
   @Column({ type: 'timestamptz', name: 'archived_at', nullable: true })
   archivedAt!: Date | null;
 
-  // maintained by a DB trigger on `transactions`, not application code — see
-  // "Баланс счёта: cached_balance вместо full-scan вьюхи" in 01-architecture-decisions.md
+  // Denormalized running balance, kept in sync by a DB trigger on `transactions`
+  // (added in the domain migration), not computed on read — summing the full transaction
+  // history on every balance check doesn't scale once an account has years of activity.
   @Column({ type: 'numeric', precision: 14, scale: 2, name: 'cached_balance', default: '0' })
   cachedBalance!: string;
 

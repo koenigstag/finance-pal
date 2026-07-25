@@ -50,3 +50,9 @@ Thumbs.db
 test-output
 
 local/
+
+# environment
+.env
+.env.local
+apps/**/.env
+apps/**/.env.local

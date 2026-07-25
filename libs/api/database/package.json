@@ -24,7 +24,10 @@
     ]
   },
   "dependencies": {
+    "pg": "^8.22.0",
+    "reflect-metadata": "^0.2.2",
     "tslib": "^2.3.0",
-    "typeorm": "^1.1.0"
+    "typeorm": "^1.1.0",
+    "umzug": "^3.8.3"
   }
 }
