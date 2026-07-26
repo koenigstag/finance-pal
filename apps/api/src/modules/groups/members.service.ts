@@ -5,6 +5,7 @@ import { Transactional } from 'typeorm-transactional';
 import { GroupMember, MemberRole, User } from '@ft/api-database';
 import type { AssignableMemberRole } from '@ft/shared-contracts';
 import { AbilityFactory, type GroupAuthzContext } from '../_core/authz/ability.factory';
+import { RealtimeEmitterService } from '../realtime/realtime-emitter.service';
 
 export interface MemberWithEmail {
   userId: string;
@@ -19,6 +20,7 @@ export class MembersService {
     @InjectRepository(GroupMember) private readonly members: Repository<GroupMember>,
     @InjectRepository(User) private readonly users: Repository<User>,
     private readonly abilities: AbilityFactory,
+    private readonly realtime: RealtimeEmitterService,
   ) {}
 
   async list(userId: string, groupId: string): Promise<MemberWithEmail[]> {
@@ -49,6 +51,13 @@ export class MembersService {
     const created = await this.members.save(
       this.members.create({ groupId: ctx.groupId, userId: invitee.id, role: role as MemberRole }),
     );
+    this.realtime.joinUserToGroup(invitee.id, ctx.groupId);
+    this.realtime.emitToGroup(ctx.groupId, {
+      resourceType: 'GroupMember',
+      resourceId: invitee.id,
+      action: 'created',
+      groupId: ctx.groupId,
+    });
     return toDto({ ...created, user: invitee });
   }
 
@@ -75,6 +84,12 @@ export class MembersService {
 
     await this.members.update({ groupId: ctx.groupId, userId: targetUserId }, { role: role as MemberRole });
     target.role = role as MemberRole;
+    this.realtime.emitToGroup(ctx.groupId, {
+      resourceType: 'GroupMember',
+      resourceId: targetUserId,
+      action: 'updated',
+      groupId: ctx.groupId,
+    });
     return toDto(target);
   }
 
@@ -102,6 +117,13 @@ export class MembersService {
     }
 
     await this.members.delete({ groupId: ctx.groupId, userId: targetUserId });
+    this.realtime.removeUserFromGroup(targetUserId, ctx.groupId);
+    this.realtime.emitToGroup(ctx.groupId, {
+      resourceType: 'GroupMember',
+      resourceId: targetUserId,
+      action: 'deleted',
+      groupId: ctx.groupId,
+    });
     return toDto(target);
   }
 

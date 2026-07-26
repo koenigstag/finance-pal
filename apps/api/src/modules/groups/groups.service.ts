@@ -5,6 +5,7 @@ import { Transactional } from 'typeorm-transactional';
 import { Group, GroupMember, MemberRole } from '@ft/api-database';
 import type { Action, AppAbility, MemberRole as WireRole, Subject } from '@ft/shared-contracts';
 import { AbilityFactory, type GroupAuthzContext } from '../_core/authz/ability.factory';
+import { RealtimeEmitterService } from '../realtime/realtime-emitter.service';
 import { OnboardingService, type SeedResult } from '../onboarding/onboarding.service';
 
 export interface GroupWithRole {
@@ -23,6 +24,7 @@ export class GroupsService {
     @InjectRepository(GroupMember) private readonly members: Repository<GroupMember>,
     private readonly abilities: AbilityFactory,
     private readonly onboarding: OnboardingService,
+    private readonly realtime: RealtimeEmitterService,
   ) {}
 
   async list(userId: string): Promise<GroupWithRole[]> {
@@ -43,6 +45,7 @@ export class GroupsService {
   async rename(userId: string, groupId: string, name: string): Promise<GroupWithRole> {
     const ctx = await this.authorize(userId, groupId, 'update', 'Group');
     await this.groups.update(groupId, { name });
+    this.realtime.emitToGroup(groupId, { resourceType: 'Group', resourceId: groupId, action: 'updated', groupId });
     return this.reload(ctx);
   }
 
@@ -50,6 +53,7 @@ export class GroupsService {
   async archive(userId: string, groupId: string): Promise<GroupWithRole> {
     const ctx = await this.authorize(userId, groupId, 'archive', 'Group');
     await this.groups.update(groupId, { archivedAt: new Date() });
+    this.realtime.emitToGroup(groupId, { resourceType: 'Group', resourceId: groupId, action: 'archived', groupId });
     return this.reload(ctx);
   }
 
@@ -57,6 +61,7 @@ export class GroupsService {
   async restore(userId: string, groupId: string): Promise<GroupWithRole> {
     const ctx = await this.authorize(userId, groupId, 'restore', 'Group');
     await this.groups.update(groupId, { archivedAt: null });
+    this.realtime.emitToGroup(groupId, { resourceType: 'Group', resourceId: groupId, action: 'restored', groupId });
     return this.reload(ctx);
   }
 
