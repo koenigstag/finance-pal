@@ -1,0 +1,105 @@
+import { initContract } from '@ts-rest/core';
+import { z } from 'zod';
+import { moneySchema } from '../common/money.schema.js';
+import { errorSchema } from '../common/error.schema.js';
+
+const c = initContract();
+
+export const TRANSACTION_TYPES = ['expense', 'income', 'transfer'] as const;
+export const transactionTypeSchema = z.enum(TRANSACTION_TYPES);
+
+export const transactionSchema = z.object({
+  id: z.string().uuid(),
+  groupId: z.string().uuid(),
+  type: transactionTypeSchema,
+  date: z.string().datetime(),
+  amount: moneySchema,
+  currencyId: z.number().int(),
+  accountId: z.string().uuid(),
+  categoryId: z.string().uuid().nullable(),
+  toAccountId: z.string().uuid().nullable(),
+  destAmount: moneySchema.nullable(),
+  note: z.string().nullable(),
+  tagIds: z.array(z.string().uuid()),
+  createdAt: z.string().datetime(),
+  updatedAt: z.string().datetime(),
+});
+
+const createTransactionBodySchema = z.object({
+  type: transactionTypeSchema,
+  date: z.string().datetime(),
+  amount: moneySchema,
+  currencyId: z.number().int(),
+  accountId: z.string().uuid(),
+  categoryId: z.string().uuid().nullable().optional(),
+  toAccountId: z.string().uuid().nullable().optional(),
+  destAmount: moneySchema.nullable().optional(),
+  note: z.string().optional(),
+  tagIds: z.array(z.string().uuid()).optional(),
+});
+
+const updateTransactionBodySchema = createTransactionBodySchema.partial();
+
+const transactionListQuerySchema = z.object({
+  cursor: z.string().optional(),
+  limit: z.coerce.number().int().min(1).max(200).optional(),
+  accountId: z.string().uuid().optional(),
+  categoryId: z.string().uuid().optional(),
+  tagId: z.string().uuid().optional(),
+  type: transactionTypeSchema.optional(),
+  dateFrom: z.string().datetime().optional(),
+  dateTo: z.string().datetime().optional(),
+  search: z.string().optional(),
+});
+
+const transactionListResponseSchema = z.object({
+  items: z.array(transactionSchema),
+  nextCursor: z.string().nullable(),
+});
+
+const groupPathParams = z.object({ groupId: z.string().uuid() });
+const transactionPathParams = z.object({ groupId: z.string().uuid(), transactionId: z.string().uuid() });
+
+export const transactionsContract = c.router(
+  {
+    list: {
+      method: 'GET',
+      path: '/groups/:groupId/transactions',
+      pathParams: groupPathParams,
+      query: transactionListQuerySchema,
+      responses: { 200: transactionListResponseSchema, 400: errorSchema, 404: errorSchema },
+      summary: 'List transactions in a group, cursor-paginated by date desc, filterable',
+    },
+    create: {
+      method: 'POST',
+      path: '/groups/:groupId/transactions',
+      pathParams: groupPathParams,
+      body: createTransactionBodySchema,
+      responses: { 201: transactionSchema, 400: errorSchema, 403: errorSchema, 404: errorSchema },
+      summary: 'Create a transaction (expense/income/transfer)',
+    },
+    get: {
+      method: 'GET',
+      path: '/groups/:groupId/transactions/:transactionId',
+      pathParams: transactionPathParams,
+      responses: { 200: transactionSchema, 404: errorSchema },
+      summary: 'Get one transaction',
+    },
+    update: {
+      method: 'PATCH',
+      path: '/groups/:groupId/transactions/:transactionId',
+      pathParams: transactionPathParams,
+      body: updateTransactionBodySchema,
+      responses: { 200: transactionSchema, 400: errorSchema, 403: errorSchema, 404: errorSchema },
+      summary: 'Update a transaction',
+    },
+    remove: {
+      method: 'DELETE',
+      path: '/groups/:groupId/transactions/:transactionId',
+      pathParams: transactionPathParams,
+      responses: { 200: transactionSchema, 403: errorSchema, 404: errorSchema },
+      summary: 'Soft-delete a transaction',
+    },
+  },
+  { pathPrefix: '/api' },
+);

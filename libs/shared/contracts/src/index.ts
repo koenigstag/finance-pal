@@ -9,3 +9,4 @@ export * from './lib/ledger/currencies.contract.js';
 export * from './lib/ledger/accounts.contract.js';
 export * from './lib/ledger/categories.contract.js';
 export * from './lib/ledger/tags.contract.js';
+export * from './lib/ledger/transactions.contract.js';

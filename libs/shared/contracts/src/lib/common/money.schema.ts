@@ -10,3 +10,9 @@ export const moneySchema = z
   .regex(/^\d{1,12}(\.\d{1,2})?$/, 'invalid money format');
 
 export type Money = z.infer<typeof moneySchema>;
+
+// A single-comparison parse, not stored or passed anywhere — safe despite money otherwise
+// always traveling as a string, since float rounding only bites on repeated arithmetic.
+export function isPositiveMoney(value: string): boolean {
+  return Number(value) > 0;
+}
