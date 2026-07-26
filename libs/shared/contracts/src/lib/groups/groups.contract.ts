@@ -17,6 +17,19 @@ const errorSchema = z.object({
   message: z.string(),
 });
 
+// Excludes 'owner' on purpose: promoting a member to owner also has to move Group.ownerId in
+// lockstep (see the comment on that column), which is a distinct, not-yet-built
+// transferOwnership flow — not a role you can hand out through plain member management.
+export const assignableMemberRoleSchema = z.enum(['admin', 'member', 'viewer']);
+export type AssignableMemberRole = z.infer<typeof assignableMemberRoleSchema>;
+
+export const memberSchema = z.object({
+  userId: z.string().uuid(),
+  email: z.string().email(),
+  role: z.enum(MEMBER_ROLES),
+  joinedAt: z.string().datetime(),
+});
+
 export const groupsContract = c.router(
   {
     list: {
@@ -67,6 +80,51 @@ export const groupsContract = c.router(
         404: errorSchema,
       },
       summary: 'Restore an archived group (owner only)',
+    },
+    listMembers: {
+      method: 'GET',
+      path: '/groups/:groupId/members',
+      pathParams: z.object({ groupId: z.string().uuid() }),
+      responses: { 200: z.array(memberSchema), 404: errorSchema },
+      summary: 'List members of a group',
+    },
+    inviteMember: {
+      method: 'POST',
+      path: '/groups/:groupId/members',
+      pathParams: z.object({ groupId: z.string().uuid() }),
+      body: z.object({ email: z.string().email(), role: assignableMemberRoleSchema }),
+      responses: {
+        201: memberSchema,
+        403: errorSchema,
+        404: errorSchema,
+        409: errorSchema,
+      },
+      summary: 'Invite an existing user to a group by email (owner/admin only)',
+    },
+    updateMemberRole: {
+      method: 'PATCH',
+      path: '/groups/:groupId/members/:userId',
+      pathParams: z.object({ groupId: z.string().uuid(), userId: z.string().uuid() }),
+      body: z.object({ role: assignableMemberRoleSchema }),
+      responses: {
+        200: memberSchema,
+        403: errorSchema,
+        404: errorSchema,
+        409: errorSchema,
+      },
+      summary: "Change a member's role (owner/admin only)",
+    },
+    removeMember: {
+      method: 'DELETE',
+      path: '/groups/:groupId/members/:userId',
+      pathParams: z.object({ groupId: z.string().uuid(), userId: z.string().uuid() }),
+      responses: {
+        200: memberSchema,
+        403: errorSchema,
+        404: errorSchema,
+        409: errorSchema,
+      },
+      summary: 'Remove a member (owner/admin), or leave the group yourself',
     },
   },
   { pathPrefix: '/api' },

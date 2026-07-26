@@ -1,13 +1,14 @@
 import { Module } from '@nestjs/common';
 import { TypeOrmModule } from '@nestjs/typeorm';
-import { Group, GroupMember } from '@ft/api-database';
+import { Group, GroupMember, User } from '@ft/api-database';
 import { AuthzModule } from '../_core/authz/authz.module';
 import { GroupsController } from './groups.controller';
 import { GroupsService } from './groups.service';
+import { MembersService } from './members.service';
 
 @Module({
-  imports: [TypeOrmModule.forFeature([Group, GroupMember]), AuthzModule],
+  imports: [TypeOrmModule.forFeature([Group, GroupMember, User]), AuthzModule],
   controllers: [GroupsController],
-  providers: [GroupsService],
+  providers: [GroupsService, MembersService],
 })
 export class GroupsModule {}

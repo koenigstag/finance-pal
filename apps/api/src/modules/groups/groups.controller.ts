@@ -3,6 +3,7 @@ import { TsRestHandler, tsRestHandler } from '@ts-rest/nest';
 import { groupsContract } from '@ft/shared-contracts';
 import { CurrentUser, type RequestUser } from '../_core/authn/request-user';
 import { GroupsService, type GroupWithRole } from './groups.service';
+import { MembersService, type MemberWithEmail } from './members.service';
 
 function toGroupDto({ group, role }: GroupWithRole) {
   return {
@@ -14,9 +15,21 @@ function toGroupDto({ group, role }: GroupWithRole) {
   };
 }
 
+function toMemberDto(member: MemberWithEmail) {
+  return {
+    userId: member.userId,
+    email: member.email,
+    role: member.role,
+    joinedAt: member.joinedAt.toISOString(),
+  };
+}
+
 @Controller()
 export class GroupsController {
-  constructor(private readonly groups: GroupsService) {}
+  constructor(
+    private readonly groups: GroupsService,
+    private readonly members: MembersService,
+  ) {}
 
   @TsRestHandler(groupsContract.list)
   list(@CurrentUser() user?: RequestUser) {
@@ -55,6 +68,38 @@ export class GroupsController {
     return tsRestHandler(groupsContract.restore, async ({ params }) => {
       const updated = await this.groups.restore(requireUser(user).id, params.groupId);
       return { status: 200 as const, body: toGroupDto(updated) };
+    });
+  }
+
+  @TsRestHandler(groupsContract.listMembers)
+  listMembers(@CurrentUser() user?: RequestUser) {
+    return tsRestHandler(groupsContract.listMembers, async ({ params }) => {
+      const members = await this.members.list(requireUser(user).id, params.groupId);
+      return { status: 200 as const, body: members.map(toMemberDto) };
+    });
+  }
+
+  @TsRestHandler(groupsContract.inviteMember)
+  inviteMember(@CurrentUser() user?: RequestUser) {
+    return tsRestHandler(groupsContract.inviteMember, async ({ params, body }) => {
+      const created = await this.members.invite(requireUser(user).id, params.groupId, body.email, body.role);
+      return { status: 201 as const, body: toMemberDto(created) };
+    });
+  }
+
+  @TsRestHandler(groupsContract.updateMemberRole)
+  updateMemberRole(@CurrentUser() user?: RequestUser) {
+    return tsRestHandler(groupsContract.updateMemberRole, async ({ params, body }) => {
+      const updated = await this.members.updateRole(requireUser(user).id, params.groupId, params.userId, body.role);
+      return { status: 200 as const, body: toMemberDto(updated) };
+    });
+  }
+
+  @TsRestHandler(groupsContract.removeMember)
+  removeMember(@CurrentUser() user?: RequestUser) {
+    return tsRestHandler(groupsContract.removeMember, async ({ params }) => {
+      const removed = await this.members.remove(requireUser(user).id, params.groupId, params.userId);
+      return { status: 200 as const, body: toMemberDto(removed) };
     });
   }
 }
