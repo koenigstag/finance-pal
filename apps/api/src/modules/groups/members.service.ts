@@ -27,8 +27,16 @@ export class MembersService {
     return rows.map(toDto);
   }
 
+  // Named "Existing" because there's no invite-before-registration flow: the invitee has to
+  // already have an account, or this 404s. If that changes, this method still only covers the
+  // existing-user path — a new one would handle the other.
   @Transactional()
-  async invite(userId: string, groupId: string, email: string, role: AssignableMemberRole): Promise<MemberWithEmail> {
+  async inviteExisting(
+    userId: string,
+    groupId: string,
+    email: string,
+    role: AssignableMemberRole,
+  ): Promise<MemberWithEmail> {
     const ctx = await this.authorizeManage(userId, groupId);
     const invitee = await this.users.findOneBy({ email });
     if (!invitee) {

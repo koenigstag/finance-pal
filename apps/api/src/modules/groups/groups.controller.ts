@@ -82,7 +82,7 @@ export class GroupsController {
   @TsRestHandler(groupsContract.inviteMember)
   inviteMember(@CurrentUser() user?: RequestUser) {
     return tsRestHandler(groupsContract.inviteMember, async ({ params, body }) => {
-      const created = await this.members.invite(requireUser(user).id, params.groupId, body.email, body.role);
+      const created = await this.members.inviteExisting(requireUser(user).id, params.groupId, body.email, body.role);
       return { status: 201 as const, body: toMemberDto(created) };
     });
   }
