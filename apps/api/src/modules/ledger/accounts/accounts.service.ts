@@ -5,6 +5,7 @@ import { Transactional } from 'typeorm-transactional';
 import { Account, AccountTarget, AccountType } from '@ft/api-database';
 import { ACCOUNT_TYPES, type Action, type AppAbility, type Subject } from '@ft/shared-contracts';
 import { AbilityFactory } from '../../_core/authz/ability.factory';
+import { RealtimeEmitterService } from '../../realtime/realtime-emitter.service';
 
 // The shared string union, not api-database's TypeORM enum — see the identical comment on
 // GroupWithRole.role in GroupsService for why (assignable one way, not the other).
@@ -33,6 +34,7 @@ export class AccountsService {
     @InjectRepository(Account) private readonly accounts: Repository<Account>,
     @InjectRepository(AccountTarget) private readonly targets: Repository<AccountTarget>,
     private readonly abilities: AbilityFactory,
+    private readonly realtime: RealtimeEmitterService,
   ) {}
 
   async list(userId: string, groupId: string, includeArchived: boolean): Promise<Account[]> {
@@ -57,7 +59,9 @@ export class AccountsService {
       groupId,
       createdBy: userId,
     });
-    return this.accounts.save(account);
+    const saved = await this.accounts.save(account);
+    this.realtime.emitToGroup(groupId, { resourceType: 'Account', resourceId: saved.id, action: 'created', groupId });
+    return saved;
   }
 
   @Transactional()
@@ -65,7 +69,9 @@ export class AccountsService {
     await this.authorize(userId, groupId, 'update', 'Account');
     await this.findOrFail(groupId, accountId);
     await this.accounts.update({ id: accountId, groupId }, { ...patch, type: patch.type as AccountType | undefined });
-    return this.findOrFail(groupId, accountId);
+    const updated = await this.findOrFail(groupId, accountId);
+    this.realtime.emitToGroup(groupId, { resourceType: 'Account', resourceId: accountId, action: 'updated', groupId });
+    return updated;
   }
 
   @Transactional()
@@ -73,7 +79,9 @@ export class AccountsService {
     await this.authorize(userId, groupId, 'update', 'Account');
     await this.findOrFail(groupId, accountId);
     await this.accounts.update({ id: accountId, groupId }, { archived: true, archivedAt: new Date() });
-    return this.findOrFail(groupId, accountId);
+    const account = await this.findOrFail(groupId, accountId);
+    this.realtime.emitToGroup(groupId, { resourceType: 'Account', resourceId: accountId, action: 'archived', groupId });
+    return account;
   }
 
   @Transactional()
@@ -81,7 +89,9 @@ export class AccountsService {
     await this.authorize(userId, groupId, 'update', 'Account');
     await this.findOrFail(groupId, accountId);
     await this.accounts.update({ id: accountId, groupId }, { archived: false, archivedAt: null });
-    return this.findOrFail(groupId, accountId);
+    const account = await this.findOrFail(groupId, accountId);
+    this.realtime.emitToGroup(groupId, { resourceType: 'Account', resourceId: accountId, action: 'restored', groupId });
+    return account;
   }
 
   @Transactional()
@@ -89,6 +99,7 @@ export class AccountsService {
     await this.authorize(userId, groupId, 'delete', 'Account');
     const account = await this.findOrFail(groupId, accountId);
     await this.accounts.softDelete({ id: accountId, groupId });
+    this.realtime.emitToGroup(groupId, { resourceType: 'Account', resourceId: accountId, action: 'deleted', groupId });
     return account;
   }
 
@@ -108,7 +119,14 @@ export class AccountsService {
       limitAmount: input.limitAmount !== undefined ? input.limitAmount : (existing?.limitAmount ?? null),
       goalAmount: input.goalAmount !== undefined ? input.goalAmount : (existing?.goalAmount ?? null),
     });
-    return this.targets.save(target);
+    const saved = await this.targets.save(target);
+    this.realtime.emitToGroup(groupId, {
+      resourceType: 'AccountTarget',
+      resourceId: accountId,
+      action: 'updated',
+      groupId,
+    });
+    return saved;
   }
 
   private async findOrFail(groupId: string, accountId: string): Promise<Account> {

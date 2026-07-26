@@ -5,6 +5,7 @@ import { Transactional } from 'typeorm-transactional';
 import { Category, CategoryType } from '@ft/api-database';
 import { CATEGORY_TYPES, type Action, type AppAbility, type Subject } from '@ft/shared-contracts';
 import { AbilityFactory } from '../../_core/authz/ability.factory';
+import { RealtimeEmitterService } from '../../realtime/realtime-emitter.service';
 
 // The shared string union, not api-database's TypeORM enum — see the identical comment on
 // GroupWithRole.role in GroupsService for why (assignable one way, not the other).
@@ -24,6 +25,7 @@ export class CategoriesService {
   constructor(
     @InjectRepository(Category) private readonly categories: Repository<Category>,
     private readonly abilities: AbilityFactory,
+    private readonly realtime: RealtimeEmitterService,
   ) {}
 
   async list(userId: string, groupId: string, includeArchived: boolean): Promise<Category[]> {
@@ -52,7 +54,9 @@ export class CategoriesService {
       groupId,
       createdBy: userId,
     });
-    return this.categories.save(category);
+    const saved = await this.categories.save(category);
+    this.realtime.emitToGroup(groupId, { resourceType: 'Category', resourceId: saved.id, action: 'created', groupId });
+    return saved;
   }
 
   @Transactional()
@@ -72,7 +76,9 @@ export class CategoriesService {
       { id: categoryId, groupId },
       { ...patch, type: patch.type as CategoryType | undefined },
     );
-    return this.findOrFail(groupId, categoryId);
+    const updated = await this.findOrFail(groupId, categoryId);
+    this.realtime.emitToGroup(groupId, { resourceType: 'Category', resourceId: categoryId, action: 'updated', groupId });
+    return updated;
   }
 
   @Transactional()
@@ -80,7 +86,9 @@ export class CategoriesService {
     await this.authorize(userId, groupId, 'update', 'Category');
     await this.findOrFail(groupId, categoryId);
     await this.categories.update({ id: categoryId, groupId }, { archived: true, archivedAt: new Date() });
-    return this.findOrFail(groupId, categoryId);
+    const category = await this.findOrFail(groupId, categoryId);
+    this.realtime.emitToGroup(groupId, { resourceType: 'Category', resourceId: categoryId, action: 'archived', groupId });
+    return category;
   }
 
   @Transactional()
@@ -88,7 +96,9 @@ export class CategoriesService {
     await this.authorize(userId, groupId, 'update', 'Category');
     await this.findOrFail(groupId, categoryId);
     await this.categories.update({ id: categoryId, groupId }, { archived: false, archivedAt: null });
-    return this.findOrFail(groupId, categoryId);
+    const category = await this.findOrFail(groupId, categoryId);
+    this.realtime.emitToGroup(groupId, { resourceType: 'Category', resourceId: categoryId, action: 'restored', groupId });
+    return category;
   }
 
   @Transactional()
@@ -96,6 +106,7 @@ export class CategoriesService {
     await this.authorize(userId, groupId, 'delete', 'Category');
     const category = await this.findOrFail(groupId, categoryId);
     await this.categories.softDelete({ id: categoryId, groupId });
+    this.realtime.emitToGroup(groupId, { resourceType: 'Category', resourceId: categoryId, action: 'deleted', groupId });
     return category;
   }
 

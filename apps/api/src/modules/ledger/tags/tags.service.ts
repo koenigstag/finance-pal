@@ -5,12 +5,14 @@ import { Transactional } from 'typeorm-transactional';
 import { Tag } from '@ft/api-database';
 import type { Action, AppAbility, Subject } from '@ft/shared-contracts';
 import { AbilityFactory } from '../../_core/authz/ability.factory';
+import { RealtimeEmitterService } from '../../realtime/realtime-emitter.service';
 
 @Injectable()
 export class TagsService {
   constructor(
     @InjectRepository(Tag) private readonly tags: Repository<Tag>,
     private readonly abilities: AbilityFactory,
+    private readonly realtime: RealtimeEmitterService,
   ) {}
 
   async list(userId: string, groupId: string): Promise<Tag[]> {
@@ -22,7 +24,9 @@ export class TagsService {
   async create(userId: string, groupId: string, name: string): Promise<Tag> {
     await this.authorize(userId, groupId, 'create', 'Tag');
     await this.assertNameFree(groupId, name);
-    return this.tags.save(this.tags.create({ groupId, name }));
+    const saved = await this.tags.save(this.tags.create({ groupId, name }));
+    this.realtime.emitToGroup(groupId, { resourceType: 'Tag', resourceId: saved.id, action: 'created', groupId });
+    return saved;
   }
 
   @Transactional()
@@ -31,7 +35,9 @@ export class TagsService {
     await this.findOrFail(groupId, tagId);
     await this.assertNameFree(groupId, name, tagId);
     await this.tags.update({ id: tagId, groupId }, { name });
-    return this.findOrFail(groupId, tagId);
+    const updated = await this.findOrFail(groupId, tagId);
+    this.realtime.emitToGroup(groupId, { resourceType: 'Tag', resourceId: tagId, action: 'updated', groupId });
+    return updated;
   }
 
   @Transactional()
@@ -39,6 +45,7 @@ export class TagsService {
     await this.authorize(userId, groupId, 'delete', 'Tag');
     const tag = await this.findOrFail(groupId, tagId);
     await this.tags.delete({ id: tagId, groupId });
+    this.realtime.emitToGroup(groupId, { resourceType: 'Tag', resourceId: tagId, action: 'deleted', groupId });
     return tag;
   }
 

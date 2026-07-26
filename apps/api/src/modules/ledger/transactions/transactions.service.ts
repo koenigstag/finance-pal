@@ -11,6 +11,7 @@ import {
   type Subject,
 } from '@ft/shared-contracts';
 import { AbilityFactory } from '../../_core/authz/ability.factory';
+import { RealtimeEmitterService } from '../../realtime/realtime-emitter.service';
 import { decodeCursor, encodeCursor } from './cursor.util';
 
 // The shared string union, not api-database's TypeORM enum — see the identical comment on
@@ -59,6 +60,7 @@ export class TransactionsService {
     @InjectRepository(Category) private readonly categories: Repository<Category>,
     @InjectRepository(Tag) private readonly tags: Repository<Tag>,
     private readonly abilities: AbilityFactory,
+    private readonly realtime: RealtimeEmitterService,
   ) {}
 
   async list(userId: string, groupId: string, filter: ListTransactionsFilter): Promise<TransactionPage> {
@@ -153,6 +155,12 @@ export class TransactionsService {
       await this.transactionTags.save(tagIds.map((tagId) => this.transactionTags.create({ transactionId: transaction.id, tagId })));
     }
 
+    this.realtime.emitToGroup(groupId, {
+      resourceType: 'Transaction',
+      resourceId: transaction.id,
+      action: 'created',
+      groupId,
+    });
     return { transaction, tagIds };
   }
 
@@ -207,6 +215,12 @@ export class TransactionsService {
 
     const transaction = await this.findOrFail(groupId, transactionId);
     const tagIds = patchedTagIds ?? (await this.loadTagIds([transactionId])).get(transactionId) ?? [];
+    this.realtime.emitToGroup(groupId, {
+      resourceType: 'Transaction',
+      resourceId: transactionId,
+      action: 'updated',
+      groupId,
+    });
     return { transaction, tagIds };
   }
 
@@ -216,6 +230,12 @@ export class TransactionsService {
     const transaction = await this.findOrFail(groupId, transactionId);
     const tagIds = (await this.loadTagIds([transactionId])).get(transactionId) ?? [];
     await this.transactions.softDelete({ id: transactionId, groupId });
+    this.realtime.emitToGroup(groupId, {
+      resourceType: 'Transaction',
+      resourceId: transactionId,
+      action: 'deleted',
+      groupId,
+    });
     return { transaction, tagIds };
   }
 
