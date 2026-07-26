@@ -6,7 +6,13 @@ export const envSchema = z.object({
   DATABASE_URL: z.string().min(1),
   JWT_ACCESS_SECRET: z.string().min(32),
   JWT_ACCESS_TTL: z.string().default('15m'),
-  JWT_REFRESH_TTL: z.string().default('30d'),
+  // Plain number of seconds, not a duration string like the access TTL above — this one is
+  // used to compute refresh_tokens.expires_at ourselves, not just handed to a jwt library.
+  JWT_REFRESH_TTL_SECONDS: z.coerce
+    .number()
+    .int()
+    .positive()
+    .default(60 * 60 * 24 * 30),
 });
 
 export type Env = z.infer<typeof envSchema>;

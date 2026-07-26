@@ -22,7 +22,9 @@ module.exports = {
   // "commonjs" prefix is required too — bare string externals (e.g. 'typeorm') default to the
   // "var" type without an explicit externalsType, compiling to a global-variable reference
   // instead of require('typeorm').
-  externals: [{ typeorm: 'commonjs typeorm', pg: 'commonjs pg' }],
+  // argon2 is a native addon (.node binary) — webpack can't bundle it under any
+  // configuration, same treatment as typeorm/pg above.
+  externals: [{ typeorm: 'commonjs typeorm', pg: 'commonjs pg', argon2: 'commonjs argon2' }],
   plugins: [
     new NxAppWebpackPlugin({
       target: 'node',
