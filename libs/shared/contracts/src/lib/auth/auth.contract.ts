@@ -1,5 +1,6 @@
 import { initContract } from '@ts-rest/core';
 import { z } from 'zod';
+import { errorSchema } from '../common/error.schema.js';
 
 const c = initContract();
 
@@ -17,11 +18,6 @@ export const authTokensSchema = z.object({
 const credentialsSchema = z.object({
   email: z.string().email(),
   password: z.string().min(8),
-});
-
-const errorSchema = z.object({
-  statusCode: z.number(),
-  message: z.string(),
 });
 
 export const authContract = c.router(

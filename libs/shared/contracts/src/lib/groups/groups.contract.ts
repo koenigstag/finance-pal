@@ -1,6 +1,7 @@
 import { initContract } from '@ts-rest/core';
 import { z } from 'zod';
 import { MEMBER_ROLES } from '../authz/ability.js';
+import { errorSchema } from '../common/error.schema.js';
 
 const c = initContract();
 
@@ -10,11 +11,6 @@ export const groupSchema = z.object({
   ownerId: z.string().uuid(),
   archivedAt: z.string().datetime().nullable(),
   role: z.enum(MEMBER_ROLES),
-});
-
-const errorSchema = z.object({
-  statusCode: z.number(),
-  message: z.string(),
 });
 
 // Excludes 'owner' on purpose: promoting a member to owner also has to move Group.ownerId in

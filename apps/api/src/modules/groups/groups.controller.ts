@@ -1,7 +1,8 @@
-import { Controller, UnauthorizedException } from '@nestjs/common';
+import { Controller } from '@nestjs/common';
 import { TsRestHandler, tsRestHandler } from '@ts-rest/nest';
 import { groupsContract } from '@ft/shared-contracts';
 import { CurrentUser, type RequestUser } from '../_core/authn/request-user';
+import { requireUser } from '../_core/authn/require-user';
 import { GroupsService, type GroupWithRole } from './groups.service';
 import { MembersService, type MemberWithEmail } from './members.service';
 
@@ -110,14 +111,4 @@ export class GroupsController {
       return { status: 200 as const, body: toMemberDto(removed) };
     });
   }
-}
-
-// JwtAuthGuard populates request.user for every non-@Public route, so this should be
-// unreachable — it exists so the type is non-optional downstream without a cast that would
-// silently produce `undefined.id` if the guard were ever detached from this controller.
-function requireUser(user: RequestUser | undefined): RequestUser {
-  if (!user) {
-    throw new UnauthorizedException('Missing authenticated user');
-  }
-  return user;
 }
