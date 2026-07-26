@@ -10,5 +10,8 @@ import { MembersService } from './members.service';
   imports: [TypeOrmModule.forFeature([Group, GroupMember, User]), AuthzModule],
   controllers: [GroupsController],
   providers: [GroupsService, MembersService],
+  // GroupsService is reused by OnboardingModule to create a new user's default group —
+  // same RLS-pinned insert path, no reason to duplicate it.
+  exports: [GroupsService],
 })
 export class GroupsModule {}

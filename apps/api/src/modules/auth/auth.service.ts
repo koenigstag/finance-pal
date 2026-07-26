@@ -7,6 +7,7 @@ import { Propagation, Transactional } from 'typeorm-transactional';
 import * as argon2 from 'argon2';
 import { RefreshToken, User } from '@ft/api-database';
 import type { Env } from '../_core/config/env.schema';
+import { OnboardingService } from '../onboarding/onboarding.service';
 import { generateOpaqueToken, parseOpaqueToken, secretMatchesHash } from './tokens.util';
 
 const ARGON2_OPTIONS = {
@@ -29,6 +30,7 @@ export class AuthService {
     @InjectRepository(RefreshToken) private readonly refreshTokens: Repository<RefreshToken>,
     private readonly jwt: JwtService,
     private readonly config: ConfigService<Env, true>,
+    private readonly onboarding: OnboardingService,
   ) {}
 
   @Transactional()
@@ -41,8 +43,8 @@ export class AuthService {
     const passwordHash = await argon2.hash(password, ARGON2_OPTIONS);
     const user = await this.users.save(this.users.create({ email, passwordHash }));
 
-    // Profile + group + reference-data seeding also happen in register() per the architecture
-    // decision, but that's phase 5 (api/reference + onboarding) — not built yet.
+    await this.onboarding.seedNewUser(user);
+
     return this.issueTokens(user);
   }
 
