@@ -4,6 +4,7 @@ import { createDomainSchema } from './20260725210000-create-domain-schema.js';
 import { seedCurrencies } from './20260725220000-seed-currencies.js';
 import { enableRowLevelSecurity } from './20260726120000-enable-rls.js';
 import { fixGroupsSelectOwnerVisibility } from './20260726130000-fix-groups-select-owner-visibility.js';
+import { addProfileOnboardingFields } from './20260726140000-add-profile-onboarding-fields.js';
 
 export const migrations: readonly Migration[] = [
   createAuthTables,
@@ -11,6 +12,7 @@ export const migrations: readonly Migration[] = [
   seedCurrencies,
   enableRowLevelSecurity,
   fixGroupsSelectOwnerVisibility,
+  addProfileOnboardingFields,
 ];
 
 export * from './migration.interface.js';

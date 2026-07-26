@@ -26,6 +26,14 @@ export class Profile {
   @Column({ type: 'text', default: 'en' })
   language!: string;
 
+  // Both nullable and filled in only through the onboarding flow, not at profile creation —
+  // see the migration that added them for why that matters for isOnboarded/missingFields.
+  @Column({ type: 'text', name: 'display_name', nullable: true })
+  displayName!: string | null;
+
+  @Column({ type: 'smallint', name: 'start_day_of_week', nullable: true })
+  startDayOfWeek!: number | null;
+
   @CreateDateColumn({ type: 'timestamptz', name: 'created_at' })
   createdAt!: Date;
 }

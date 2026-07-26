@@ -1,55 +1,90 @@
-import { Injectable } from '@nestjs/common';
-import { InjectDataSource, InjectRepository } from '@nestjs/typeorm';
-import { DataSource, Repository } from 'typeorm';
+import { ConflictException, Injectable, NotFoundException } from '@nestjs/common';
+import { InjectRepository } from '@nestjs/typeorm';
+import { Repository } from 'typeorm';
 import { Transactional } from 'typeorm-transactional';
 import { Account, Category, Profile, User } from '@ft/api-database';
-import { GroupsService } from '../groups/groups.service';
 import { ACCOUNT_TEMPLATES } from './templates/account-templates.const';
 import { CATEGORY_TEMPLATES } from './templates/category-templates.const';
-import { DEFAULT_VALUES } from './onboarding.const';
+import { DEFAULT_VALUES, ONBOARDING_REQUIRED_FIELDS } from './onboarding.const';
 
-export interface OnboardingResult {
-  profile: Profile;
-  groupId: string;
+export interface OnboardingStatus {
+  isOnboarded: boolean;
+  missingFields: string[];
+}
+
+export interface ProfileUpdate {
+  displayName?: string;
+  startDayOfWeek?: number;
+  mainCurrencyId?: number;
+  language?: string;
+}
+
+export interface SeedResult {
+  accountsCreated: number;
+  categoriesCreated: number;
 }
 
 @Injectable()
 export class OnboardingService {
   constructor(
-    @InjectDataSource() private readonly dataSource: DataSource,
     @InjectRepository(Profile) private readonly profiles: Repository<Profile>,
+    @InjectRepository(User) private readonly users: Repository<User>,
     @InjectRepository(Account) private readonly accounts: Repository<Account>,
     @InjectRepository(Category) private readonly categories: Repository<Category>,
-    private readonly groupsService: GroupsService,
   ) {}
 
-  /**
-   * Creates everything a brand-new user needs: a profile, a default group they own, and that
-   * group's starter accounts/categories. Called from AuthService.register(), which runs on a
-   * @Public() route — no JWT exists yet for RlsContextInterceptor to act on, so this sets
-   * app.current_user_id itself before touching any RLS-protected table, exactly the way the
-   * interceptor would for an authenticated request (see its doc comment, which anticipates
-   * this exact call site).
-   */
-  @Transactional()
-  async seedNewUser(user: User, language: string = DEFAULT_VALUES.language): Promise<OnboardingResult> {
-    await this.dataSource.query(`SELECT set_config('app.current_user_id', $1, true)`, [user.id]);
+  async getStatus(userId: string): Promise<OnboardingStatus> {
+    const profile = await this.profiles.findOneBy({ id: userId });
+    const missingFields = ONBOARDING_REQUIRED_FIELDS.filter((field) => !profile || profile[field] == null);
+    return { isOnboarded: missingFields.length === 0, missingFields };
+  }
 
-    const profile = await this.profiles.save(
+  // Same call for first-time onboarding and for filling in a field added after a profile
+  // already exists — see ONBOARDING_REQUIRED_FIELDS for why that's the point.
+  @Transactional()
+  async upsertProfile(userId: string, patch: ProfileUpdate): Promise<Profile> {
+    const existing = await this.profiles.findOneBy({ id: userId });
+    if (existing) {
+      await this.profiles.update({ id: userId }, patch);
+      return { ...existing, ...patch };
+    }
+
+    const user = await this.users.findOneBy({ id: userId });
+    if (!user) {
+      // Unreachable in practice — JwtAuthGuard already resolved this userId from a valid
+      // token — but findOneByOrFail's error wouldn't explain why, so this is more honest.
+      throw new NotFoundException('User not found');
+    }
+
+    return this.profiles.save(
       this.profiles.create({
-        id: user.id,
+        id: userId,
         email: user.email,
-        mainCurrencyId: DEFAULT_VALUES.currencyId,
-        language,
+        mainCurrencyId: patch.mainCurrencyId ?? DEFAULT_VALUES.currencyId,
+        language: patch.language ?? DEFAULT_VALUES.language,
+        displayName: patch.displayName ?? null,
+        startDayOfWeek: patch.startDayOfWeek ?? null,
       }),
     );
+  }
 
-    const { group } = await this.groupsService.create(user.id, DEFAULT_VALUES.groupName);
+  /**
+   * Populates a group with starter accounts/categories from the onboarding templates. Pure
+   * mechanics only — authorizing the caller against this group is GroupsService's job (the
+   * same "load membership, check CASL" step every other group mutation goes through), not
+   * onboarding's.
+   */
+  @Transactional()
+  async seedGroup(groupId: string, userId: string, language: string = DEFAULT_VALUES.language): Promise<SeedResult> {
+    const alreadySeeded = await this.accounts.exists({ where: { groupId } });
+    if (alreadySeeded) {
+      throw new ConflictException('Group already has accounts — seed only applies to a fresh group');
+    }
 
     const accountRows = ACCOUNT_TEMPLATES.filter((t) => t.lang === language).map((t) =>
       this.accounts.create({
-        groupId: group.id,
-        createdBy: user.id,
+        groupId,
+        createdBy: userId,
         currencyId: DEFAULT_VALUES.currencyId,
         type: t.type,
         name: t.name,
@@ -62,8 +97,8 @@ export class OnboardingService {
 
     const categoryRows = CATEGORY_TEMPLATES.filter((t) => t.lang === language).map((t) =>
       this.categories.create({
-        groupId: group.id,
-        createdBy: user.id,
+        groupId,
+        createdBy: userId,
         type: t.type,
         name: t.name,
         icon: t.icon,
@@ -73,6 +108,6 @@ export class OnboardingService {
     );
     await this.categories.save(categoryRows);
 
-    return { profile, groupId: group.id };
+    return { accountsCreated: accountRows.length, categoriesCreated: categoryRows.length };
   }
 }

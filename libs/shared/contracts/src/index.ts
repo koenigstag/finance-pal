@@ -3,3 +3,4 @@ export * from './lib/health/health.contract.js';
 export * from './lib/auth/auth.contract.js';
 export * from './lib/authz/ability.js';
 export * from './lib/groups/groups.contract.js';
+export * from './lib/onboarding/onboarding.contract.js';

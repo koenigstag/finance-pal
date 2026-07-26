@@ -71,6 +71,14 @@ export class GroupsController {
     });
   }
 
+  @TsRestHandler(groupsContract.seed)
+  seed(@CurrentUser() user?: RequestUser) {
+    return tsRestHandler(groupsContract.seed, async ({ params, body }) => {
+      const result = await this.groups.seed(requireUser(user).id, params.groupId, body.language);
+      return { status: 201 as const, body: result };
+    });
+  }
+
   @TsRestHandler(groupsContract.listMembers)
   listMembers(@CurrentUser() user?: RequestUser) {
     return tsRestHandler(groupsContract.listMembers, async ({ params }) => {

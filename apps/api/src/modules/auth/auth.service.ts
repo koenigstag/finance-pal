@@ -7,7 +7,6 @@ import { Propagation, Transactional } from 'typeorm-transactional';
 import * as argon2 from 'argon2';
 import { RefreshToken, User } from '@ft/api-database';
 import type { Env } from '../_core/config/env.schema';
-import { OnboardingService } from '../onboarding/onboarding.service';
 import { generateOpaqueToken, parseOpaqueToken, secretMatchesHash } from './tokens.util';
 
 const ARGON2_OPTIONS = {
@@ -30,7 +29,6 @@ export class AuthService {
     @InjectRepository(RefreshToken) private readonly refreshTokens: Repository<RefreshToken>,
     private readonly jwt: JwtService,
     private readonly config: ConfigService<Env, true>,
-    private readonly onboarding: OnboardingService,
   ) {}
 
   @Transactional()
@@ -43,8 +41,10 @@ export class AuthService {
     const passwordHash = await argon2.hash(password, ARGON2_OPTIONS);
     const user = await this.users.save(this.users.create({ email, passwordHash }));
 
-    await this.onboarding.seedNewUser(user);
-
+    // Profile (display name, currency, etc.), the default group, and its starter
+    // accounts/categories are no longer created here — see the onboarding module: register()
+    // only establishes identity, onboarding is a separate authenticated flow so returning
+    // users can complete it too when new fields are added, not just at signup.
     return this.issueTokens(user);
   }
 

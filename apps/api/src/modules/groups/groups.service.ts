@@ -5,6 +5,7 @@ import { Transactional } from 'typeorm-transactional';
 import { Group, GroupMember, MemberRole } from '@ft/api-database';
 import type { Action, AppAbility, MemberRole as WireRole, Subject } from '@ft/shared-contracts';
 import { AbilityFactory, type GroupAuthzContext } from '../_core/authz/ability.factory';
+import { OnboardingService, type SeedResult } from '../onboarding/onboarding.service';
 
 export interface GroupWithRole {
   group: Group;
@@ -21,6 +22,7 @@ export class GroupsService {
     @InjectRepository(Group) private readonly groups: Repository<Group>,
     @InjectRepository(GroupMember) private readonly members: Repository<GroupMember>,
     private readonly abilities: AbilityFactory,
+    private readonly onboarding: OnboardingService,
   ) {}
 
   async list(userId: string): Promise<GroupWithRole[]> {
@@ -56,6 +58,15 @@ export class GroupsService {
     const ctx = await this.authorize(userId, groupId, 'restore', 'Group');
     await this.groups.update(groupId, { archivedAt: null });
     return this.reload(ctx);
+  }
+
+  @Transactional()
+  async seed(userId: string, groupId: string, language?: string): Promise<SeedResult> {
+    // 'create' + 'Account' is the same CASL check any ledger write goes through: a viewer
+    // can't seed a group any more than they could create an account by hand, and an archived
+    // group can't be seeded at all.
+    const ctx = await this.authorize(userId, groupId, 'create', 'Account');
+    return this.onboarding.seedGroup(ctx.groupId, userId, language);
   }
 
   private async authorize(

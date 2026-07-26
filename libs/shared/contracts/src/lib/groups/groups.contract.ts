@@ -81,6 +81,19 @@ export const groupsContract = c.router(
       },
       summary: 'Restore an archived group (owner only)',
     },
+    seed: {
+      method: 'POST',
+      path: '/groups/:groupId/seed',
+      pathParams: z.object({ groupId: z.string().uuid() }),
+      body: z.object({ language: z.string().optional() }),
+      responses: {
+        201: z.object({ accountsCreated: z.number(), categoriesCreated: z.number() }),
+        403: errorSchema,
+        404: errorSchema,
+        409: errorSchema,
+      },
+      summary: 'Populate a group with starter accounts/categories from templates (once per group, not viewer)',
+    },
     listMembers: {
       method: 'GET',
       path: '/groups/:groupId/members',
