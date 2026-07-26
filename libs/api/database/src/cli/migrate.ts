@@ -1,3 +1,7 @@
+// First line, same reasoning as apps/api/src/main.ts: the imports below resolve (and their
+// top-level code runs) before anything else in this file, so createMigrationDataSource must
+// not read process.env.MIGRATION_DATABASE_URL/DATABASE_URL until dotenv has populated it.
+import 'dotenv/config';
 import { createMigrationDataSource } from '../data-source.js';
 import { migrations, migrateUp } from '../migrations/index.js';
 
