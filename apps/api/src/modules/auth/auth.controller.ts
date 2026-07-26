@@ -2,12 +2,17 @@ import { Controller } from '@nestjs/common';
 import { TsRestHandler, tsRestHandler } from '@ts-rest/nest';
 import { authContract } from '@ft/shared-contracts';
 import type { User } from '@ft/api-database';
+import { Public } from '../_core/authn/public.decorator';
 import { AuthService } from './auth.service';
 
 function toUserDto(user: User) {
   return { id: user.id, email: user.email, createdAt: user.createdAt.toISOString() };
 }
 
+// Every route here runs before an identity exists, so none of them can require a token.
+// This is also why users/refresh_tokens carry no RLS policies — there would be no
+// app.current_user_id to filter on.
+@Public()
 @Controller()
 export class AuthController {
   constructor(private readonly auth: AuthService) {}
