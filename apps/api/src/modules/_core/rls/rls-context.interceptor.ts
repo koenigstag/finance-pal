@@ -2,10 +2,10 @@ import { CallHandler, ExecutionContext, Injectable, NestInterceptor } from '@nes
 import { Reflector } from '@nestjs/core';
 import { InjectDataSource } from '@nestjs/typeorm';
 import { DataSource } from 'typeorm';
-import { runInTransaction } from 'typeorm-transactional';
 import { from, lastValueFrom, type Observable } from 'rxjs';
 import { IS_PUBLIC_KEY } from '../authn/public.decorator';
 import type { AuthenticatedRequest } from '../authn/request-user';
+import { withRlsUser } from './with-rls-user';
 
 /**
  * Binds the authenticated user to the database session so Postgres RLS policies can see who
@@ -55,18 +55,9 @@ export class RlsContextInterceptor implements NestInterceptor {
     const userId = request.user?.id ?? null;
 
     return from(
-      runInTransaction(async () => {
-        // set_config(..., is_local => true) is the parameterizable equivalent of SET LOCAL;
-        // SET LOCAL itself takes no bind parameters, which would mean interpolating a value
-        // straight into SQL. NULL is passed through as an empty string, which
-        // app_current_user_id() maps back to NULL — that is the unauthenticated case, and
-        // every policy denies it.
-        await this.dataSource.query(`SELECT set_config('app.current_user_id', $1, true)`, [userId ?? '']);
-
-        // Awaiting the handler's final emission is what holds the transaction open for the
-        // whole request, instead of committing the moment this interceptor returns.
-        return await lastValueFrom(next.handle());
-      }),
+      // Awaiting the handler's final emission inside withRlsUser is what holds the transaction
+      // open for the whole request, instead of committing the moment this interceptor returns.
+      withRlsUser(this.dataSource, userId, () => lastValueFrom(next.handle())),
     );
   }
 }

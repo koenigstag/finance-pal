@@ -24,7 +24,10 @@ module.exports = {
   // instead of require('typeorm').
   // argon2 is a native addon (.node binary) — webpack can't bundle it under any
   // configuration, same treatment as typeorm/pg above.
-  externals: [{ typeorm: 'commonjs typeorm', pg: 'commonjs pg', argon2: 'commonjs argon2' }],
+  // socket.io isn't dynamic-require or native like the above, but it has the same nested-under-
+  // pnpm node_modules shape that already broke the 'all' scan once — external defensively rather
+  // than find out the hard way again.
+  externals: [{ typeorm: 'commonjs typeorm', pg: 'commonjs pg', argon2: 'commonjs argon2', 'socket.io': 'commonjs socket.io' }],
   plugins: [
     new NxAppWebpackPlugin({
       target: 'node',

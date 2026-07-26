@@ -96,7 +96,9 @@
     "@nestjs/core": "^11.0.0",
     "@nestjs/jwt": "^11.0.2",
     "@nestjs/platform-express": "^11.0.0",
+    "@nestjs/platform-socket.io": "^11.1.28",
     "@nestjs/typeorm": "^11.0.3",
+    "@nestjs/websockets": "^11.1.28",
     "@ts-rest/core": "3.52.1",
     "@ts-rest/nest": "3.52.1",
     "argon2": "^0.45.1",
@@ -104,6 +106,7 @@
     "pg": "^8.22.0",
     "reflect-metadata": "^0.2.0",
     "rxjs": "^7.8.0",
+    "socket.io": "^4.8.3",
     "tslib": "^2.3.0",
     "typeorm": "^1.1.0",
     "typeorm-transactional": "^0.5.0",
@@ -111,6 +114,7 @@
   },
   "devDependencies": {
     "@nestjs/testing": "^11.0.0",
-    "@types/express": "^5.0.6"
+    "@types/express": "^5.0.6",
+    "socket.io-client": "^4.8.3"
   }
 }
