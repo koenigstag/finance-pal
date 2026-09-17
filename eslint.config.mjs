@@ -5,7 +5,12 @@ export default [
   ...nx.configs['flat/typescript'],
   ...nx.configs['flat/javascript'],
   {
-    ignores: ['**/dist', '**/out-tsc'],
+    ignores: [
+      '**/dist',
+      '**/out-tsc',
+      '**/vite.config.*.timestamp*',
+      '**/vitest.config.*.timestamp*',
+    ],
   },
   {
     files: ['**/*.ts', '**/*.tsx', '**/*.js', '**/*.jsx'],
@@ -40,6 +45,20 @@ export default [
                 'argon2',
                 'react',
                 'react-*',
+              ],
+            },
+            // Browser code must never pull in server-only packages. scope:web already keeps it
+            // off @ft/api-* libs; this catches the same packages imported from npm directly.
+            // socket.io (the server) is banned, socket.io-client is what the browser uses.
+            {
+              sourceTag: 'platform:browser',
+              bannedExternalImports: [
+                '@nestjs/*',
+                'typeorm',
+                'typeorm-transactional',
+                'argon2',
+                'pg',
+                'socket.io',
               ],
             },
             // Contracts are the lowest layer: they may not depend on features.

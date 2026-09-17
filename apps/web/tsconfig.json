@@ -1,0 +1,20 @@
+{
+  "files": [],
+  "include": [],
+  "references": [
+    {
+      "path": "./tsconfig.app.json"
+    },
+    {
+      "path": "./tsconfig.spec.json"
+    }
+  ],
+  "extends": "../../tsconfig.base.json",
+  // Only read by tooling that looks for aliases in the root tsconfig (the shadcn/ui CLI);
+  // the compiler takes paths from tsconfig.app.json / tsconfig.spec.json.
+  "compilerOptions": {
+    "paths": {
+      "@/*": ["./src/*"]
+    }
+  }
+}

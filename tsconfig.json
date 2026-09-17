@@ -11,6 +11,9 @@
     },
     {
       "path": "./libs/api/database"
+    },
+    {
+      "path": "./apps/web"
     }
   ],
   "compilerOptions": {}
