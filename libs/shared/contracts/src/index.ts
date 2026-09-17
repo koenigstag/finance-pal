@@ -20,3 +20,4 @@ export * from './lib/api-keys/api-key-scopes.js';
 export * from './lib/api-keys/api-keys.contract.js';
 export * from './lib/external/external.contract.js';
 export * from './lib/realtime/realtime-event.js';
+export * from './lib/ledger/exchange-rates.contract.js';

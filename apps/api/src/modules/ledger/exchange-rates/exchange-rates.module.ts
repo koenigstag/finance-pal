@@ -1,10 +1,17 @@
 import { Module } from '@nestjs/common';
+import { TypeOrmModule } from '@nestjs/typeorm';
+import { Currency, ExchangeRate, Profile } from '@ft/api-database';
 import { RATE_PROVIDERS, type RateProvider } from './rate-provider';
 import { CurrencyApiProvider } from './providers/currency-api.provider';
 import { OpenErApiProvider } from './providers/open-er-api.provider';
+import { ExchangeRatesController } from './exchange-rates.controller';
+import { ExchangeRatesService } from './exchange-rates.service';
 
 @Module({
+  imports: [TypeOrmModule.forFeature([ExchangeRate, Currency, Profile])],
+  controllers: [ExchangeRatesController],
   providers: [
+    ExchangeRatesService,
     CurrencyApiProvider,
     OpenErApiProvider,
     {
@@ -18,6 +25,6 @@ import { OpenErApiProvider } from './providers/open-er-api.provider';
       inject: [CurrencyApiProvider, OpenErApiProvider],
     },
   ],
-  exports: [RATE_PROVIDERS, CurrencyApiProvider, OpenErApiProvider],
+  exports: [ExchangeRatesService],
 })
 export class ExchangeRatesModule {}

@@ -111,7 +111,8 @@ export const en = {
       assets: 'Assets',
       debts: 'Debts',
       total: 'Total',
-      ratesMissing: 'Set exchange rates in settings to total these together.',
+      ratesMissing: 'No exchange rates right now, so these currencies cannot be totalled together.',
+      ratesOn: 'Rates published {{date}}',
     },
     groups: {
       regular: 'Regular',

@@ -113,7 +113,8 @@ export const ru: Catalog<typeof en> = {
       assets: 'Активы',
       debts: 'Долги',
       total: 'Итого',
-      ratesMissing: 'Задайте курсы валют в настройках, чтобы увидеть общий итог.',
+      ratesMissing: 'Курсов сейчас нет, поэтому свести эти валюты в один итог не получится.',
+      ratesOn: 'Курсы на {{date}}',
     },
     groups: {
       regular: 'Обычные',
