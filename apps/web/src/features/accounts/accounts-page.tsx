@@ -6,6 +6,7 @@ import { QueryError } from '@/components/query-error';
 import { Empty, EmptyDescription, EmptyHeader, EmptyMedia, EmptyTitle } from '@/components/ui/empty';
 import { Spinner } from '@/components/ui/spinner';
 import { useGroupScope } from '@/features/groups/group-context';
+import { pickDefaultAccountId } from '@/features/transactions/transaction-form-model';
 import { AccountDialog } from './account-dialog';
 import { AccountList } from './account-list';
 import { useAccounts, type Account } from './queries';
@@ -45,12 +46,19 @@ export function AccountsPage() {
           groupId={group.id}
           accounts={accounts.data}
           onEdit={canUpdate ? (account) => setDialog({ open: true, account }) : undefined}
+          canUpdate={canUpdate}
         />
       )}
 
       <AccountDialog
         groupId={group.id}
         account={dialog.account}
+        accountCount={accounts.data?.length ?? 0}
+        implicitFavourite={
+          !!dialog.account &&
+          !dialog.account.isFavourite &&
+          pickDefaultAccountId(accounts.data ?? []) === dialog.account.id
+        }
         canDelete={canDelete}
         open={dialog.open}
         onOpenChange={(open) => setDialog((current) => ({ ...current, open }))}

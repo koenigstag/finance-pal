@@ -3,6 +3,7 @@ import { useEffect, useMemo, useRef, useState } from 'react';
 import { useTranslation } from 'react-i18next';
 import { useSearchParams } from 'react-router';
 import { TRANSACTION_TYPES } from '@ft/shared-contracts';
+import { AppearanceIcon } from '@/components/appearance/appearance-icon';
 import { PageHeader } from '@/components/page-header';
 import { QueryError } from '@/components/query-error';
 import { Badge } from '@/components/ui/badge';
@@ -12,7 +13,6 @@ import { Input } from '@/components/ui/input';
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select';
 import { Spinner } from '@/components/ui/spinner';
 import { useAccounts } from '@/features/accounts/queries';
-import { CategoryIcon } from '@/features/categories/category-icon';
 import { categoryOptions, useCategories } from '@/features/categories/queries';
 import { useGroupScope } from '@/features/groups/group-context';
 import { monthRange, parseMonthParam, shiftMonth, toMonthParam } from '@/lib/dates';
@@ -144,6 +144,7 @@ export function TransactionsPage() {
             <SelectItem value={ALL}>{t('transactions.filters.allAccounts')}</SelectItem>
             {accounts.data?.map((account) => (
               <SelectItem key={account.id} value={account.id}>
+                <AppearanceIcon icon={account.icon} color={account.color} fallbackIcon="wallet" size="sm" />
                 {account.name}
               </SelectItem>
             ))}
@@ -194,7 +195,7 @@ export function TransactionsPage() {
             {categoryFilterOptions.map(({ category, depth }) => (
               <SelectItem key={category.id} value={category.id}>
                 <span className="flex items-center gap-2" style={{ paddingInlineStart: `${depth}rem` }}>
-                  <CategoryIcon icon={category.icon} color={category.color} size="sm" />
+                  <AppearanceIcon icon={category.icon} color={category.color} size="sm" />
                   {category.name}
                 </span>
               </SelectItem>

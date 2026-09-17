@@ -2,9 +2,9 @@ import { format } from 'date-fns';
 import { ArrowRightIcon, RepeatIcon } from 'lucide-react';
 import { useMemo } from 'react';
 import { useTranslation } from 'react-i18next';
+import { AppearanceIcon } from '@/components/appearance/appearance-icon';
 import { Badge } from '@/components/ui/badge';
 import type { Account } from '@/features/accounts/queries';
-import { CategoryIcon } from '@/features/categories/category-icon';
 import type { Category } from '@/features/categories/queries';
 import { useCurrencyCodes } from '@/features/currencies/queries';
 import { formatMoney } from '@/lib/money';
@@ -82,7 +82,7 @@ function TransactionRow({ transaction, planned, accountsById, categoriesById, on
 
   const content = (
     <>
-      <CategoryIcon
+      <AppearanceIcon
         icon={category?.icon}
         color={category?.color}
         placeholder={isTransfer ? 'transfer' : category ? undefined : 'none'}

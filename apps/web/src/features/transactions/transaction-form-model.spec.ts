@@ -1,6 +1,7 @@
 import { describe, expect, it } from 'vitest';
 import {
   defaultTransactionFormValues,
+  pickDefaultAccountId,
   toTransactionBody,
   transactionFormSchema,
   type TransactionFormValues,
@@ -84,5 +85,24 @@ describe('toTransactionBody', () => {
       date: existing.date,
     });
     expect(toTransactionBody(values({}), accounts, undefined, now).note).toBeUndefined();
+  });
+});
+
+describe('pickDefaultAccountId', () => {
+  const list = [
+    { ...usd, isFavourite: false },
+    { ...usd2, isFavourite: true },
+    { ...eur, isFavourite: true },
+  ];
+
+  it('uses the requested account when it exists', () => {
+    expect(pickDefaultAccountId(list, eur.id)).toBe(eur.id);
+  });
+
+  it('falls back to the first favourite, then to the first account', () => {
+    expect(pickDefaultAccountId(list)).toBe(usd2.id);
+    expect(pickDefaultAccountId(list, 'deleted-account')).toBe(usd2.id);
+    expect(pickDefaultAccountId(list.map((account) => ({ ...account, isFavourite: false })))).toBe(usd.id);
+    expect(pickDefaultAccountId([])).toBeUndefined();
   });
 });

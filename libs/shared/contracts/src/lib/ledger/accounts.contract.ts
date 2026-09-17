@@ -15,6 +15,7 @@ export const accountSchema = z.object({
   type: accountTypeSchema,
   name: z.string().min(1).max(120),
   currencyId: z.number().int(),
+  // At most one per group: marking an account unmarks the others.
   isFavourite: z.boolean(),
   icon: z.string().nullable(),
   color: z.string().nullable(),
@@ -42,8 +43,14 @@ const createAccountBodySchema = z.object({
   name: z.string().min(1).max(120),
   currencyId: z.number().int(),
   isFavourite: z.boolean().optional(),
-  icon: z.string().optional(),
-  color: z.string().optional(),
+  // A name from the client's icon set (e.g. "wallet"); null clears it.
+  icon: z.string().min(1).max(40).nullable().optional(),
+  // #RRGGBB; null clears it.
+  color: z
+    .string()
+    .regex(/^#[0-9a-fA-F]{6}$/, 'color must be #RRGGBB')
+    .nullable()
+    .optional(),
   description: z.string().optional(),
   isIncludedInBalance: z.boolean().optional(),
   sortOrder: z.number().int().optional(),

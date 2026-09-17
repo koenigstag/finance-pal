@@ -9,6 +9,20 @@ interface AccountLike {
   currencyId: number;
 }
 
+/**
+ * The account a new transaction starts on: the one asked for (e.g. the account the list is
+ * filtered by) if it exists, otherwise the favourite, otherwise the first. Without a request this
+ * is also the account the UI shows as favourite, starred or not. Accounts come in list order, so
+ * should several ever be marked, the first one listed wins.
+ */
+export function pickDefaultAccountId(
+  accounts: (AccountLike & { isFavourite: boolean })[],
+  requestedId?: string,
+): string | undefined {
+  const requested = requestedId ? accounts.find((account) => account.id === requestedId) : undefined;
+  return (requested ?? accounts.find((account) => account.isFavourite) ?? accounts[0])?.id;
+}
+
 // What the inputs hold: strings as typed, '' for "nothing chosen". Converted to the contract's
 // body only on submit, by toTransactionBody.
 export interface TransactionFormValues {

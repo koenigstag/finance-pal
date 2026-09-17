@@ -3,15 +3,15 @@ import { useEffect, useMemo, useState } from 'react';
 import { Controller, useForm, useWatch } from 'react-hook-form';
 import { useTranslation } from 'react-i18next';
 import { z } from 'zod';
+import { CATEGORY_ICON_NAMES, defaultAppearance } from '@/components/appearance/appearance';
+import { AppearanceIcon } from '@/components/appearance/appearance-icon';
+import { ColorPicker, IconPicker } from '@/components/appearance/appearance-picker';
 import { Alert, AlertDescription } from '@/components/ui/alert';
 import { Button } from '@/components/ui/button';
 import { Dialog, DialogContent, DialogDescription, DialogFooter, DialogHeader, DialogTitle } from '@/components/ui/dialog';
 import { Field, FieldDescription, FieldError, FieldGroup, FieldLabel } from '@/components/ui/field';
 import { Input } from '@/components/ui/input';
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select';
-import { ColorPicker, IconPicker } from './appearance-picker';
-import { defaultAppearance } from './category-appearance';
-import { CategoryIcon } from './category-icon';
 import { DeleteCategoryDialog } from './delete-category-dialog';
 import { nextSortOrder, useSaveCategory, type Category } from './queries';
 
@@ -115,7 +115,7 @@ export function CategoryDialog({
           </DialogHeader>
           {/* How the category will look in lists, as it's being edited. */}
           <div className="flex items-center gap-3 rounded-lg bg-muted/50 px-3 py-2" aria-hidden>
-            <CategoryIcon icon={previewIcon} color={previewColor} />
+            <AppearanceIcon icon={previewIcon} color={previewColor} />
             <span className="truncate font-medium">{previewName?.trim() || t('categories.name')}</span>
           </div>
           <form onSubmit={onSubmit} noValidate>
@@ -158,7 +158,7 @@ export function CategoryDialog({
                 <Controller
                   control={form.control}
                   name="color"
-                  render={({ field }) => <ColorPicker id="category-color" value={field.value} onChange={field.onChange} />}
+                  render={({ field }) => <ColorPicker id="category-color" label={t('categories.color')} value={field.value} onChange={field.onChange} />}
                 />
               </Field>
               <Field>
@@ -167,7 +167,14 @@ export function CategoryDialog({
                   control={form.control}
                   name="icon"
                   render={({ field }) => (
-                    <IconPicker id="category-icon" value={field.value} color={previewColor} onChange={field.onChange} />
+                    <IconPicker
+                      id="category-icon"
+                      label={t('categories.icon')}
+                      names={CATEGORY_ICON_NAMES}
+                      value={field.value}
+                      color={previewColor}
+                      onChange={field.onChange}
+                    />
                   )}
                 />
               </Field>

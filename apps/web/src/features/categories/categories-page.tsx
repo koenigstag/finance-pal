@@ -3,6 +3,7 @@ import { useMemo, useState } from 'react';
 import { useTranslation } from 'react-i18next';
 import { useSearchParams } from 'react-router';
 import { CATEGORY_TYPES } from '@ft/shared-contracts';
+import { AppearanceIcon } from '@/components/appearance/appearance-icon';
 import { PageHeader } from '@/components/page-header';
 import { QueryError } from '@/components/query-error';
 import { Button } from '@/components/ui/button';
@@ -12,7 +13,6 @@ import { ToggleGroup, ToggleGroupItem } from '@/components/ui/toggle-group';
 import { useGroupScope } from '@/features/groups/group-context';
 import { cn } from '@/lib/utils';
 import { CategoryDialog } from './category-dialog';
-import { CategoryIcon } from './category-icon';
 import { useCategories, type Category } from './queries';
 
 type CategoryType = Category['type'];
@@ -138,7 +138,7 @@ function CategoryRow({ category, nested = false, detail, onSelect, onAddSubcateg
   const { t } = useTranslation();
   const content = (
     <>
-      <CategoryIcon icon={category.icon} color={category.color} size={nested ? 'sm' : 'md'} />
+      <AppearanceIcon icon={category.icon} color={category.color} size={nested ? 'sm' : 'md'} />
       <div className="min-w-0 flex-1">
         <p className={cn('truncate', nested ? 'text-sm' : 'font-medium')}>{category.name}</p>
         {detail && <p className="text-sm text-muted-foreground">{detail}</p>}

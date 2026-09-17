@@ -3,11 +3,14 @@ import {
   BanknoteIcon,
   BeerIcon,
   BikeIcon,
+  BitcoinIcon,
   BookIcon,
   BriefcaseIcon,
+  Building2Icon,
   BusIcon,
   CarIcon,
   CatIcon,
+  ChartCandlestickIcon,
   CoffeeIcon,
   CoinsIcon,
   CreditCardIcon,
@@ -19,11 +22,13 @@ import {
   FlameIcon,
   FuelIcon,
   Gamepad2Icon,
+  GemIcon,
   GiftIcon,
   GlassesIcon,
   GraduationCapIcon,
   HammerIcon,
   HandCoinsIcon,
+  HandshakeIcon,
   HeartIcon,
   HouseIcon,
   KeyIcon,
@@ -52,6 +57,8 @@ import {
   TvIcon,
   UsersIcon,
   UtensilsIcon,
+  VaultIcon,
+  WalletIcon,
   WifiIcon,
   WrenchIcon,
   ZapIcon,
@@ -59,11 +66,23 @@ import {
 } from 'lucide-react';
 
 /**
- * Icons a category can have, by the name stored in categories.icon. The first names are the ones
- * the starter templates use (some predate lucide, hence "bolt", "home", "dots-horizontal"); the
- * rest widen the choice. Order is the order of the picker.
+ * Icons an account or a category can have, by the name stored in their icon column. Some names
+ * predate lucide and come from the starter templates ("bolt", "home", "dots-horizontal", "card").
  */
-export const CATEGORY_ICONS: Readonly<Record<string, LucideIcon>> = {
+export const ICONS: Readonly<Record<string, LucideIcon>> = {
+  wallet: WalletIcon,
+  card: CreditCardIcon,
+  landmark: LandmarkIcon,
+  bank: Building2Icon,
+  banknote: BanknoteIcon,
+  coins: CoinsIcon,
+  'piggy-bank': PiggyBankIcon,
+  vault: VaultIcon,
+  'hand-coins': HandCoinsIcon,
+  handshake: HandshakeIcon,
+  'chart-candlestick': ChartCandlestickIcon,
+  bitcoin: BitcoinIcon,
+  gem: GemIcon,
   'shopping-cart': ShoppingCartIcon,
   coffee: CoffeeIcon,
   car: CarIcon,
@@ -114,18 +133,27 @@ export const CATEGORY_ICONS: Readonly<Record<string, LucideIcon>> = {
   cat: CatIcon,
   receipt: ReceiptIcon,
   'credit-card': CreditCardIcon,
-  landmark: LandmarkIcon,
-  banknote: BanknoteIcon,
-  coins: CoinsIcon,
-  'hand-coins': HandCoinsIcon,
-  'piggy-bank': PiggyBankIcon,
   'dots-horizontal': EllipsisIcon,
 };
 
-export const CATEGORY_ICON_NAMES = Object.keys(CATEGORY_ICONS);
+const MONEY_ICONS = [
+  'wallet', 'card', 'landmark', 'bank', 'banknote', 'coins', 'piggy-bank', 'vault', 'hand-coins',
+  'handshake', 'chart-candlestick', 'bitcoin', 'gem',
+];
 
-/** Colors a category can have: the starter templates' Material palette, plus a few to fill gaps. */
-export const CATEGORY_COLORS = [
+// Picker order. Accounts lead with places money is kept; categories with what it's spent on and
+// earned from. Both offer every icon, only the order differs.
+export const CATEGORY_ICON_NAMES = [
+  ...Object.keys(ICONS).filter((name) => !MONEY_ICONS.includes(name) && name !== 'credit-card'),
+  ...MONEY_ICONS,
+];
+export const ACCOUNT_ICON_NAMES = [
+  ...MONEY_ICONS,
+  ...Object.keys(ICONS).filter((name) => !MONEY_ICONS.includes(name) && name !== 'credit-card'),
+];
+
+/** The palette: the starter templates' Material colors, plus a few to fill gaps. */
+export const COLORS = [
   '#F44336',
   '#E91E63',
   '#9C27B0',
@@ -147,17 +175,21 @@ export const CATEGORY_COLORS = [
 const HEX_COLOR = /^#[0-9a-f]{6}$/i;
 
 /** The color to render, or null for one that isn't a plain #RRGGBB (and so can't be tinted). */
-export function categoryColor(color: string | null | undefined): string | null {
+export function validColor(color: string | null | undefined): string | null {
   return color && HEX_COLOR.test(color) ? color : null;
 }
 
-/** A suggestion for a new category: its parent's look, or the next palette color for a top level one. */
+/**
+ * A suggested look for something new: its parent's (a subcategory's parent category), or the next
+ * palette color after its existing siblings.
+ */
 export function defaultAppearance(
   parent: { icon: string | null; color: string | null } | undefined,
   siblingCount: number,
+  fallbackIcon: string | null = null,
 ): { icon: string | null; color: string } {
   return {
-    icon: parent?.icon ?? null,
-    color: categoryColor(parent?.color) ?? CATEGORY_COLORS[siblingCount % CATEGORY_COLORS.length],
+    icon: parent?.icon ?? fallbackIcon,
+    color: validColor(parent?.color) ?? COLORS[siblingCount % COLORS.length],
   };
 }

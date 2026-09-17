@@ -3,6 +3,7 @@ import { RepeatIcon } from 'lucide-react';
 import { useEffect, useMemo, useRef, useState, type FocusEvent } from 'react';
 import { Controller, useForm, useWatch } from 'react-hook-form';
 import { useTranslation } from 'react-i18next';
+import { AppearanceIcon } from '@/components/appearance/appearance-icon';
 import { Alert, AlertDescription } from '@/components/ui/alert';
 import {
   AlertDialog,
@@ -22,12 +23,12 @@ import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@
 import { Textarea } from '@/components/ui/textarea';
 import { ToggleGroup, ToggleGroupItem } from '@/components/ui/toggle-group';
 import { useAccounts } from '@/features/accounts/queries';
-import { CategoryIcon } from '@/features/categories/category-icon';
 import { categoryOptions, useCategories } from '@/features/categories/queries';
 import { useCurrencyCodes } from '@/features/currencies/queries';
 import { useDeleteTransaction, useSaveTransaction, type Transaction } from './queries';
 import {
   defaultTransactionFormValues,
+  pickDefaultAccountId,
   needsDestAmount,
   toTransactionBody,
   transactionFormSchema,
@@ -82,7 +83,7 @@ export function TransactionDialog({ groupId, transaction, defaultAccountId, open
   const errors = form.formState.errors;
   const [type, accountId, toAccountId] = useWatch({ control: form.control, name: ['type', 'accountId', 'toAccountId'] });
 
-  const fallbackAccountId = defaultAccountId ?? accountList[0]?.id;
+  const fallbackAccountId = pickDefaultAccountId(accountList, defaultAccountId);
   useEffect(() => {
     if (open) {
       form.reset(transaction ? transactionToFormValues(transaction) : defaultTransactionFormValues({ accountId: fallbackAccountId }));
@@ -90,6 +91,14 @@ export function TransactionDialog({ groupId, transaction, defaultAccountId, open
     // Only on opening: re-running when accounts refetch would wipe what's being typed.
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [open, transaction]);
+
+  // Accounts can still be loading when a new transaction's dialog opens; fill the account in once
+  // they arrive, unless one was picked meanwhile.
+  useEffect(() => {
+    if (open && !transaction && fallbackAccountId && !form.getValues('accountId')) {
+      form.setValue('accountId', fallbackAccountId);
+    }
+  }, [open, transaction, fallbackAccountId, form]);
 
   const options = useMemo(
     () => (type === 'transfer' ? [] : categoryOptions(categories.data ?? [], type)),
@@ -136,6 +145,7 @@ export function TransactionDialog({ groupId, transaction, defaultAccountId, open
           <SelectContent>
             {accountList.map((account) => (
               <SelectItem key={account.id} value={account.id}>
+                <AppearanceIcon icon={account.icon} color={account.color} fallbackIcon="wallet" size="sm" />
                 {account.name}{' '}
                 <span className="text-muted-foreground">{currencyCodes.get(account.currencyId)}</span>
               </SelectItem>
@@ -252,13 +262,13 @@ export function TransactionDialog({ groupId, transaction, defaultAccountId, open
                         </SelectTrigger>
                         <SelectContent>
                           <SelectItem value={NO_CATEGORY}>
-                            <CategoryIcon placeholder="none" size="sm" />
+                            <AppearanceIcon placeholder="none" size="sm" />
                             {t('transactions.noCategory')}
                           </SelectItem>
                           {options.map(({ category, depth }) => (
                             <SelectItem key={category.id} value={category.id}>
                               <span className="flex items-center gap-2" style={{ paddingInlineStart: `${depth}rem` }}>
-                                <CategoryIcon icon={category.icon} color={category.color} size="sm" />
+                                <AppearanceIcon icon={category.icon} color={category.color} size="sm" />
                                 {category.name}
                               </span>
                             </SelectItem>

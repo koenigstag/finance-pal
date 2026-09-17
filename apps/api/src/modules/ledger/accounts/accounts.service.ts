@@ -1,6 +1,6 @@
 import { ForbiddenException, Injectable, NotFoundException } from '@nestjs/common';
 import { InjectRepository } from '@nestjs/typeorm';
-import { Repository } from 'typeorm';
+import { Not, Repository } from 'typeorm';
 import { Transactional } from 'typeorm-transactional';
 import { Account, AccountTarget, AccountType, RecurringRule, Transaction } from '@ft/api-database';
 import { ACCOUNT_TYPES, type Action, type AppAbility, type Subject } from '@ft/shared-contracts';
@@ -14,8 +14,8 @@ export interface CreateAccountInput {
   name: string;
   currencyId: number;
   isFavourite?: boolean;
-  icon?: string;
-  color?: string;
+  icon?: string | null;
+  color?: string | null;
   description?: string;
   isIncludedInBalance?: boolean;
   sortOrder?: number;
@@ -95,6 +95,9 @@ export class AccountsService {
       createdBy: userId,
     });
     const saved = await this.accounts.save(account);
+    if (input.isFavourite) {
+      await this.clearOtherFavourites(groupId, saved.id);
+    }
     this.realtime.emitToGroup(groupId, { resourceType: 'Account', resourceId: saved.id, action: 'created', groupId });
     return this.withBalance(saved);
   }
@@ -109,9 +112,18 @@ export class AccountsService {
     await this.authorize(userId, groupId, 'update', 'Account');
     await this.findOrFail(groupId, accountId);
     await this.accounts.update({ id: accountId, groupId }, { ...patch, type: patch.type as AccountType | undefined });
+    if (patch.isFavourite) {
+      await this.clearOtherFavourites(groupId, accountId);
+    }
     const updated = await this.findOrFail(groupId, accountId);
     this.realtime.emitToGroup(groupId, { resourceType: 'Account', resourceId: accountId, action: 'updated', groupId });
     return this.withBalance(updated);
+  }
+
+  // A group has at most one favourite account — the one new transactions start on — so marking
+  // one unmarks the rest. The other rows' change reaches clients with this request's Account event.
+  private async clearOtherFavourites(groupId: string, favouriteId: string): Promise<void> {
+    await this.accounts.update({ groupId, id: Not(favouriteId), isFavourite: true }, { isFavourite: false });
   }
 
   @Transactional()

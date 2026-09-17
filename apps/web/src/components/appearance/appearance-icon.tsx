@@ -1,6 +1,6 @@
 import { ArrowLeftRightIcon, CircleDashedIcon, ShapesIcon } from 'lucide-react';
 import { cn } from '@/lib/utils';
-import { CATEGORY_ICONS, categoryColor } from './category-appearance';
+import { ICONS, validColor } from './appearance';
 
 const SIZES = {
   sm: 'size-6 [&_svg]:size-3.5',
@@ -8,22 +8,31 @@ const SIZES = {
   lg: 'size-10 [&_svg]:size-5',
 } as const;
 
-interface CategoryIconProps {
+interface AppearanceIconProps {
   icon?: string | null;
   color?: string | null;
-  // What a row without a category shows: nothing chosen, or a transfer between accounts.
+  // What to show instead of a stored icon: nothing chosen (an uncategorized transaction), or a
+  // transfer between accounts.
   placeholder?: 'none' | 'transfer';
+  // The icon for one with none (or an unknown name) stored: a wallet suits an account better than
+  // the generic shape.
+  fallbackIcon?: string;
   size?: keyof typeof SIZES;
   className?: string;
 }
 
 /**
- * A category's icon on a disc tinted with its color. Decorative: the category's name is always
+ * An account's or category's icon on a disc tinted with its color. Decorative: the name is always
  * shown next to it, so it's hidden from assistive technology.
  */
-export function CategoryIcon({ icon, color, placeholder, size = 'md', className }: CategoryIconProps) {
-  const tint = categoryColor(color);
-  const Icon = placeholder === 'transfer' ? ArrowLeftRightIcon : placeholder === 'none' ? CircleDashedIcon : (icon && CATEGORY_ICONS[icon]) || ShapesIcon;
+export function AppearanceIcon({ icon, color, placeholder, fallbackIcon, size = 'md', className }: AppearanceIconProps) {
+  const tint = validColor(color);
+  const Icon =
+    placeholder === 'transfer'
+      ? ArrowLeftRightIcon
+      : placeholder === 'none'
+        ? CircleDashedIcon
+        : (icon && ICONS[icon]) || (fallbackIcon && ICONS[fallbackIcon]) || ShapesIcon;
 
   return (
     <span

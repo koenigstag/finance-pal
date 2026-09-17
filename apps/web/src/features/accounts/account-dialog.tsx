@@ -1,9 +1,12 @@
 import { zodResolver } from '@hookform/resolvers/zod';
 import { useEffect, useState } from 'react';
-import { Controller, useForm } from 'react-hook-form';
+import { Controller, useForm, useWatch } from 'react-hook-form';
 import { useTranslation } from 'react-i18next';
 import { z } from 'zod';
 import { ACCOUNT_TYPES, accountsContract } from '@ft/shared-contracts';
+import { ACCOUNT_ICON_NAMES, defaultAppearance } from '@/components/appearance/appearance';
+import { AppearanceIcon } from '@/components/appearance/appearance-icon';
+import { ColorPicker, IconPicker } from '@/components/appearance/appearance-picker';
 import { Alert, AlertDescription } from '@/components/ui/alert';
 import { Button } from '@/components/ui/button';
 import { Checkbox } from '@/components/ui/checkbox';
@@ -14,12 +17,16 @@ import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@
 import { useCurrencies } from '@/features/currencies/queries';
 import { useProfile } from '@/features/profile/queries';
 import { DeleteAccountDialog } from './delete-account-dialog';
+import { FavouriteToggle } from './favourite-toggle';
 import { useSaveAccount, type Account } from './queries';
 
 const accountFormSchema = accountsContract.create.body.extend({
   name: z.string().trim().min(1).max(120),
   type: z.enum(ACCOUNT_TYPES),
   isIncludedInBalance: z.boolean(),
+  isFavourite: z.boolean(),
+  icon: z.string().nullable(),
+  color: z.string().nullable(),
 });
 
 type AccountFormValues = z.infer<typeof accountFormSchema>;
@@ -28,13 +35,26 @@ interface AccountDialogProps {
   groupId: string;
   // The account to edit; absent to create one.
   account?: Account;
+  // How many accounts the group has, to suggest the next palette color for a new one.
+  accountCount?: number;
+  // Whether this account is the default for new transactions without being starred (it's first
+  // and no account is): its star shows filled all the same.
+  implicitFavourite?: boolean;
   // Whether the caller may delete the account being edited.
   canDelete?: boolean;
   open: boolean;
   onOpenChange: (open: boolean) => void;
 }
 
-export function AccountDialog({ groupId, account, canDelete = false, open, onOpenChange }: AccountDialogProps) {
+export function AccountDialog({
+  groupId,
+  account,
+  accountCount = 0,
+  implicitFavourite = false,
+  canDelete = false,
+  open,
+  onOpenChange,
+}: AccountDialogProps) {
   const [confirmingDelete, setConfirmingDelete] = useState(false);
   const { t } = useTranslation();
   const currencies = useCurrencies();
@@ -42,6 +62,7 @@ export function AccountDialog({ groupId, account, canDelete = false, open, onOpe
   const saveAccount = useSaveAccount(groupId);
   const form = useForm<AccountFormValues>({ resolver: zodResolver(accountFormSchema) });
   const errors = form.formState.errors;
+  const [previewName, previewIcon, previewColor] = useWatch({ control: form.control, name: ['name', 'icon', 'color'] });
 
   // Reset on every open, so the form never shows what was typed into a previous, cancelled one.
   useEffect(() => {
@@ -53,16 +74,21 @@ export function AccountDialog({ groupId, account, canDelete = false, open, onOpe
               type: account.type,
               currencyId: account.currencyId,
               isIncludedInBalance: account.isIncludedInBalance,
+              isFavourite: account.isFavourite,
+              icon: account.icon,
+              color: account.color,
             }
           : {
               name: '',
               type: 'regular',
               currencyId: profile.data?.mainCurrencyId ?? currencies.data?.[0]?.id ?? 1,
               isIncludedInBalance: true,
+              isFavourite: false,
+              ...defaultAppearance(undefined, accountCount, 'wallet'),
             },
       );
     }
-  }, [open, account, form, profile.data, currencies.data]);
+  }, [open, account, accountCount, form, profile.data, currencies.data]);
 
   const onSubmit = form.handleSubmit(async (values) => {
     try {
@@ -80,6 +106,20 @@ export function AccountDialog({ groupId, account, canDelete = false, open, onOpe
           <DialogHeader>
             <DialogTitle>{t(account ? 'accounts.edit' : 'accounts.new')}</DialogTitle>
           </DialogHeader>
+          {/* How the account will look in lists, as it's being edited, with its favourite star. */}
+          <div className="flex items-center gap-3 rounded-lg bg-muted/50 py-1 pr-1 pl-3">
+            <div className="flex min-w-0 flex-1 items-center gap-3" aria-hidden>
+              <AppearanceIcon icon={previewIcon} color={previewColor} fallbackIcon="wallet" />
+              <span className="truncate font-medium">{previewName?.trim() || t('accounts.name')}</span>
+            </div>
+            <Controller
+              control={form.control}
+              name="isFavourite"
+              render={({ field }) => (
+                <FavouriteToggle favourite={field.value || implicitFavourite} onToggle={() => field.onChange(!field.value)} />
+              )}
+            />
+          </div>
           <form onSubmit={onSubmit} noValidate>
             <FieldGroup>
               {errors.root?.message && (
@@ -156,6 +196,33 @@ export function AccountDialog({ groupId, account, canDelete = false, open, onOpe
                   </Field>
                 )}
               />
+              <Field>
+                <FieldLabel htmlFor="account-color">{t('accounts.color')}</FieldLabel>
+                <Controller
+                  control={form.control}
+                  name="color"
+                  render={({ field }) => (
+                    <ColorPicker id="account-color" label={t('accounts.color')} value={field.value} onChange={field.onChange} />
+                  )}
+                />
+              </Field>
+              <Field>
+                <FieldLabel htmlFor="account-icon">{t('accounts.icon')}</FieldLabel>
+                <Controller
+                  control={form.control}
+                  name="icon"
+                  render={({ field }) => (
+                    <IconPicker
+                      id="account-icon"
+                      label={t('accounts.icon')}
+                      names={ACCOUNT_ICON_NAMES}
+                      value={field.value}
+                      color={previewColor}
+                      onChange={field.onChange}
+                    />
+                  )}
+                />
+              </Field>
             </FieldGroup>
             <DialogFooter className="mt-6">
               {account && canDelete && (
