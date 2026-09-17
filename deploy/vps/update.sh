@@ -8,6 +8,10 @@
 # the same node image the service runs (argon2 is a native addon, so it must be built for that
 # image), applies migrations, then installs and restarts the user unit and waits for the health
 # route.
+#
+# The whole script is one function, called on the last line: bash then parses all of it before
+# running any, so the git pull below can't change the file under a running bash. After pulling,
+# it hands over to the copy it just pulled, so a change to this script applies to the same deploy.
 set -euo pipefail
 
 REPO=koenigstag/finance-pal
@@ -18,10 +22,14 @@ ENV_FILE="$HOME/.config/containers/env/finance-api.env"
 CACHE="$HOME/.cache/finance-pal"
 PORT=3002
 
-if [[ ! -d "$APP_DIR/.git" ]]; then
-  gh repo clone "$REPO" "$APP_DIR"
-else
-  git -C "$APP_DIR" pull --ff-only
+main() {
+if [[ "${FINANCE_PAL_PULLED:-}" != 1 ]]; then
+  if [[ ! -d "$APP_DIR/.git" ]]; then
+    gh repo clone "$REPO" "$APP_DIR"
+  else
+    git -C "$APP_DIR" pull --ff-only
+  fi
+  FINANCE_PAL_PULLED=1 exec bash "$APP_DIR/deploy/vps/update.sh" "$@"
 fi
 git -C "$APP_DIR" log -1 --format='Deploying %h %s'
 
@@ -61,3 +69,6 @@ for _ in $(seq 1 30); do
 done
 echo "No answer on 127.0.0.1:$PORT. Logs: journalctl --user -u $UNIT -n 50" >&2
 exit 1
+}
+
+main "$@"
