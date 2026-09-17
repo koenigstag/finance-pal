@@ -1,17 +1,17 @@
-import { ChevronRightIcon, PlusIcon, ShapesIcon } from 'lucide-react';
+import { PlusIcon, ShapesIcon } from 'lucide-react';
 import { useMemo, useState } from 'react';
 import { useTranslation } from 'react-i18next';
-import { useSearchParams } from 'react-router';
+import { useNavigate, useSearchParams } from 'react-router';
 import { CATEGORY_TYPES } from '@ft/shared-contracts';
 import { AppearanceIcon } from '@/components/appearance/appearance-icon';
-import { PageHeader } from '@/components/page-header';
+import { PAGE_BOTTOM_SPACE, PageHeader } from '@/components/page-header';
 import { QueryError } from '@/components/query-error';
-import { Button } from '@/components/ui/button';
 import { Empty, EmptyDescription, EmptyHeader, EmptyMedia, EmptyTitle } from '@/components/ui/empty';
 import { Spinner } from '@/components/ui/spinner';
 import { ToggleGroup, ToggleGroupItem } from '@/components/ui/toggle-group';
 import { useGroupScope } from '@/features/groups/group-context';
 import { cn } from '@/lib/utils';
+import { CategoryActionsSheet, type CategoryAction } from './category-actions-sheet';
 import { CategoryDialog } from './category-dialog';
 import { useCategories, type Category } from './queries';
 
@@ -23,7 +23,6 @@ const TYPE_ORDER = ['income', 'expense'] as const satisfies readonly (typeof CAT
 interface DialogState {
   open: boolean;
   category?: Category;
-  defaultParentId?: string;
 }
 
 export function CategoriesPage() {
@@ -31,7 +30,9 @@ export function CategoriesPage() {
   const { group, ability } = useGroupScope();
   const categories = useCategories(group.id);
   const [params, setParams] = useSearchParams();
+  const navigate = useNavigate();
   const [dialog, setDialog] = useState<DialogState>({ open: false });
+  const [sheet, setSheet] = useState<{ open: boolean; category?: Category }>({ open: false });
 
   // In the URL, so a reload or the back button returns to the same list. Expense by default:
   // it's the list people edit most.
@@ -40,10 +41,19 @@ export function CategoriesPage() {
   const canUpdate = ability.can('update', 'Category');
   const canDelete = ability.can('delete', 'Category');
 
+  const onAction = (action: CategoryAction, category: Category) => {
+    setSheet((current) => ({ ...current, open: false }));
+    if (action === 'edit') {
+      setDialog({ open: true, category });
+    } else {
+      void navigate(`/g/${group.id}/transactions?category=${category.id}`);
+    }
+  };
+
   const tree = useMemo(() => buildTree(categories.data ?? [], type), [categories.data, type]);
 
   return (
-    <section className="flex flex-col gap-4">
+    <section className={cn('flex flex-col gap-4', PAGE_BOTTOM_SPACE)}>
       <PageHeader
         title={t('categories.title')}
         action={canCreate ? { label: t('categories.new'), icon: PlusIcon, onClick: () => setDialog({ open: true }) } : undefined}
@@ -88,10 +98,7 @@ export function CategoriesPage() {
               <CategoryRow
                 category={category}
                 detail={children.length > 0 ? t('categories.subcategoryCount', { count: children.length }) : undefined}
-                onSelect={canUpdate ? () => setDialog({ open: true, category }) : undefined}
-                onAddSubcategory={
-                  canCreate ? () => setDialog({ open: true, defaultParentId: category.id }) : undefined
-                }
+                onSelect={() => setSheet({ open: true, category })}
               />
               {children.length > 0 && (
                 <ul className="divide-y border-t">
@@ -100,7 +107,7 @@ export function CategoriesPage() {
                       <CategoryRow
                         category={child}
                         nested
-                        onSelect={canUpdate ? () => setDialog({ open: true, category: child }) : undefined}
+                        onSelect={() => setSheet({ open: true, category: child })}
                       />
                     </li>
                   ))}
@@ -111,12 +118,20 @@ export function CategoriesPage() {
         </ul>
       )}
 
+      <CategoryActionsSheet
+        category={sheet.category}
+        parent={categories.data?.find((candidate) => candidate.id === sheet.category?.parentId)}
+        open={sheet.open}
+        onOpenChange={(open) => setSheet((current) => ({ ...current, open }))}
+        canEdit={canUpdate}
+        onAction={onAction}
+      />
+
       <CategoryDialog
         groupId={group.id}
         categories={categories.data ?? []}
         type={dialog.category?.type ?? type}
         category={dialog.category}
-        defaultParentId={dialog.defaultParentId}
         canDelete={canDelete}
         open={dialog.open}
         onOpenChange={(open) => setDialog((current) => ({ ...current, open }))}
@@ -129,41 +144,23 @@ interface CategoryRowProps {
   category: Category;
   nested?: boolean;
   detail?: string;
-  // Absent for callers who can't edit: the row is then plain text.
-  onSelect?: () => void;
-  onAddSubcategory?: () => void;
+  onSelect: () => void;
 }
 
-function CategoryRow({ category, nested = false, detail, onSelect, onAddSubcategory }: CategoryRowProps) {
-  const { t } = useTranslation();
-  const content = (
-    <>
+function CategoryRow({ category, nested = false, detail, onSelect }: CategoryRowProps) {
+  return (
+    <button
+      type="button"
+      // Subcategories line their smaller icon up under the parent's name.
+      className={cn('flex min-h-12 w-full items-center gap-3 px-4 py-2 text-left hover:bg-muted/50', nested && 'pl-[3.75rem]')}
+      onClick={onSelect}
+    >
       <AppearanceIcon icon={category.icon} color={category.color} size={nested ? 'sm' : 'md'} />
       <div className="min-w-0 flex-1">
         <p className={cn('truncate', nested ? 'text-sm' : 'font-medium')}>{category.name}</p>
         {detail && <p className="text-sm text-muted-foreground">{detail}</p>}
       </div>
-      {onSelect && <ChevronRightIcon className="size-4 shrink-0 text-muted-foreground" />}
-    </>
-  );
-  // Subcategories line their smaller icon up under the parent's name.
-  const rowClass = cn('flex min-h-12 flex-1 items-center gap-3 px-4 py-2 text-left', nested && 'pl-[3.75rem]');
-
-  return (
-    <div className="flex items-center pr-2">
-      {onSelect ? (
-        <button type="button" className={cn(rowClass, 'hover:bg-muted/50')} onClick={onSelect}>
-          {content}
-        </button>
-      ) : (
-        <div className={rowClass}>{content}</div>
-      )}
-      {onAddSubcategory && (
-        <Button variant="ghost" size="icon" aria-label={t('categories.addSubcategory', { name: category.name })} onClick={onAddSubcategory}>
-          <PlusIcon />
-        </Button>
-      )}
-    </div>
+    </button>
   );
 }
 

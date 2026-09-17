@@ -117,6 +117,16 @@
     --sidebar-ring: oklch(0.556 0 0);
 }
 
+/* Scrolls without showing a scrollbar: for lists that open part-way down (the transactions list
+   starts at today), where a bar sitting mid-track looks broken. Touch, wheel and keyboard still
+   scroll. */
+@utility scrollbar-none {
+  scrollbar-width: none;
+  &::-webkit-scrollbar {
+    display: none;
+  }
+}
+
 @layer base {
   * {
     @apply border-border outline-ring/50;

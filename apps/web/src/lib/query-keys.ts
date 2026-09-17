@@ -11,6 +11,7 @@ export const queryKeys = {
   currencies: ['currencies'] as const,
   groups: ['groups'] as const,
   group: (groupId: string) => ['group', groupId] as const,
+  members: (groupId: string) => ['group', groupId, 'members'] as const,
   accounts: (groupId: string) => ['group', groupId, 'accounts'] as const,
   accountUsage: (groupId: string, accountId: string) => ['group', groupId, 'accounts', accountId, 'usage'] as const,
   categories: (groupId: string) => ['group', groupId, 'categories'] as const,

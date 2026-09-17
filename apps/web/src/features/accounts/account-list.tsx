@@ -48,12 +48,12 @@ export function AccountList({ accounts, onSelect }: AccountListProps) {
 }
 
 function AccountRow({ account, onSelect }: { account: Account; onSelect: (account: Account) => void }) {
-  const { t, i18n } = useTranslation();
+  const { i18n } = useTranslation();
   const currencyCodes = useCurrencyCodes();
-  const currency = currencyCodes.get(account.currencyId);
-  const hasPlanned = account.plannedBalance !== account.balance;
   // Symbols rather than codes (₴, not UAH): shorter, and the list is about the amounts.
-  const format = (amount: string) => formatMoney(amount, currency, i18n.language, { currencyDisplay: 'narrowSymbol' });
+  const balance = formatMoney(account.balance, currencyCodes.get(account.currencyId), i18n.language, {
+    currencyDisplay: 'narrowSymbol',
+  });
 
   return (
     <button
@@ -63,16 +63,7 @@ function AccountRow({ account, onSelect }: { account: Account; onSelect: (accoun
     >
       <AppearanceIcon icon={account.icon} color={account.color} fallbackIcon="wallet" />
       <p className="min-w-0 flex-1 truncate font-medium">{account.name}</p>
-      <div className="text-right">
-        <p className={cn('font-medium tabular-nums', signColor(moneySign(account.balance)))}>
-          {format(account.balance)}
-        </p>
-        {hasPlanned && (
-          <p className="text-sm text-muted-foreground tabular-nums">
-            {t('accounts.planned', { amount: format(account.plannedBalance) })}
-          </p>
-        )}
-      </div>
+      <p className={cn('text-right font-medium tabular-nums', signColor(moneySign(account.balance)))}>{balance}</p>
     </button>
   );
 }

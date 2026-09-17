@@ -12,6 +12,10 @@ export const ru: Catalog<typeof en> = {
     email: 'Email',
     password: 'Пароль',
     logout: 'Выйти',
+    logoutConfirm: {
+      title: 'Выйти из аккаунта?',
+      description: 'На этом устройстве придётся войти снова.',
+    },
     login: {
       title: 'Вход',
       submit: 'Войти',
@@ -49,6 +53,7 @@ export const ru: Catalog<typeof en> = {
   },
   accounts: {
     title: 'Счета',
+    total: 'Все счета',
     new: 'Новый счёт',
     edit: 'Изменить счёт',
     name: 'Название',
@@ -62,7 +67,6 @@ export const ru: Catalog<typeof en> = {
     favouriteDescription: 'Выбирается по умолчанию при добавлении операции.',
     markFavourite: 'Сделать избранным',
     unmarkFavourite: 'Убрать из избранного',
-    planned: 'С учётом плана: {{amount}}',
     delete: {
       title: 'Удалить «{{name}}»?',
       alsoDeletes: 'Вместе со счётом будут удалены:',
@@ -107,7 +111,6 @@ export const ru: Catalog<typeof en> = {
     icon: 'Иконка',
     topLevel: 'Нет (верхний уровень)',
     hasSubcategories: 'У неё есть подкатегории, поэтому она остаётся на верхнем уровне.',
-    addSubcategory: 'Добавить подкатегорию в {{name}}',
     subcategoryCount_one: '{{count}} подкатегория',
     subcategoryCount_few: '{{count}} подкатегории',
     subcategoryCount_many: '{{count}} подкатегорий',
@@ -159,8 +162,11 @@ export const ru: Catalog<typeof en> = {
     date: 'Дата',
     note: 'Заметка',
     recurring: 'Повторяющаяся',
-    planned: 'Запланировано',
     customized: 'Изменено',
+    plannedSeparator_one: '{{count}} запланированная операция',
+    plannedSeparator_few: '{{count}} запланированные операции',
+    plannedSeparator_many: '{{count}} запланированных операций',
+    plannedSeparator_other: '{{count}} запланированной операции',
     loadMore: 'Загрузить ещё',
     occurrenceNotice: 'Часть повторяющейся серии. Изменения затронут только эту дату.',
     types: {
@@ -171,14 +177,24 @@ export const ru: Catalog<typeof en> = {
     errors: {
       sameAccount: 'Выберите другой счёт',
     },
+    actions: {
+      duplicate: 'Дублировать',
+    },
     deleteConfirm: {
       title: 'Удалить операцию?',
       description: 'Балансы счетов будут пересчитаны.',
       occurrence: 'Будет пропущена только эта дата, остальная серия сохранится.',
     },
     filters: {
-      search: 'Поиск по заметкам',
-      toggle: 'Фильтры',
+      title: 'Фильтры',
+      search: 'Поиск',
+      searchPlaceholder: 'Поиск по заметкам',
+      reset: 'Сбросить',
+      done: 'Готово',
+      openActive_one: 'Фильтры, {{count}} активный',
+      openActive_few: 'Фильтры, {{count}} активных',
+      openActive_many: 'Фильтры, {{count}} активных',
+      openActive_other: 'Фильтры, {{count}} активного',
       type: 'Тип',
       allAccounts: 'Все счета',
       allTypes: 'Все типы',
@@ -205,6 +221,9 @@ export const ru: Catalog<typeof en> = {
   settings: {
     title: 'Настройки',
     saved: 'Сохранено',
+    account: {
+      title: 'Аккаунт',
+    },
     appearance: {
       title: 'Оформление',
       description: 'Действует только на этом устройстве.',
@@ -227,12 +246,45 @@ export const ru: Catalog<typeof en> = {
       member: 'Участник',
       viewer: 'Наблюдатель',
     },
+    settings: {
+      open: 'Настройки группы «{{name}}»',
+      details: 'Изменить данные группы',
+      members: 'Участники',
+      delete: 'Удалить группу и все её данные',
+    },
+    members: {
+      you: 'вы',
+      invite: 'Пригласить участника',
+      inviteRole: 'Роль для приглашения',
+      inviteAction: 'Пригласить',
+      role: 'Роль {{email}}',
+      remove: 'Удалить {{email}}',
+      removeAction: 'Удалить',
+      removeConfirm: {
+        title: 'Удалить {{email}} из группы?',
+        description: 'Участник потеряет доступ к группе. Добавленные им записи останутся.',
+      },
+      errors: {
+        noUser: 'Пользователь с таким адресом ещё не зарегистрирован.',
+        alreadyMember: 'Этот пользователь уже в группе.',
+      },
+    },
+    delete: {
+      title: 'Удалить группу «{{name}}»?',
+      description:
+        'Вместе с ней у всех участников удалятся счета, категории, операции и повторяющиеся правила. Отменить это будет нельзя.',
+      continue: 'Продолжить',
+      confirmName: 'Введите название группы для подтверждения.',
+      nameLabel: 'Введите {{name}}',
+      submit: 'Удалить группу',
+    },
     switcher: {
       label: 'Группы',
       placeholder: 'Выберите группу',
     },
     create: {
       title: 'Новая группа',
+      add: 'Добавить группу',
       description: 'Группы разделяют бюджеты, например личный и семейный.',
       firstDescription: 'Создайте первую группу, чтобы начать учёт. Позже ею можно будет поделиться.',
       name: 'Название',

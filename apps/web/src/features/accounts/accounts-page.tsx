@@ -2,7 +2,7 @@ import { PlusIcon, WalletIcon } from 'lucide-react';
 import { useState } from 'react';
 import { useTranslation } from 'react-i18next';
 import { useNavigate } from 'react-router';
-import { PageHeader } from '@/components/page-header';
+import { PAGE_BOTTOM_SPACE, PageHeader } from '@/components/page-header';
 import { QueryError } from '@/components/query-error';
 import { Empty, EmptyDescription, EmptyHeader, EmptyMedia, EmptyTitle } from '@/components/ui/empty';
 import { Spinner } from '@/components/ui/spinner';
@@ -13,6 +13,7 @@ import { AccountActionsSheet, type AccountAction } from './account-actions-sheet
 import { AccountDialog } from './account-dialog';
 import { AccountList } from './account-list';
 import { useAccounts, type Account } from './queries';
+import { cn } from '@/lib/utils';
 
 export function AccountsPage() {
   const { t } = useTranslation();
@@ -45,7 +46,7 @@ export function AccountsPage() {
   };
 
   return (
-    <section className="flex flex-col gap-4">
+    <section className={cn('flex flex-col gap-4', PAGE_BOTTOM_SPACE)}>
       <PageHeader
         title={t('accounts.title')}
         action={canCreate ? { label: t('accounts.new'), icon: PlusIcon, onClick: () => setDialog({ open: true }) } : undefined}

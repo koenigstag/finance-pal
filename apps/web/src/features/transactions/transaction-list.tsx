@@ -1,5 +1,5 @@
 import { format } from 'date-fns';
-import { ArrowRightIcon, RepeatIcon } from 'lucide-react';
+import { ArrowRightIcon, ChevronUpIcon, RepeatIcon } from 'lucide-react';
 import { useMemo } from 'react';
 import { useTranslation } from 'react-i18next';
 import { AppearanceIcon } from '@/components/appearance/appearance-icon';
@@ -20,39 +20,68 @@ interface TransactionListProps {
   onSelect?: (transaction: Transaction) => void;
 }
 
-/** Transactions grouped under a heading per local calendar day, newest first as the API sorts them. */
+/**
+ * Transactions grouped under a heading per local calendar day, newest first as the API sorts them.
+ * Planned (future-dated) ones come first, dimmed, then a separator counting them, then everything
+ * that already happened. A day with both appears on each side of the separator.
+ */
 export function TransactionList({ transactions, accounts, categories, onSelect }: TransactionListProps) {
-  const { i18n } = useTranslation();
-  const days = useMemo(() => groupByDay(transactions), [transactions]);
+  const { t, i18n } = useTranslation();
   const dayFormat = useMemo(
     () => new Intl.DateTimeFormat(i18n.language, { weekday: 'short', day: 'numeric', month: 'long', year: 'numeric' }),
     [i18n.language],
   );
   const accountsById = useMemo(() => new Map(accounts.map((account) => [account.id, account])), [accounts]);
   const categoriesById = useMemo(() => new Map(categories.map((category) => [category.id, category])), [categories]);
-  // Rendered once per list, not per row: rows compare against the same instant.
+  // Rendered once per list, not per row: every row compares against the same instant.
   const now = Date.now();
+  const planned = transactions.filter((transaction) => new Date(transaction.date).getTime() > now);
+  const happened = transactions.filter((transaction) => new Date(transaction.date).getTime() <= now);
+
+  const renderDays = (items: Transaction[], isPlanned: boolean) =>
+    groupByDay(items).map(({ day, items: dayItems }) => (
+      <section key={`${isPlanned ? 'planned' : 'happened'}-${day}`} className="flex flex-col gap-1" data-day={day}>
+        <h3 className={cn('px-1 text-sm font-medium text-muted-foreground', isPlanned && 'opacity-60')}>
+          {dayFormat.format(dayItems[0].dateValue)}
+        </h3>
+        <ul className="divide-y rounded-xl border">
+          {dayItems.map(({ transaction }) => (
+            <li key={transaction.id}>
+              <TransactionRow
+                transaction={transaction}
+                planned={isPlanned}
+                accountsById={accountsById}
+                categoriesById={categoriesById}
+                onSelect={onSelect}
+              />
+            </li>
+          ))}
+        </ul>
+      </section>
+    ));
 
   return (
     <div className="flex flex-col gap-4">
-      {days.map(({ day, items }) => (
-        <section key={day} className="flex flex-col gap-1">
-          <h3 className="px-1 text-sm font-medium text-muted-foreground">{dayFormat.format(items[0].dateValue)}</h3>
-          <ul className="divide-y rounded-xl border">
-            {items.map(({ transaction, dateValue }) => (
-              <li key={transaction.id}>
-                <TransactionRow
-                  transaction={transaction}
-                  planned={dateValue.getTime() > now}
-                  accountsById={accountsById}
-                  categoriesById={categoriesById}
-                  onSelect={onSelect}
-                />
-              </li>
-            ))}
-          </ul>
-        </section>
-      ))}
+      {renderDays(planned, true)}
+      {planned.length > 0 && happened.length > 0 && (
+        // Where the page opens (see useTodayAnchor): planned transactions are above, a scroll up.
+        <div
+          data-today-anchor
+          role="separator"
+          aria-label={t('transactions.plannedSeparator', { count: planned.length })}
+          className="flex items-center gap-3 py-1"
+        >
+          <span aria-hidden className="h-1 flex-1 rounded-full bg-border" />
+          {/* The chevrons point at where the planned transactions are: above. */}
+          <span aria-hidden className="flex items-center gap-1.5 text-xs font-medium whitespace-nowrap text-muted-foreground">
+            <ChevronUpIcon className="size-4" />
+            {t('transactions.plannedSeparator', { count: planned.length })}
+            <ChevronUpIcon className="size-4" />
+          </span>
+          <span aria-hidden className="h-1 flex-1 rounded-full bg-border" />
+        </div>
+      )}
+      {renderDays(happened, false)}
     </div>
   );
 }
@@ -107,10 +136,9 @@ function TransactionRow({ transaction, planned, accountsById, categoriesById, on
           )}
           {transaction.note && <span className="truncate"> · {transaction.note}</span>}
         </p>
-        {(planned || transaction.isCustomized) && (
+        {transaction.isCustomized && (
           <div className="mt-1 flex gap-1">
-            {planned && <Badge variant="outline">{t('transactions.planned')}</Badge>}
-            {transaction.isCustomized && <Badge variant="secondary">{t('transactions.customized')}</Badge>}
+            <Badge variant="secondary">{t('transactions.customized')}</Badge>
           </div>
         )}
       </div>
@@ -126,7 +154,9 @@ function TransactionRow({ transaction, planned, accountsById, categoriesById, on
     </>
   );
 
-  const className = cn('flex w-full items-start gap-3 px-4 py-3 text-left', planned && 'text-muted-foreground');
+  // Planned (future-dated) rows are dimmed as a whole — text, amount and icon — so what already
+  // happened stands out.
+  const className = cn('flex w-full items-start gap-3 px-4 py-3 text-left', planned && 'text-muted-foreground opacity-60');
   return onSelect ? (
     <button type="button" className={cn(className, 'hover:bg-muted/50')} onClick={() => onSelect(transaction)}>
       {content}

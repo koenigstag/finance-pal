@@ -9,6 +9,10 @@ export const en = {
     email: 'Email',
     password: 'Password',
     logout: 'Log out',
+    logoutConfirm: {
+      title: 'Log out?',
+      description: 'You will need to log in again on this device.',
+    },
     login: {
       title: 'Log in',
       submit: 'Log in',
@@ -46,6 +50,7 @@ export const en = {
   },
   accounts: {
     title: 'Accounts',
+    total: 'All accounts',
     new: 'New account',
     edit: 'Edit account',
     name: 'Name',
@@ -59,7 +64,6 @@ export const en = {
     favouriteDescription: 'Preselected when you add a transaction.',
     markFavourite: 'Make favourite',
     unmarkFavourite: 'Remove from favourites',
-    planned: 'Planned: {{amount}}',
     delete: {
       title: 'Delete “{{name}}”?',
       alsoDeletes: 'This also deletes:',
@@ -105,7 +109,6 @@ export const en = {
     icon: 'Icon',
     topLevel: 'None (top level)',
     hasSubcategories: 'It has subcategories, so it stays at the top level.',
-    addSubcategory: 'Add a subcategory to {{name}}',
     subcategoryCount_one: '{{count}} subcategory',
     subcategoryCount_few: '{{count}} subcategories',
     subcategoryCount_many: '{{count}} subcategories',
@@ -157,8 +160,12 @@ export const en = {
     date: 'Date',
     note: 'Note',
     recurring: 'Recurring',
-    planned: 'Planned',
     customized: 'Changed',
+    // few/many are unused in English; they exist so the Russian catalog can match this shape.
+    plannedSeparator_one: '{{count}} planned transaction',
+    plannedSeparator_few: '{{count}} planned transactions',
+    plannedSeparator_many: '{{count}} planned transactions',
+    plannedSeparator_other: '{{count}} planned transactions',
     loadMore: 'Load more',
     occurrenceNotice: 'Part of a recurring series. Changes here apply to this date only.',
     types: {
@@ -169,14 +176,24 @@ export const en = {
     errors: {
       sameAccount: 'Choose a different account',
     },
+    actions: {
+      duplicate: 'Duplicate',
+    },
     deleteConfirm: {
       title: 'Delete this transaction?',
       description: 'Account balances will be recalculated.',
       occurrence: 'Only this date is skipped; the rest of the series stays.',
     },
     filters: {
-      search: 'Search notes',
-      toggle: 'Filters',
+      title: 'Filters',
+      search: 'Search',
+      searchPlaceholder: 'Search notes',
+      reset: 'Reset',
+      done: 'Done',
+      openActive_one: 'Filters, {{count}} active',
+      openActive_few: 'Filters, {{count}} active',
+      openActive_many: 'Filters, {{count}} active',
+      openActive_other: 'Filters, {{count}} active',
       type: 'Type',
       allAccounts: 'All accounts',
       allTypes: 'All types',
@@ -203,6 +220,9 @@ export const en = {
   settings: {
     title: 'Settings',
     saved: 'Saved',
+    account: {
+      title: 'Account',
+    },
     appearance: {
       title: 'Appearance',
       description: 'Applies to this device only.',
@@ -225,12 +245,45 @@ export const en = {
       member: 'Member',
       viewer: 'Viewer',
     },
+    settings: {
+      open: 'Settings for {{name}}',
+      details: 'Edit group details',
+      members: 'Manage members',
+      delete: 'Delete group and its data',
+    },
+    members: {
+      you: 'you',
+      invite: 'Invite someone',
+      inviteRole: 'Role for the invitation',
+      inviteAction: 'Invite',
+      role: 'Role of {{email}}',
+      remove: 'Remove {{email}}',
+      removeAction: 'Remove',
+      removeConfirm: {
+        title: 'Remove {{email}}?',
+        description: 'They lose access to this group. What they added stays.',
+      },
+      errors: {
+        noUser: 'Nobody uses this app with that email yet.',
+        alreadyMember: 'They are already in this group.',
+      },
+    },
+    delete: {
+      title: 'Delete “{{name}}”?',
+      description:
+        'Everything in this group goes with it, for every member: accounts, categories, transactions and recurring rules. This cannot be undone.',
+      continue: 'Continue',
+      confirmName: 'Type the name of the group to confirm.',
+      nameLabel: 'Type {{name}}',
+      submit: 'Delete group',
+    },
     switcher: {
       label: 'Groups',
       placeholder: 'Choose a group',
     },
     create: {
       title: 'New group',
+      add: 'Add group',
       description: 'Groups keep separate budgets apart, like personal and family.',
       firstDescription: 'Create your first group to start tracking money. You can share it with others later.',
       name: 'Name',

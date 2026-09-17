@@ -3,31 +3,36 @@ import { useEffect, useMemo, useRef, useState } from 'react';
 import { useTranslation } from 'react-i18next';
 import { useSearchParams } from 'react-router';
 import { TRANSACTION_TYPES } from '@ft/shared-contracts';
-import { AppearanceIcon } from '@/components/appearance/appearance-icon';
-import { PageHeader } from '@/components/page-header';
+import { HeaderTools } from '@/components/header-tools';
+import { PAGE_BOTTOM_SPACE, PageHeader } from '@/components/page-header';
 import { QueryError } from '@/components/query-error';
 import { Badge } from '@/components/ui/badge';
 import { Button } from '@/components/ui/button';
 import { Empty, EmptyDescription, EmptyHeader, EmptyMedia, EmptyTitle } from '@/components/ui/empty';
-import { Input } from '@/components/ui/input';
-import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select';
 import { Spinner } from '@/components/ui/spinner';
 import { useAccounts } from '@/features/accounts/queries';
-import { categoryOptions, useCategories } from '@/features/categories/queries';
+import { useCategories } from '@/features/categories/queries';
 import { useGroupScope } from '@/features/groups/group-context';
 import { monthRange, parseMonthParam, shiftMonth, toMonthParam } from '@/lib/dates';
 import { capitalizeFirst } from '@/lib/text';
 import { cn } from '@/lib/utils';
 import { useTransactionPages, type Transaction, type TransactionFilters } from './queries';
+import { DeleteTransactionDialog } from './delete-transaction-dialog';
+import { TransactionActionsSheet, type TransactionAction } from './transaction-actions-sheet';
 import { TransactionDialog } from './transaction-dialog';
 import { TransactionList } from './transaction-list';
-import { TRANSACTION_TYPE_ORDER } from './transaction-types';
-
-// Select items can't have an empty value; this one means "no filter".
-const ALL = 'all';
-const SEARCH_DEBOUNCE_MS = 300;
+import { TransactionFiltersSheet, type TransactionFilterValues } from './transaction-filters-sheet';
+import { useTodayAnchor } from './use-today-anchor';
 
 type TransactionType = (typeof TRANSACTION_TYPES)[number];
+
+// Which URL parameter holds each filter.
+const FILTER_PARAMS: Record<keyof TransactionFilterValues, string> = {
+  search: 'q',
+  accountId: 'account',
+  type: 'type',
+  categoryId: 'category',
+};
 
 export function TransactionsPage() {
   const { t, i18n } = useTranslation();
@@ -35,8 +40,9 @@ export function TransactionsPage() {
   const [params, setParams] = useSearchParams();
   const accounts = useAccounts(group.id);
   const categories = useCategories(group.id);
-  const [dialog, setDialog] = useState<{ open: boolean; transaction?: Transaction }>({ open: false });
-  // Phones show only the month and search until asked; the other filters take a screenful.
+  const [dialog, setDialog] = useState<{ open: boolean; transaction?: Transaction; template?: Transaction }>({ open: false });
+  const [sheet, setSheet] = useState<{ open: boolean; transaction?: Transaction }>({ open: false });
+  const [deleting, setDeleting] = useState<{ open: boolean; transaction?: Transaction }>({ open: false });
   const [filtersOpen, setFiltersOpen] = useState(false);
 
   // Filters live in the URL, so a reload, the back button or a shared link keep them.
@@ -47,18 +53,30 @@ export function TransactionsPage() {
   const type = TRANSACTION_TYPES.includes(typeParam as TransactionType) ? (typeParam as TransactionType) : undefined;
   const search = params.get('q') ?? '';
 
-  const setParam = (name: string, value: string | undefined) =>
+  // Sets or clears URL parameters in one navigation; undefined or '' clears.
+  const updateParams = (patch: Record<string, string | undefined>) =>
     setParams(
       (current) => {
         const next = new URLSearchParams(current);
-        if (value) {
-          next.set(name, value);
-        } else {
-          next.delete(name);
+        for (const [name, value] of Object.entries(patch)) {
+          if (value) {
+            next.set(name, value);
+          } else {
+            next.delete(name);
+          }
         }
         return next;
       },
       { replace: true },
+    );
+  const setParam = (name: string, value: string | undefined) => updateParams({ [name]: value });
+
+  const filterValues: TransactionFilterValues = { search, accountId, type, categoryId };
+  const onFiltersChange = (patch: Partial<TransactionFilterValues>) =>
+    updateParams(
+      Object.fromEntries(
+        Object.entries(patch).map(([name, value]) => [FILTER_PARAMS[name as keyof TransactionFilterValues], value]),
+      ),
     );
 
   const monthKey = toMonthParam(month);
@@ -68,30 +86,59 @@ export function TransactionsPage() {
   );
   const pages = useTransactionPages(group.id, filters);
   const transactions = useMemo(() => pages.data?.pages.flatMap((page) => page.items) ?? [], [pages.data]);
+  const scrollerRef = useRef<HTMLDivElement>(null);
+  // The list opens on the separator before what already happened; planned transactions wait
+  // above it, a scroll up. The title, month and filters above the list don't move.
+  const anchorSpacer = useTodayAnchor(scrollerRef, JSON.stringify([group.id, filters]), pages.isSuccess);
 
-  const activeFilterCount = [accountId, categoryId, type].filter(Boolean).length;
+  const activeFilterCount = [search, accountId, categoryId, type].filter(Boolean).length;
   const canCreate = ability.can('create', 'Transaction');
   const canUpdate = ability.can('update', 'Transaction');
+  const canDelete = ability.can('delete', 'Transaction');
+
+  const onAction = (action: TransactionAction, transaction: Transaction) => {
+    setSheet((current) => ({ ...current, open: false }));
+    if (action === 'edit') {
+      setDialog({ open: true, transaction });
+    } else if (action === 'duplicate') {
+      setDialog({ open: true, template: transaction });
+    } else {
+      setDeleting({ open: true, transaction });
+    }
+  };
   const monthLabel = capitalizeFirst(
     new Intl.DateTimeFormat(i18n.language, { month: 'long', year: 'numeric' }).format(month),
     i18n.language,
   );
-  const categoryFilterOptions = useMemo(
-    () =>
-      type === 'transfer'
-        ? []
-        : (type ? [type] : (['income', 'expense'] as const)).flatMap((categoryType) =>
-            categoryOptions(categories.data ?? [], categoryType),
-          ),
-    [categories.data, type],
-  );
 
   return (
-    <section className="flex flex-col gap-4">
+    // Fills the content area instead of growing past it, so only the list below scrolls.
+    <section className="flex min-h-0 flex-1 flex-col gap-4">
       <PageHeader
         title={t('transactions.title')}
         action={canCreate ? { label: t('transactions.new'), icon: PlusIcon, onClick: () => setDialog({ open: true }) } : undefined}
       />
+
+      <HeaderTools>
+        <Button
+          variant="ghost"
+          size="icon"
+          aria-label={
+            activeFilterCount > 0
+              ? t('transactions.filters.openActive', { count: activeFilterCount })
+              : t('transactions.filters.title')
+          }
+          onClick={() => setFiltersOpen(true)}
+          className="relative"
+        >
+          <ListFilterIcon />
+          {activeFilterCount > 0 && (
+            <Badge aria-hidden className="absolute -top-1.5 -right-1.5 h-5 min-w-5 px-1.5">
+              {activeFilterCount}
+            </Badge>
+          )}
+        </Button>
+      </HeaderTools>
 
       <div className="flex items-center justify-between gap-1 md:justify-start">
         <Button
@@ -113,163 +160,75 @@ export function TransactionsPage() {
         </Button>
       </div>
 
-      <div className="flex gap-2 md:hidden">
-        <div className="flex-1">
-          <SearchInput value={search} onChange={(value) => setParam('q', value || undefined)} />
-        </div>
-        <Button
-          variant="outline"
-          aria-expanded={filtersOpen}
-          aria-controls="transaction-filters"
-          onClick={() => setFiltersOpen((open) => !open)}
-        >
-          <ListFilterIcon />
-          {t('transactions.filters.toggle')}
-          {activeFilterCount > 0 && <Badge className="ml-0.5 h-5 min-w-5 px-1.5">{activeFilterCount}</Badge>}
-        </Button>
+      <div ref={scrollerRef} className={cn('-mx-1 min-h-0 flex-1 overflow-y-auto px-1 scrollbar-none', PAGE_BOTTOM_SPACE)}>
+        {pages.isPending ? (
+          <Spinner className="mx-auto size-6 text-muted-foreground" />
+        ) : pages.isError ? (
+          <QueryError onRetry={() => void pages.refetch()} />
+        ) : transactions.length === 0 ? (
+          <Empty className="border">
+            <EmptyHeader>
+              <EmptyMedia variant="icon">
+                <ReceiptTextIcon />
+              </EmptyMedia>
+              <EmptyTitle>{t('transactions.empty.title')}</EmptyTitle>
+              <EmptyDescription>{t('transactions.empty.description')}</EmptyDescription>
+            </EmptyHeader>
+          </Empty>
+        ) : (
+          <div className="flex flex-col gap-4">
+            <TransactionList
+              transactions={transactions}
+              accounts={accounts.data ?? []}
+              categories={categories.data ?? []}
+              onSelect={canUpdate || canCreate || canDelete ? (transaction) => setSheet({ open: true, transaction }) : undefined}
+            />
+            {pages.hasNextPage && (
+              <LoadMore loading={pages.isFetchingNextPage} onLoadMore={() => void pages.fetchNextPage()} />
+            )}
+            {anchorSpacer > 0 && <div aria-hidden style={{ height: anchorSpacer }} />}
+          </div>
+        )}
       </div>
 
-      <div
-        id="transaction-filters"
-        className={cn('grid-cols-1 gap-2 md:grid md:grid-cols-2 lg:grid-cols-4', filtersOpen ? 'grid' : 'hidden')}
-      >
-        <div className="hidden md:block">
-          <SearchInput value={search} onChange={(value) => setParam('q', value || undefined)} />
-        </div>
-        <Select value={accountId ?? ALL} onValueChange={(value) => setParam('account', value === ALL ? undefined : value)}>
-          <SelectTrigger className="w-full" aria-label={t('transactions.account')}>
-            <SelectValue />
-          </SelectTrigger>
-          <SelectContent>
-            <SelectItem value={ALL}>{t('transactions.filters.allAccounts')}</SelectItem>
-            {accounts.data?.map((account) => (
-              <SelectItem key={account.id} value={account.id}>
-                <AppearanceIcon icon={account.icon} color={account.color} fallbackIcon="wallet" size="sm" />
-                {account.name}
-              </SelectItem>
-            ))}
-          </SelectContent>
-        </Select>
-        <Select
-          value={type ?? ALL}
-          onValueChange={(value) =>
-            setParams(
-              (current) => {
-                const next = new URLSearchParams(current);
-                if (value === ALL) {
-                  next.delete('type');
-                } else {
-                  next.set('type', value);
-                }
-                // A category belongs to one type; keeping it across a type change could only
-                // filter everything out.
-                next.delete('category');
-                return next;
-              },
-              { replace: true },
-            )
-          }
-        >
-          <SelectTrigger className="w-full" aria-label={t('transactions.filters.type')}>
-            <SelectValue />
-          </SelectTrigger>
-          <SelectContent>
-            <SelectItem value={ALL}>{t('transactions.filters.allTypes')}</SelectItem>
-            {TRANSACTION_TYPE_ORDER.map((option) => (
-              <SelectItem key={option} value={option}>
-                {t(`transactions.types.${option}`)}
-              </SelectItem>
-            ))}
-          </SelectContent>
-        </Select>
-        <Select
-          value={categoryId ?? ALL}
-          onValueChange={(value) => setParam('category', value === ALL ? undefined : value)}
-          disabled={type === 'transfer'}
-        >
-          <SelectTrigger className="w-full" aria-label={t('transactions.category')}>
-            <SelectValue />
-          </SelectTrigger>
-          <SelectContent>
-            <SelectItem value={ALL}>{t('transactions.filters.allCategories')}</SelectItem>
-            {categoryFilterOptions.map(({ category, depth }) => (
-              <SelectItem key={category.id} value={category.id}>
-                <span className="flex items-center gap-2" style={{ paddingInlineStart: `${depth}rem` }}>
-                  <AppearanceIcon icon={category.icon} color={category.color} size="sm" />
-                  {category.name}
-                </span>
-              </SelectItem>
-            ))}
-          </SelectContent>
-        </Select>
-      </div>
+      <TransactionFiltersSheet
+        open={filtersOpen}
+        onOpenChange={setFiltersOpen}
+        values={filterValues}
+        onChange={onFiltersChange}
+        onReset={() => updateParams({ q: undefined, account: undefined, type: undefined, category: undefined })}
+        accounts={accounts.data ?? []}
+        categories={categories.data ?? []}
+      />
 
-      {pages.isPending ? (
-        <Spinner className="mx-auto size-6 text-muted-foreground" />
-      ) : pages.isError ? (
-        <QueryError onRetry={() => void pages.refetch()} />
-      ) : transactions.length === 0 ? (
-        <Empty className="border">
-          <EmptyHeader>
-            <EmptyMedia variant="icon">
-              <ReceiptTextIcon />
-            </EmptyMedia>
-            <EmptyTitle>{t('transactions.empty.title')}</EmptyTitle>
-            <EmptyDescription>{t('transactions.empty.description')}</EmptyDescription>
-          </EmptyHeader>
-        </Empty>
-      ) : (
-        <>
-          <TransactionList
-            transactions={transactions}
-            accounts={accounts.data ?? []}
-            categories={categories.data ?? []}
-            onSelect={canUpdate ? (transaction) => setDialog({ open: true, transaction }) : undefined}
-          />
-          {pages.hasNextPage && (
-            <LoadMore loading={pages.isFetchingNextPage} onLoadMore={() => void pages.fetchNextPage()} />
-          )}
-        </>
-      )}
+      <TransactionActionsSheet
+        transaction={sheet.transaction}
+        accounts={accounts.data ?? []}
+        categories={categories.data ?? []}
+        open={sheet.open}
+        onOpenChange={(open) => setSheet((current) => ({ ...current, open }))}
+        canUpdate={canUpdate}
+        canCreate={canCreate}
+        canDelete={canDelete}
+        onAction={onAction}
+      />
+
+      <DeleteTransactionDialog
+        groupId={group.id}
+        transaction={deleting.transaction}
+        open={deleting.open}
+        onOpenChange={(open) => setDeleting((current) => ({ ...current, open }))}
+      />
 
       <TransactionDialog
         groupId={group.id}
         transaction={dialog.transaction}
+        template={dialog.template}
         defaultAccountId={accountId}
         open={dialog.open}
         onOpenChange={(open) => setDialog((current) => ({ ...current, open }))}
       />
     </section>
-  );
-}
-
-// Typing updates the field at once but the URL (and so the query) only after a pause.
-function SearchInput({ value, onChange }: { value: string; onChange: (value: string) => void }) {
-  const { t } = useTranslation();
-  const [draft, setDraft] = useState(value);
-  const onChangeRef = useRef(onChange);
-  onChangeRef.current = onChange;
-
-  // Follow outside changes, e.g. back navigation to a different search — but not our own echo,
-  // which would eat a trailing space mid-typing ("coffee " → "coffee").
-  useEffect(() => setDraft((current) => (current.trim() === value ? current : value)), [value]);
-
-  useEffect(() => {
-    if (draft.trim() === value) {
-      return;
-    }
-    const timer = setTimeout(() => onChangeRef.current(draft.trim()), SEARCH_DEBOUNCE_MS);
-    return () => clearTimeout(timer);
-  }, [draft, value]);
-
-  return (
-    <Input
-      type="search"
-      placeholder={t('transactions.filters.search')}
-      aria-label={t('transactions.filters.search')}
-      value={draft}
-      onChange={(event) => setDraft(event.target.value)}
-    />
   );
 }
 

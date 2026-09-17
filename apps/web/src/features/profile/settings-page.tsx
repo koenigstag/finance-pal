@@ -8,6 +8,7 @@ import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/com
 import { Spinner } from '@/components/ui/spinner';
 import { detectLanguage, isSupportedLanguage } from '@/i18n';
 import { AppearanceCard } from '@/theme/appearance-card';
+import { LogoutCard } from '@/features/auth/logout-card';
 import { readLastGroupId } from '@/features/groups/last-group';
 import { ProfileForm } from './profile-form';
 import { useCurrencies } from '@/features/currencies/queries';
@@ -77,6 +78,7 @@ export function SettingsPage() {
         </div>
         <AppearanceCard />
         {content}
+        <LogoutCard />
       </main>
     </>
   );
