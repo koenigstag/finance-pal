@@ -6,11 +6,27 @@ import { ru } from './locales/ru';
 export const SUPPORTED_LANGUAGES = ['en', 'ru'] as const;
 export type Language = (typeof SUPPORTED_LANGUAGES)[number];
 
-// The default UI language is the browser's; anything unsupported falls back to English. A manual
-// choice made in settings, once that exists, should override this rather than replace it.
+export function isSupportedLanguage(language: string): language is Language {
+  return SUPPORTED_LANGUAGES.includes(language as Language);
+}
+
+// Before there's a profile to read, the UI follows the browser; anything unsupported falls back
+// to English.
 export function detectLanguage(): Language {
   const primary = navigator.language.slice(0, 2).toLowerCase();
-  return SUPPORTED_LANGUAGES.includes(primary as Language) ? (primary as Language) : 'en';
+  return isSupportedLanguage(primary) ? primary : 'en';
+}
+
+// The profile's language (set during onboarding, changed in settings) wins over the browser's.
+// Null means "no signed-in profile": fall back to detection again, e.g. after logout.
+let preferredLanguage: Language | null = null;
+
+export function setPreferredLanguage(language: string | null): void {
+  preferredLanguage = language !== null && isSupportedLanguage(language) ? language : null;
+  const next = preferredLanguage ?? detectLanguage();
+  if (i18n.language !== next) {
+    void i18n.changeLanguage(next);
+  }
 }
 
 void i18n.use(initReactI18next).init({
@@ -21,9 +37,12 @@ void i18n.use(initReactI18next).init({
   interpolation: { escapeValue: false },
 });
 
-// Follow the browser if its language preference changes while the app is open.
+// Follow the browser if its language preference changes while the app is open, unless the
+// profile has chosen one.
 window.addEventListener('languagechange', () => {
-  void i18n.changeLanguage(detectLanguage());
+  if (!preferredLanguage) {
+    void i18n.changeLanguage(detectLanguage());
+  }
 });
 
 document.documentElement.lang = i18n.language;
