@@ -57,25 +57,26 @@ export function CategoriesPage() {
       <PageHeader
         title={t('categories.title')}
         action={canCreate ? { label: t('categories.new'), icon: PlusIcon, onClick: () => setDialog({ open: true }) } : undefined}
-      />
-
-      <ToggleGroup
-        type="single"
-        variant="outline"
-        className="w-full md:w-80"
-        value={type}
-        onValueChange={(value) => {
-          if (value) {
-            setParams({ type: value }, { replace: true });
-          }
-        }}
       >
-        {TYPE_ORDER.map((option) => (
-          <ToggleGroupItem key={option} value={option} className="flex-1">
-            {t(`categories.types.${option}`)}
-          </ToggleGroupItem>
-        ))}
-      </ToggleGroup>
+        <ToggleGroup
+          type="single"
+          variant="outline"
+          className="w-full md:w-80"
+          value={type}
+          onValueChange={(value) => {
+            if (value) {
+              setParams({ type: value }, { replace: true });
+            }
+          }}
+        >
+          {TYPE_ORDER.map((option) => (
+            <ToggleGroupItem key={option} value={option} className="flex-1">
+              {t(`categories.types.${option}`)}
+            </ToggleGroupItem>
+          ))}
+        </ToggleGroup>
+      </PageHeader>
+
 
       {categories.isPending ? (
         <Spinner className="mx-auto size-6 text-muted-foreground" />

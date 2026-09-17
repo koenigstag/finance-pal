@@ -18,6 +18,8 @@ interface PageHeaderProps {
   title: ReactNode;
   // The page's primary action, if the caller may perform it.
   action?: PageAction;
+  // The page's own controls (a month switcher, a type filter): they share the action's row.
+  children?: ReactNode;
 }
 
 /**
@@ -27,30 +29,34 @@ interface PageHeaderProps {
  * the header from md up — already says which page this is, and a title repeating it only takes
  * room from the content. It stays in the page for screen readers, which have no tab bar to read.
  *
- * The action is a regular button above the content from md up; on a phone it becomes a floating
- * button above the bottom navigation, where a thumb reaches it.
+ * The action is a regular button from md up, at the end of the row the page's own controls sit
+ * in; on a phone it becomes a floating button above the bottom navigation, where a thumb reaches
+ * it, leaving that row to the controls.
  */
-export function PageHeader({ title, action }: PageHeaderProps) {
+export function PageHeader({ title, action, children }: PageHeaderProps) {
   return (
     <>
       <h1 className="sr-only">{title}</h1>
-      {action && (
-        <>
-          <div className="hidden justify-end md:flex">
-            <Button onClick={action.onClick}>
+      {(children || action) && (
+        <div className="flex items-center gap-2">
+          {children && <div className="min-w-0 flex-1">{children}</div>}
+          {action && (
+            <Button className="hidden md:inline-flex" onClick={action.onClick}>
               <action.icon />
               {action.label}
             </Button>
-          </div>
-          <Button
-            size="icon-lg"
-            aria-label={action.label}
-            onClick={action.onClick}
-            className="fixed right-4 bottom-[calc(4.75rem+env(safe-area-inset-bottom))] z-30 size-14 rounded-full shadow-lg md:hidden [&_svg:not([class*='size-'])]:size-6"
-          >
-            <action.icon />
-          </Button>
-        </>
+          )}
+        </div>
+      )}
+      {action && (
+        <Button
+          size="icon-lg"
+          aria-label={action.label}
+          onClick={action.onClick}
+          className="fixed right-4 bottom-[calc(4.75rem+env(safe-area-inset-bottom))] z-30 size-14 rounded-full shadow-lg md:hidden [&_svg:not([class*='size-'])]:size-6"
+        >
+          <action.icon />
+        </Button>
       )}
     </>
   );

@@ -117,7 +117,27 @@ export function TransactionsPage() {
       <PageHeader
         title={t('transactions.title')}
         action={canCreate ? { label: t('transactions.new'), icon: PlusIcon, onClick: () => setDialog({ open: true }) } : undefined}
-      />
+      >
+        <div className="flex items-center justify-between gap-1 md:justify-start">
+          <Button
+            variant="ghost"
+            size="icon"
+            aria-label={t('transactions.filters.previousMonth')}
+            onClick={() => setParam('month', toMonthParam(shiftMonth(month, -1)))}
+          >
+            <ChevronLeftIcon />
+          </Button>
+          <span className="min-w-40 flex-1 text-center font-medium md:flex-none">{monthLabel}</span>
+          <Button
+            variant="ghost"
+            size="icon"
+            aria-label={t('transactions.filters.nextMonth')}
+            onClick={() => setParam('month', toMonthParam(shiftMonth(month, 1)))}
+          >
+            <ChevronRightIcon />
+          </Button>
+        </div>
+      </PageHeader>
 
       <HeaderTools>
         <Button
@@ -139,26 +159,6 @@ export function TransactionsPage() {
           )}
         </Button>
       </HeaderTools>
-
-      <div className="flex items-center justify-between gap-1 md:justify-start">
-        <Button
-          variant="ghost"
-          size="icon"
-          aria-label={t('transactions.filters.previousMonth')}
-          onClick={() => setParam('month', toMonthParam(shiftMonth(month, -1)))}
-        >
-          <ChevronLeftIcon />
-        </Button>
-        <span className="min-w-40 flex-1 text-center font-medium md:flex-none">{monthLabel}</span>
-        <Button
-          variant="ghost"
-          size="icon"
-          aria-label={t('transactions.filters.nextMonth')}
-          onClick={() => setParam('month', toMonthParam(shiftMonth(month, 1)))}
-        >
-          <ChevronRightIcon />
-        </Button>
-      </div>
 
       <div ref={scrollerRef} className={cn('-mx-1 min-h-0 flex-1 overflow-y-auto px-1 scrollbar-none', PAGE_BOTTOM_SPACE)}>
         {pages.isPending ? (
