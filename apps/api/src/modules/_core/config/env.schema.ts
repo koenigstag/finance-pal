@@ -21,7 +21,10 @@ export const envSchema = z.object({
       'CORS_ORIGINS must be comma-separated origins like https://example.com, without paths',
     ),
   DATABASE_URL: z.string().min(1),
+  // Two keys on purpose: a refresh token can't be passed off as an access token or vice versa,
+  // and either key can be rotated without touching the other kind of token.
   JWT_ACCESS_SECRET: z.string().min(32),
+  JWT_REFRESH_SECRET: z.string().min(32),
   JWT_ACCESS_TTL: z.string().default('15m'),
   // Plain number of seconds, not a duration string like the access TTL above — this one is
   // used to compute refresh_tokens.expires_at ourselves, not just handed to a jwt library.
@@ -30,7 +33,11 @@ export const envSchema = z.object({
     .int()
     .positive()
     .default(60 * 60 * 24 * 30),
-});
+})
+  .refine((env) => env.JWT_ACCESS_SECRET !== env.JWT_REFRESH_SECRET, {
+    message: 'JWT_ACCESS_SECRET and JWT_REFRESH_SECRET must differ',
+    path: ['JWT_REFRESH_SECRET'],
+  });
 
 export type Env = z.infer<typeof envSchema>;
 

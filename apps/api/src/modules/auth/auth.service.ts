@@ -2,12 +2,13 @@ import { ConflictException, Injectable, UnauthorizedException } from '@nestjs/co
 import { ConfigService } from '@nestjs/config';
 import { JwtService } from '@nestjs/jwt';
 import { InjectRepository } from '@nestjs/typeorm';
+import { randomUUID } from 'crypto';
 import { IsNull, Repository } from 'typeorm';
 import { Propagation, Transactional } from 'typeorm-transactional';
 import * as argon2 from 'argon2';
 import { RefreshToken, User } from '@ft/api-database';
 import type { Env } from '../_core/config/env.schema';
-import { generateOpaqueToken, parseOpaqueToken, secretMatchesHash } from './tokens.util';
+import { hashToken, tokenMatchesHash, type RefreshTokenPayload } from './tokens.util';
 
 const ARGON2_OPTIONS = {
   type: argon2.argon2id,
@@ -61,10 +62,13 @@ export class AuthService {
 
   @Transactional()
   async refresh(tokenValue: string): Promise<Omit<AuthResult, 'user'>> {
-    const parsed = parseOpaqueToken(tokenValue);
-    const token = parsed && (await this.refreshTokens.findOneBy({ id: parsed.id }));
+    // Signature and expiry first: a forged, tampered or expired token is turned away without a
+    // database lookup. The row check below still decides: the signature proves the token was
+    // issued by this API, the stored hash that it's the one issued for this row.
+    const claims = await this.verifyRefreshToken(tokenValue);
+    const token = claims && (await this.refreshTokens.findOneBy({ id: claims.jti }));
 
-    if (!parsed || !token || !secretMatchesHash(parsed.secret, token.tokenHash)) {
+    if (!claims || !token || token.userId !== claims.sub || !tokenMatchesHash(tokenValue, token.tokenHash)) {
       throw new UnauthorizedException('Invalid refresh token');
     }
 
@@ -76,6 +80,8 @@ export class AuthService {
       throw new UnauthorizedException('Refresh token reuse detected');
     }
 
+    // The JWT's own exp already covers this; the row's expiry stays authoritative in case the two
+    // ever disagree (e.g. a TTL change between issuing and presenting a token).
     if (token.expiresAt < new Date()) {
       throw new UnauthorizedException('Refresh token expired');
     }
@@ -91,13 +97,14 @@ export class AuthService {
   }
 
   async logout(tokenValue: string): Promise<void> {
-    const parsed = parseOpaqueToken(tokenValue);
-    if (!parsed) {
+    // An invalid or already-expired token has nothing left to revoke.
+    const claims = await this.verifyRefreshToken(tokenValue);
+    if (!claims) {
       return;
     }
 
-    const token = await this.refreshTokens.findOneBy({ id: parsed.id });
-    if (token && !token.revokedAt && secretMatchesHash(parsed.secret, token.tokenHash)) {
+    const token = await this.refreshTokens.findOneBy({ id: claims.jti });
+    if (token && !token.revokedAt && tokenMatchesHash(tokenValue, token.tokenHash)) {
       await this.refreshTokens.update(token.id, { revokedAt: new Date() });
     }
   }
@@ -108,24 +115,42 @@ export class AuthService {
   }
 
   private async issueTokens(user: User, familyId?: string): Promise<AuthResult> {
+    // Access tokens use the JwtModule defaults: JWT_ACCESS_SECRET and JWT_ACCESS_TTL.
     const accessToken = await this.jwt.signAsync({ sub: user.id });
 
-    const opaque = generateOpaqueToken();
+    const id = randomUUID();
+    const ttlSeconds = this.config.get('JWT_REFRESH_TTL_SECONDS', { infer: true });
+    const payload: RefreshTokenPayload = { sub: user.id, jti: id, fam: familyId ?? id };
+    const refreshToken = await this.jwt.signAsync(payload, {
+      secret: this.config.get('JWT_REFRESH_SECRET', { infer: true }),
+      expiresIn: ttlSeconds,
+    });
+
     await this.refreshTokens.save(
       this.refreshTokens.create({
-        id: opaque.id,
+        id,
         userId: user.id,
-        familyId: familyId ?? opaque.id,
-        tokenHash: opaque.hash,
-        expiresAt: this.refreshExpiryDate(),
+        familyId: payload.fam,
+        tokenHash: hashToken(refreshToken),
+        expiresAt: new Date(Date.now() + ttlSeconds * 1000),
       }),
     );
 
-    return { user, accessToken, refreshToken: opaque.value };
+    return { user, accessToken, refreshToken };
   }
 
-  private refreshExpiryDate(): Date {
-    const ttlSeconds = this.config.get('JWT_REFRESH_TTL_SECONDS', { infer: true });
-    return new Date(Date.now() + ttlSeconds * 1000);
+  // Null for anything that isn't a valid, unexpired refresh token signed with the refresh secret —
+  // including an access token, which is signed with the other one.
+  private async verifyRefreshToken(tokenValue: string): Promise<RefreshTokenPayload | null> {
+    try {
+      const claims = await this.jwt.verifyAsync<RefreshTokenPayload>(tokenValue, {
+        secret: this.config.get('JWT_REFRESH_SECRET', { infer: true }),
+      });
+      return typeof claims.jti === 'string' && typeof claims.sub === 'string' && typeof claims.fam === 'string'
+        ? claims
+        : null;
+    } catch {
+      return null;
+    }
   }
 }
