@@ -8,6 +8,7 @@ import { HeaderToolsProvider } from '@/components/header-tools';
 import { QueryError } from '@/components/query-error';
 import { Alert, AlertDescription } from '@/components/ui/alert';
 import { GroupScopeContext } from './group-context';
+import { OfflineNotice } from '@/features/pwa/offline-notice';
 import { BottomNav, TopNav } from './group-nav';
 import { writeLastGroupId } from './last-group';
 import { useGroups, type Group } from './queries';
@@ -54,6 +55,7 @@ function GroupScopeProvider({ group }: { group: Group }) {
       */}
       <div className="flex h-svh flex-col">
         <AppHeader currentGroupId={group.id} />
+        <OfflineNotice />
         <TopNav groupId={group.id} />
         {/*
           Full width so its scrollbar sits at the window's edge; the horizontal padding centers the

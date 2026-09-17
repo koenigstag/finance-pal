@@ -8,6 +8,12 @@
     <meta name="theme-color" media="(prefers-color-scheme: light)" content="#ffffff" />
     <meta name="theme-color" media="(prefers-color-scheme: dark)" content="#0a0a0a" />
     <link rel="icon" type="image/x-icon" href="%BASE_URL%favicon.ico" />
+    <link rel="apple-touch-icon" href="%BASE_URL%apple-touch-icon.png" />
+    <!-- iOS has no manifest support for standalone mode; these are how it learns the same. -->
+    <meta name="apple-mobile-web-app-capable" content="yes" />
+    <meta name="apple-mobile-web-app-status-bar-style" content="black-translucent" />
+    <meta name="apple-mobile-web-app-title" content="Finance" />
+    <meta name="description" content="Personal and shared budgets: accounts, categories and transactions." />
     <script>
       // Applies the theme before first paint, so a dark page doesn't flash light while the bundle
       // loads. Mirrors src/stores/theme-store.ts, which takes over once the app starts.

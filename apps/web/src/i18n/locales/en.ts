@@ -244,6 +244,10 @@ export const en = {
       simple: 'Brands',
     },
   },
+  pwa: {
+    install: 'Install app',
+    offline: 'Offline — showing the last data. Changes wait for the network.',
+  },
   data: {
     title: 'Data',
     description: 'Bring your money history in or take it with you',

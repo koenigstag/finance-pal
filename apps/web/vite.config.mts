@@ -3,6 +3,7 @@ import { fileURLToPath } from 'node:url';
 import { defineConfig, defaultClientConditions } from 'vite';
 import react from '@vitejs/plugin-react';
 import tailwindcss from '@tailwindcss/vite';
+import { VitePWA } from 'vite-plugin-pwa';
 import { iconSetsPlugin } from '../../tools/icon-sets.mjs';
 
 // Where the API runs in development. Both REST and Socket.io are proxied through the Vite dev
@@ -41,7 +42,71 @@ export default defineConfig(() => ({
     },
   },
   // The extra icon sets are generated into public/icons from their packages, never committed.
-  plugins: [react(), tailwindcss(), iconSetsPlugin(fileURLToPath(new URL('./public/icons', import.meta.url)))],
+  plugins: [
+    react(),
+    tailwindcss(),
+    iconSetsPlugin(fileURLToPath(new URL('./public/icons', import.meta.url))),
+    VitePWA({
+      registerType: 'autoUpdate',
+      // Deep links work offline: anything not in the cache falls back to the app shell.
+      manifest: {
+        name: 'Finance Tracker',
+        short_name: 'Finance',
+        description: 'Personal and shared budgets: accounts, categories and transactions.',
+        start_url: '.',
+        scope: '.',
+        display: 'standalone',
+        background_color: '#ffffff',
+        theme_color: '#ffffff',
+        icons: [
+          { src: 'icon-192.png', sizes: '192x192', type: 'image/png' },
+          { src: 'icon-512.png', sizes: '512x512', type: 'image/png' },
+          // Android cuts its own shape out of this one, so the mark sits well inside it.
+          { src: 'icon-maskable-512.png', sizes: '512x512', type: 'image/png', purpose: 'maskable' },
+        ],
+      },
+      workbox: {
+        // The shell, and only the shell: the icon chunks and sets are thousands of files that
+        // would otherwise all be downloaded on the first visit.
+        globPatterns: ['index.html', 'assets/index-*.{js,css}', 'assets/*.woff2', '*.png', 'favicon.ico'],
+        navigateFallback: 'index.html',
+        cleanupOutdatedCaches: true,
+        runtimeCaching: [
+          {
+            // Reading the ledger offline: the last answer stands in when the network doesn't come.
+            // Sign-in and refresh are left out — a stale token answer would be worse than an error.
+            urlPattern: ({ url, request }) => request.method === 'GET' && /\/api\//.test(url.pathname) && !url.pathname.includes('/api/auth/'),
+            handler: 'NetworkFirst',
+            options: {
+              cacheName: 'ft-api',
+              networkTimeoutSeconds: 5,
+              expiration: { maxEntries: 300, maxAgeSeconds: 60 * 60 * 24 * 14 },
+              cacheableResponse: { statuses: [200] },
+            },
+          },
+          {
+            // Icon sets: generated files that only change with a release.
+            urlPattern: ({ url }) => url.pathname.includes('/icons/'),
+            handler: 'CacheFirst',
+            options: {
+              cacheName: 'ft-icon-sets',
+              expiration: { maxEntries: 120, maxAgeSeconds: 60 * 60 * 24 * 60 },
+              cacheableResponse: { statuses: [200] },
+            },
+          },
+          {
+            // The lazily loaded chunks, an icon at a time: keep what's been used, refresh quietly.
+            urlPattern: ({ url }) => url.pathname.includes('/assets/'),
+            handler: 'StaleWhileRevalidate',
+            options: {
+              cacheName: 'ft-assets',
+              expiration: { maxEntries: 400, maxAgeSeconds: 60 * 60 * 24 * 60 },
+            },
+          },
+        ],
+      },
+    }),
+  ],
   build: {
     outDir: './dist',
     emptyOutDir: true,

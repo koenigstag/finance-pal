@@ -1,5 +1,5 @@
 import { observer } from 'mobx-react-lite';
-import { ChevronRightIcon, DatabaseIcon, SettingsIcon, UserIcon, WalletIcon } from 'lucide-react';
+import { ChevronRightIcon, DatabaseIcon, DownloadIcon, SettingsIcon, UserIcon, WalletIcon } from 'lucide-react';
 import { useState } from 'react';
 import { useTranslation } from 'react-i18next';
 import { Link } from 'react-router';
@@ -15,6 +15,7 @@ import {
 } from '@/components/ui/dropdown-menu';
 import { AccountsTotal } from '@/features/accounts/accounts-total';
 import { DataSheet } from '@/features/import/data-sheet';
+import { installApp, useCanInstall } from '@/features/pwa/install';
 import { GroupSettingsSheet } from '@/features/groups/group-settings-sheet';
 import { GroupsSheet } from '@/features/groups/groups-sheet';
 import { useGroups, type Group } from '@/features/groups/queries';
@@ -34,6 +35,7 @@ export const AppHeader = observer(function AppHeader({ currentGroupId }: { curre
   const [groupsOpen, setGroupsOpen] = useState(false);
   const [settingsGroup, setSettingsGroup] = useState<Group | undefined>();
   const [dataOpen, setDataOpen] = useState(false);
+  const canInstall = useCanInstall();
 
   // One menu per screen size rather than one moved around: each is its own trigger, and only
   // the one for the current width is rendered.
@@ -56,6 +58,13 @@ export const AppHeader = observer(function AppHeader({ currentGroupId }: { curre
           <DatabaseIcon />
           {t('data.title')}
         </DropdownMenuItem>
+        {/* Only where the browser offers it: iOS installs through its own Share menu. */}
+        {canInstall && (
+          <DropdownMenuItem onSelect={() => void installApp()}>
+            <DownloadIcon />
+            {t('pwa.install')}
+          </DropdownMenuItem>
+        )}
         <DropdownMenuItem asChild>
           <Link to="/settings">
             <SettingsIcon />
