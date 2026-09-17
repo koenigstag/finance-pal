@@ -49,6 +49,9 @@ systemctl --user daemon-reload
 systemctl --user enable "$UNIT" >/dev/null 2>&1
 systemctl --user restart "$UNIT"
 
+# Keeps the push webhook that triggers these deploys in step with the repository.
+bash "$APP_DIR/deploy/vps/install-deploy-hook.sh"
+
 for _ in $(seq 1 30); do
   if curl -fsS "http://127.0.0.1:$PORT/api/health" >/dev/null 2>&1; then
     echo "API is up: https://finance-api.tfc-russia.xyz/api/health"

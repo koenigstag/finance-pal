@@ -1,0 +1,15 @@
+# Finance Pal API: the GitHub push webhook receiver (deploy-hook.py), behind nginx at
+# https://finance-api.tfc-russia.xyz/hooks/deploy. Installed by install-deploy-hook.sh.
+[Unit]
+Description=Finance Pal deploy webhook
+Wants=network-online.target
+After=network-online.target
+
+[Service]
+EnvironmentFile=%h/.config/containers/env/finance-deploy-hook.env
+ExecStart=/usr/bin/python3 %h/services/finance-pal/deploy/vps/deploy-hook.py
+Restart=on-failure
+RestartSec=5
+
+[Install]
+WantedBy=default.target
