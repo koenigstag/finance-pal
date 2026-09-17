@@ -90,6 +90,10 @@ export class RecurringRule {
   @Column({ type: 'boolean', default: true })
   active!: boolean;
 
+  // IANA zone the schedule is evaluated in — "every 1st of the month" is ambiguous without one
+  @Column({ type: 'text', default: 'UTC' })
+  timezone!: string;
+
   @Column({ type: 'uuid', name: 'created_by' })
   createdBy!: string;
 

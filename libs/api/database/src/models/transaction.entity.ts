@@ -15,10 +15,15 @@ import { Currency } from './currency.entity.js';
 import { Account } from './account.entity.js';
 import { Category } from './category.entity.js';
 import { User } from './user.entity.js';
+import { RecurringRule } from './recurring-rule.entity.js';
 import { TransactionType } from './enums.js';
 
 @Entity('transactions')
 @Index('idx_transactions_group_date', ['groupId', 'date'], { where: 'deleted_at IS NULL' })
+@Index('uq_transactions_occurrence', ['recurringRuleId', 'recurrenceDate'], {
+  unique: true,
+  where: 'recurring_rule_id IS NOT NULL',
+})
 @Index('idx_transactions_account', ['accountId'], { where: 'deleted_at IS NULL' })
 @Index('idx_transactions_category', ['categoryId'], { where: 'deleted_at IS NULL' })
 @Check(
@@ -83,6 +88,22 @@ export class Transaction {
 
   @Column({ type: 'text', nullable: true })
   note!: string | null;
+
+  // set only on occurrences materialized from a recurring rule
+  @Column({ type: 'uuid', name: 'recurring_rule_id', nullable: true })
+  recurringRuleId!: string | null;
+
+  @ManyToOne(() => RecurringRule, { nullable: true, onDelete: 'SET NULL' })
+  @JoinColumn({ name: 'recurring_rule_id' })
+  recurringRule!: RecurringRule | null;
+
+  // the occurrence's scheduled date — unlike `date`, never changed by editing the row
+  @Column({ type: 'timestamptz', name: 'recurrence_date', nullable: true })
+  recurrenceDate!: Date | null;
+
+  // the user edited this occurrence directly, so regenerating the series must leave it alone
+  @Column({ type: 'boolean', name: 'is_customized', default: false })
+  isCustomized!: boolean;
 
   @Column({ type: 'uuid', name: 'created_by' })
   createdBy!: string;

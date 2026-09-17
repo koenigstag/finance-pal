@@ -20,6 +20,9 @@ function toTransactionDto(transaction: Transaction, tagIds: string[]) {
     destAmount: transaction.destAmount,
     note: transaction.note,
     tagIds,
+    recurringRuleId: transaction.recurringRuleId,
+    recurrenceDate: transaction.recurrenceDate?.toISOString() ?? null,
+    isCustomized: transaction.isCustomized,
     createdAt: transaction.createdAt.toISOString(),
     updatedAt: transaction.updatedAt.toISOString(),
   };

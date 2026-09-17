@@ -2,17 +2,12 @@ import { BadRequestException, ForbiddenException, Injectable, NotFoundException 
 import { InjectRepository } from '@nestjs/typeorm';
 import { In, Repository } from 'typeorm';
 import { Transactional } from 'typeorm-transactional';
-import { Account, Category, Tag, Transaction, TransactionTag, TransactionType } from '@ft/api-database';
-import {
-  TRANSACTION_TYPES,
-  isPositiveMoney,
-  type Action,
-  type AppAbility,
-  type Subject,
-} from '@ft/shared-contracts';
+import { Tag, Transaction, TransactionTag, TransactionType } from '@ft/api-database';
+import { TRANSACTION_TYPES, type Action, type AppAbility, type Subject } from '@ft/shared-contracts';
 import { AbilityFactory } from '../../_core/authz/ability.factory';
 import { RealtimeEmitterService } from '../../realtime/realtime-emitter.service';
 import { decodeCursor, encodeCursor } from './cursor.util';
+import { TransactionValidator } from './transaction-validator';
 
 // The shared string union, not api-database's TypeORM enum — see the identical comment on
 // GroupWithRole.role in GroupsService for why (assignable one way, not the other).
@@ -56,11 +51,10 @@ export class TransactionsService {
   constructor(
     @InjectRepository(Transaction) private readonly transactions: Repository<Transaction>,
     @InjectRepository(TransactionTag) private readonly transactionTags: Repository<TransactionTag>,
-    @InjectRepository(Account) private readonly accounts: Repository<Account>,
-    @InjectRepository(Category) private readonly categories: Repository<Category>,
     @InjectRepository(Tag) private readonly tags: Repository<Tag>,
     private readonly abilities: AbilityFactory,
     private readonly realtime: RealtimeEmitterService,
+    private readonly validator: TransactionValidator,
   ) {}
 
   async list(userId: string, groupId: string, filter: ListTransactionsFilter): Promise<TransactionPage> {
@@ -132,7 +126,7 @@ export class TransactionsService {
       amount: input.amount,
       destAmount: input.destAmount ?? null,
     };
-    await this.assertValid(groupId, merged);
+    await this.validator.assertValid(groupId, merged);
     const tagIds = await this.assertTagsValid(groupId, input.tagIds);
 
     const transaction = await this.transactions.save(
@@ -147,6 +141,11 @@ export class TransactionsService {
         toAccountId: merged.toAccountId,
         destAmount: merged.destAmount,
         note: input.note ?? null,
+        // Explicit, not left to column defaults: save() returns this object, and an omitted
+        // nullable column comes back undefined, which the contract's .nullable() rejects.
+        recurringRuleId: null,
+        recurrenceDate: null,
+        isCustomized: false,
         createdBy: userId,
       }),
     );
@@ -182,7 +181,7 @@ export class TransactionsService {
       amount: patch.amount ?? existing.amount,
       destAmount: patch.destAmount !== undefined ? patch.destAmount : existing.destAmount,
     };
-    await this.assertValid(groupId, merged);
+    await this.validator.assertValid(groupId, merged);
 
     const patchedTagIds = patch.tagIds !== undefined ? await this.assertTagsValid(groupId, patch.tagIds) : undefined;
 
@@ -201,6 +200,9 @@ export class TransactionsService {
         toAccountId: merged.toAccountId,
         destAmount: merged.destAmount,
         note: patch.note !== undefined ? patch.note : existing.note,
+        // Editing one occurrence of a series directly pins it: regenerating the series after a
+        // rule change replaces only occurrences nobody has touched.
+        isCustomized: existing.recurringRuleId !== null || existing.isCustomized,
       },
     );
 
@@ -239,52 +241,6 @@ export class TransactionsService {
     return { transaction, tagIds };
   }
 
-  private async assertValid(
-    groupId: string,
-    merged: {
-      type: TransactionType;
-      accountId: string;
-      categoryId: string | null;
-      toAccountId: string | null;
-      amount: string;
-      destAmount: string | null;
-    },
-  ): Promise<void> {
-    if (!isPositiveMoney(merged.amount)) {
-      throw new BadRequestException('amount must be greater than zero');
-    }
-    if (merged.destAmount !== null && !isPositiveMoney(merged.destAmount)) {
-      throw new BadRequestException('destAmount must be greater than zero');
-    }
-
-    if (merged.type === TransactionType.TRANSFER) {
-      if (!merged.toAccountId) {
-        throw new BadRequestException('A transfer requires toAccountId');
-      }
-      if (merged.categoryId) {
-        throw new BadRequestException('A transfer cannot have a categoryId');
-      }
-    } else if (merged.toAccountId) {
-      throw new BadRequestException('Only a transfer can have toAccountId');
-    }
-
-    const account = await this.accounts.findOneBy({ id: merged.accountId, groupId });
-    if (!account) {
-      throw new NotFoundException('Account not found');
-    }
-    if (merged.toAccountId) {
-      const toAccount = await this.accounts.findOneBy({ id: merged.toAccountId, groupId });
-      if (!toAccount) {
-        throw new NotFoundException('Destination account not found');
-      }
-    }
-    if (merged.categoryId) {
-      const category = await this.categories.findOneBy({ id: merged.categoryId, groupId });
-      if (!category) {
-        throw new NotFoundException('Category not found');
-      }
-    }
-  }
 
   private async assertTagsValid(groupId: string, tagIds: string[] | undefined): Promise<string[]> {
     if (!tagIds || tagIds.length === 0) {

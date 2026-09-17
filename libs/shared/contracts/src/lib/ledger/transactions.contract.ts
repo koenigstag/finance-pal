@@ -21,6 +21,13 @@ export const transactionSchema = z.object({
   destAmount: moneySchema.nullable(),
   note: z.string().nullable(),
   tagIds: z.array(z.string().uuid()),
+  // Set on occurrences a recurring rule materialized; null for hand-entered transactions.
+  // Read-only: the create/update bodies below deliberately don't accept these.
+  recurringRuleId: z.string().uuid().nullable(),
+  // The occurrence's scheduled date, which stays put even if the user moves `date`.
+  recurrenceDate: z.string().datetime().nullable(),
+  // True once a user edited this occurrence directly; regenerating the series leaves it alone.
+  isCustomized: z.boolean(),
   createdAt: z.string().datetime(),
   updatedAt: z.string().datetime(),
 });
