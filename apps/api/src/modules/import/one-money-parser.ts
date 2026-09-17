@@ -44,43 +44,63 @@ const PSEUDO_ACCOUNT_TYPE = 4;
 /**
  * 1Money's icons by the number it stores, named in this app's own set.
  *
- * The number indexes its asset list, which says nothing on its own; each entry below was read off
- * the app's own screens, and the comment says what the picture is. Where this app has nothing like
- * it, the nearest in meaning stands in (a burger becomes a pizza, a washing machine becomes water).
- * Anything not listed arrives without an icon rather than a wrong one, which is easily set by hand.
+ * The number is the index of a drawable in the app itself (`icon_14` and so on), which says nothing
+ * on its own. Each entry below was read from that drawable, and the comment says what the picture
+ * is. Where this app has nothing like it, the nearest in meaning stands in — a burger becomes a
+ * pizza, a washing machine becomes water — and a number not listed arrives without an icon rather
+ * than a wrong one, which is easily set by hand afterwards. The app has some 400 of them; these are
+ * the ones seen in real backups so far.
  */
 const ICONS: Record<number, string> = {
-  1: 'dots-horizontal', // three dots — the "Other" category
-  2: 'landmark', // a bank's columns, which every lending account here uses
-  14: 'shopping-cart', // shopping basket — Groceries
-  15: 'utensils', // fork and knife — Restaurant
-  16: 'ticket', // a ticket — Leisure
-  17: 'bus', // a bus — Transport
-  19: 'users', // a smiling face — Family
-  20: 'heart', // a heart held in two hands — Health
-  21: 'bag', // a shopping bag — Shopping
-  24: 'gift', // a wrapped gift — Gifts
+  1: 'dots-horizontal', // three dots
+  2: 'landmark', // a bank's columns
+  4: 'card', // a payment card
+  5: 'vault', // a safe
+  8: 'coins', // a stack of coins
+  12: 'piggy-bank', // a piggy bank
+  14: 'shopping-basket', // a shopping basket
+  15: 'utensils', // fork and knife
+  16: 'ticket', // a ticket
+  17: 'bus', // a bus
+  19: 'smile', // a smiling face
+  20: 'heart', // a heart held in two hands
+  21: 'bag', // a handbag
+  24: 'gift', // a wrapped gift
+  26: 'trending-up', // a rising bar chart
   30: 'banknote', // banknotes
-  62: 'home', // a sofa
+  31: 'circle-dollar-sign', // a dollar in a circle
+  34: 'circle-euro', // a euro in a circle
+  39: 'card', // two interlocking circles, as on a card
+  40: 'card', // a card with a logo
+  41: 'chart-candlestick', // stacked blocks of shares
+  62: 'sofa', // a sofa
+  68: 'building', // office buildings
   81: 'wrench', // a wrench
-  82: 'wifi', // a globe, for anything subscribed to
+  82: 'globe', // a globe
   85: 'dumbbell', // a dumbbell
-  106: 'smartphone', // a telephone handset
-  110: 'droplets', // a washing machine
+  106: 'phone', // a telephone handset
+  110: 'washing-machine', // a washing machine
   119: 'shopping-cart', // a shopping trolley
-  121: 'pizza', // a burger
-  253: 'sparkles', // someone having a massage
-  266: 'gift', // a parcel
-  285: 'hand-coins', // a hand holding something out
+  121: 'sandwich', // a burger
+  125: 'bag', // a paper bag
+  132: 'banknote', // a banknote with a coin
+  137: 'percent', // a percentage badge
+  253: 'hand-heart', // someone having a massage
+  266: 'package', // a parcel
+  285: 'hand-coins', // an open hand
   286: 'handshake', // two hands shaking
-  290: 'hand-coins', // a hand passing a card
-  302: 'receipt', // price tags
-  308: 'receipt', // a written page
+  290: 'hand-coins', // a hand holding out a card
+  293: 'wallet', // a coin purse
+  296: 'wallet', // a folded wallet
+  298: 'trending-up', // a rising bar chart
+  302: 'tags', // price tags
+  308: 'inbox', // a page in a tray
   324: 'receipt', // a till receipt
-  325: 'coins', // arrows in a circle
+  325: 'recycle', // arrows in a circle
   334: 'scissors', // comb and scissors
-  370: 'bolt', // a battery charging
-  373: 'shield', // a stop sign
+  370: 'battery-charging', // a battery charging
+  373: 'octagon-alert', // a stop sign
+  385: 'home', // a house
 };
 
 // Where a category with no recorded position ends up: after every category that has one.
