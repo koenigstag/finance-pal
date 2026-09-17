@@ -30,7 +30,7 @@ interface PageHeaderProps {
  * room from the content. It stays in the page for screen readers, which have no tab bar to read.
  *
  * The action is a regular button from md up, at the end of the row the page's own controls sit
- * in; on a phone it becomes a floating button above the bottom navigation, where a thumb reaches
+ * in — or on its own at the end of an otherwise empty row, for a page with no controls; on a phone it becomes a floating button above the bottom navigation, where a thumb reaches
  * it, leaving that row to the controls.
  */
 export function PageHeader({ title, action, children }: PageHeaderProps) {
@@ -38,7 +38,7 @@ export function PageHeader({ title, action, children }: PageHeaderProps) {
     <>
       <h1 className="sr-only">{title}</h1>
       {(children || action) && (
-        <div className="flex items-center gap-2">
+        <div className="flex items-center justify-end gap-2">
           {children && <div className="min-w-0 flex-1">{children}</div>}
           {action && (
             <Button className="hidden md:inline-flex" onClick={action.onClick}>
