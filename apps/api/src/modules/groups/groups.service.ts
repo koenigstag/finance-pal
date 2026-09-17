@@ -50,6 +50,14 @@ export class GroupsService {
   }
 
   @Transactional()
+  async remove(userId: string, groupId: string): Promise<void> {
+    const ctx = await this.authorize(userId, groupId, 'delete', 'Group');
+    // Everything in the group goes with it through ON DELETE CASCADE.
+    await this.groups.delete(ctx.groupId);
+    this.realtime.emitToGroup(ctx.groupId, { resourceType: 'Group', resourceId: ctx.groupId, action: 'deleted', groupId: ctx.groupId });
+  }
+
+  @Transactional()
   async archive(userId: string, groupId: string): Promise<GroupWithRole> {
     const ctx = await this.authorize(userId, groupId, 'archive', 'Group');
     await this.groups.update(groupId, { archivedAt: new Date() });

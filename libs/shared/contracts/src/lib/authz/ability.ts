@@ -49,7 +49,8 @@ export function defineAbilityFor(ctx: GroupContext): AppAbility {
     // An archived group is read-only for everyone, including its owner — the only way out is
     // to restore it first.
     if (ctx.role === 'owner') {
-      can('restore', 'Group');
+      // Deleting stays possible too: it's how an owner gets rid of an old group for good.
+      can(['restore', 'delete'], 'Group');
     }
     return build();
   }
@@ -63,7 +64,7 @@ export function defineAbilityFor(ctx: GroupContext): AppAbility {
   }
 
   if (ctx.role === 'owner') {
-    can(['update', 'archive', 'transferOwnership'], 'Group');
+    can(['update', 'archive', 'delete', 'transferOwnership'], 'Group');
   }
 
   return build();

@@ -53,6 +53,17 @@ export const groupsContract = c.router(
       },
       summary: 'Rename a group (owner only)',
     },
+    remove: {
+      method: 'DELETE',
+      path: '/groups/:groupId',
+      pathParams: z.object({ groupId: z.string().uuid() }),
+      responses: {
+        200: z.object({ id: z.string().uuid() }),
+        403: errorSchema,
+        404: errorSchema,
+      },
+      summary: 'Delete a group and everything in it: accounts, categories, transactions, rules, members (owner only)',
+    },
     archive: {
       method: 'POST',
       path: '/groups/:groupId/archive',

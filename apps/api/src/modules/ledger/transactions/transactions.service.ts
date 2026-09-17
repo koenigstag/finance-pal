@@ -172,6 +172,10 @@ export class TransactionsService {
   ): Promise<{ transaction: Transaction; tagIds: string[] }> {
     await this.authorize(userId, groupId, 'update', 'Transaction');
     const existing = await this.findOrFail(groupId, transactionId);
+    // The type is chosen when a transaction is recorded: an income never turns into a transfer.
+    if (patch.type !== undefined && patch.type !== existing.type) {
+      throw new BadRequestException('A transaction type cannot be changed');
+    }
 
     const merged = {
       type: (patch.type as TransactionType | undefined) ?? existing.type,

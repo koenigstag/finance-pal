@@ -56,6 +56,14 @@ export class GroupsController {
     });
   }
 
+  @TsRestHandler(groupsContract.remove)
+  remove(@CurrentUser() user?: RequestUser) {
+    return tsRestHandler(groupsContract.remove, async ({ params }) => {
+      await this.groups.remove(requireUser(user).id, params.groupId);
+      return { status: 200 as const, body: { id: params.groupId } };
+    });
+  }
+
   @TsRestHandler(groupsContract.archive)
   archive(@CurrentUser() user?: RequestUser) {
     return tsRestHandler(groupsContract.archive, async ({ params }) => {

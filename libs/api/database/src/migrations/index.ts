@@ -7,6 +7,7 @@ import { fixGroupsSelectOwnerVisibility } from './20260726130000-fix-groups-sele
 import { addProfileOnboardingFields } from './20260726140000-add-profile-onboarding-fields.js';
 import { addRecurringOccurrences } from './20260917120000-add-recurring-occurrences.js';
 import { addRecurringRuleStartsAt } from './20260917130000-add-recurring-rule-starts-at.js';
+import { allowOwnerGroupDelete } from './20260918120000-allow-owner-group-delete.js';
 
 export const migrations: readonly Migration[] = [
   createAuthTables,
@@ -17,6 +18,7 @@ export const migrations: readonly Migration[] = [
   addProfileOnboardingFields,
   addRecurringOccurrences,
   addRecurringRuleStartsAt,
+  allowOwnerGroupDelete,
 ];
 
 export * from './migration.interface.js';
