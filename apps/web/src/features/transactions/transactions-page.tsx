@@ -85,7 +85,11 @@ export function TransactionsPage() {
     [monthKey, accountId, categoryId, type, search],
   );
   const pages = useTransactionPages(group.id, filters);
-  const transactions = useMemo(() => pages.data?.pages.flatMap((page) => page.items) ?? [], [pages.data]);
+  const loaded = useMemo(() => pages.data?.pages.flatMap((page) => page.items) ?? [], [pages.data]);
+  // A month still to come reads forwards — the next thing due first — while this month and the
+  // ones behind it read backwards, from what happened last. The API always answers newest first.
+  const upcomingMonth = new Date(monthRange(month).dateFrom) > new Date();
+  const transactions = useMemo(() => (upcomingMonth ? [...loaded].reverse() : loaded), [loaded, upcomingMonth]);
   const scrollerRef = useRef<HTMLDivElement>(null);
   // The list opens on the separator before what already happened; planned transactions wait
   // above it, a scroll up. The title, month and filters above the list don't move.
