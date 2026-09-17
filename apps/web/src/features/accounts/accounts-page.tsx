@@ -17,6 +17,7 @@ export function AccountsPage() {
   const [dialog, setDialog] = useState<{ open: boolean; account?: Account }>({ open: false });
   const canCreate = ability.can('create', 'Account');
   const canUpdate = ability.can('update', 'Account');
+  const canDelete = ability.can('delete', 'Account');
 
   return (
     <section className="flex flex-col gap-4">
@@ -50,6 +51,7 @@ export function AccountsPage() {
       <AccountDialog
         groupId={group.id}
         account={dialog.account}
+        canDelete={canDelete}
         open={dialog.open}
         onOpenChange={(open) => setDialog((current) => ({ ...current, open }))}
       />

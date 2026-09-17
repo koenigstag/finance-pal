@@ -2,7 +2,7 @@ import { ForbiddenException, Injectable, NotFoundException } from '@nestjs/commo
 import { InjectRepository } from '@nestjs/typeorm';
 import { Repository } from 'typeorm';
 import { Transactional } from 'typeorm-transactional';
-import { Account, AccountTarget, AccountType } from '@ft/api-database';
+import { Account, AccountTarget, AccountType, RecurringRule, Transaction } from '@ft/api-database';
 import { ACCOUNT_TYPES, type Action, type AppAbility, type Subject } from '@ft/shared-contracts';
 import { AbilityFactory } from '../../_core/authz/ability.factory';
 import { RealtimeEmitterService } from '../../realtime/realtime-emitter.service';
@@ -22,6 +22,12 @@ export interface CreateAccountInput {
 }
 
 export type UpdateAccountInput = Partial<CreateAccountInput>;
+
+export interface AccountUsage {
+  transactionCount: number;
+  plannedTransactionCount: number;
+  recurringRuleCount: number;
+}
 
 export interface UpsertAccountTargetInput {
   limitAmount?: string | null;
@@ -59,6 +65,8 @@ export class AccountsService {
   constructor(
     @InjectRepository(Account) private readonly accounts: Repository<Account>,
     @InjectRepository(AccountTarget) private readonly targets: Repository<AccountTarget>,
+    @InjectRepository(Transaction) private readonly transactions: Repository<Transaction>,
+    @InjectRepository(RecurringRule) private readonly recurringRules: Repository<RecurringRule>,
     private readonly abilities: AbilityFactory,
     private readonly realtime: RealtimeEmitterService,
   ) {}
@@ -127,12 +135,48 @@ export class AccountsService {
   }
 
   @Transactional()
+  async usage(userId: string, groupId: string, accountId: string): Promise<AccountUsage> {
+    await this.authorize(userId, groupId, 'read', 'Account');
+    await this.findOrFail(groupId, accountId);
+    // One after another: the request's RLS transaction holds a single connection.
+    const now = new Date();
+    const transactionCount = await this.referencing(this.transactions, groupId, accountId).andWhere('date <= :now', { now }).getCount();
+    const plannedTransactionCount = await this.referencing(this.transactions, groupId, accountId).andWhere('date > :now', { now }).getCount();
+    const recurringRuleCount = await this.referencing(this.recurringRules, groupId, accountId).getCount();
+    return { transactionCount, plannedTransactionCount, recurringRuleCount };
+  }
+
+  /**
+   * Deletes the account and everything that only makes sense with it: its transactions, including
+   * transfers from or to it (so the other account's balance loses that transfer too), and the
+   * recurring rules using it, which would otherwise keep failing to materialize occurrences.
+   * All soft deletes, in one database transaction.
+   */
+  @Transactional()
   async remove(userId: string, groupId: string, accountId: string): Promise<AccountWithBalance> {
     await this.authorize(userId, groupId, 'delete', 'Account');
+    await this.authorize(userId, groupId, 'delete', 'Transaction');
+    await this.authorize(userId, groupId, 'delete', 'RecurringRule');
     const result = await this.withBalance(await this.findOrFail(groupId, accountId));
+
+    // Rules first: the scheduler locks a rule while it materializes occurrences, so deleting the
+    // rule waits for (or blocks) a run that could otherwise add a transaction after the next step.
+    await this.referencing(this.recurringRules, groupId, accountId).softDelete().execute();
+    // Balances follow on their own: the transactions trigger counts a deleted row as zero.
+    await this.referencing(this.transactions, groupId, accountId).softDelete().execute();
     await this.accounts.softDelete({ id: accountId, groupId });
     this.realtime.emitToGroup(groupId, { resourceType: 'Account', resourceId: accountId, action: 'deleted', groupId });
     return result;
+  }
+
+  // Live rows of a transactions-shaped table that draw from or pay into the account. Already
+  // deleted ones are left out, so deleting the account doesn't overwrite when they were deleted.
+  private referencing<T extends Transaction | RecurringRule>(repository: Repository<T>, groupId: string, accountId: string) {
+    return repository
+      .createQueryBuilder('row')
+      .where('group_id = :groupId', { groupId })
+      .andWhere('(account_id = :accountId OR to_account_id = :accountId)', { accountId })
+      .andWhere('deleted_at IS NULL');
   }
 
   @Transactional()

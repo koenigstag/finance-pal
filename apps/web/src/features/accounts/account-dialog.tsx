@@ -1,5 +1,5 @@
 import { zodResolver } from '@hookform/resolvers/zod';
-import { useEffect } from 'react';
+import { useEffect, useState } from 'react';
 import { Controller, useForm } from 'react-hook-form';
 import { useTranslation } from 'react-i18next';
 import { z } from 'zod';
@@ -13,6 +13,7 @@ import { Input } from '@/components/ui/input';
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select';
 import { useCurrencies } from '@/features/currencies/queries';
 import { useProfile } from '@/features/profile/queries';
+import { DeleteAccountDialog } from './delete-account-dialog';
 import { useSaveAccount, type Account } from './queries';
 
 const accountFormSchema = accountsContract.create.body.extend({
@@ -27,11 +28,14 @@ interface AccountDialogProps {
   groupId: string;
   // The account to edit; absent to create one.
   account?: Account;
+  // Whether the caller may delete the account being edited.
+  canDelete?: boolean;
   open: boolean;
   onOpenChange: (open: boolean) => void;
 }
 
-export function AccountDialog({ groupId, account, open, onOpenChange }: AccountDialogProps) {
+export function AccountDialog({ groupId, account, canDelete = false, open, onOpenChange }: AccountDialogProps) {
+  const [confirmingDelete, setConfirmingDelete] = useState(false);
   const { t } = useTranslation();
   const currencies = useCurrencies();
   const profile = useProfile();
@@ -70,98 +74,114 @@ export function AccountDialog({ groupId, account, open, onOpenChange }: AccountD
   });
 
   return (
-    <Dialog open={open} onOpenChange={onOpenChange}>
-      <DialogContent>
-        <DialogHeader>
-          <DialogTitle>{t(account ? 'accounts.edit' : 'accounts.new')}</DialogTitle>
-        </DialogHeader>
-        <form onSubmit={onSubmit} noValidate>
-          <FieldGroup>
-            {errors.root?.message && (
-              <Alert variant="destructive">
-                <AlertDescription>{errors.root.message}</AlertDescription>
-              </Alert>
-            )}
-            <Field data-invalid={!!errors.name}>
-              <FieldLabel htmlFor="account-name">{t('accounts.name')}</FieldLabel>
-              <Input id="account-name" aria-invalid={!!errors.name} {...form.register('name')} />
-              <FieldError errors={[errors.name]} />
-            </Field>
-            <Field>
-              <FieldLabel htmlFor="account-type">{t('accounts.type')}</FieldLabel>
-              <Controller
-                control={form.control}
-                name="type"
-                render={({ field }) => (
-                  <Select value={field.value} onValueChange={field.onChange}>
-                    <SelectTrigger id="account-type" className="w-full">
-                      <SelectValue />
-                    </SelectTrigger>
-                    <SelectContent>
-                      {ACCOUNT_TYPES.map((type) => (
-                        <SelectItem key={type} value={type}>
-                          {t(`accounts.types.${type}`)}
-                        </SelectItem>
-                      ))}
-                    </SelectContent>
-                  </Select>
-                )}
-              />
-            </Field>
-            <Field>
-              <FieldLabel htmlFor="account-currency">{t('accounts.currency')}</FieldLabel>
-              <Controller
-                control={form.control}
-                name="currencyId"
-                render={({ field }) => (
-                  // Fixed after creation: existing transactions were recorded in this currency.
-                  <Select
-                    value={field.value === undefined ? undefined : String(field.value)}
-                    onValueChange={(value) => field.onChange(Number(value))}
-                    disabled={!!account}
-                  >
-                    <SelectTrigger id="account-currency" className="w-full">
-                      <SelectValue />
-                    </SelectTrigger>
-                    <SelectContent>
-                      {currencies.data?.map((currency) => (
-                        <SelectItem key={currency.id} value={String(currency.id)}>
-                          {currency.code} — {currency.name}
-                        </SelectItem>
-                      ))}
-                    </SelectContent>
-                  </Select>
-                )}
-              />
-            </Field>
-            <Controller
-              control={form.control}
-              name="isIncludedInBalance"
-              render={({ field }) => (
-                <Field orientation="horizontal">
-                  <Checkbox
-                    id="account-included"
-                    checked={field.value}
-                    onCheckedChange={(checked) => field.onChange(checked === true)}
-                  />
-                  <FieldContent>
-                    <FieldLabel htmlFor="account-included">{t('accounts.includedInBalance')}</FieldLabel>
-                    <FieldDescription>{t('accounts.includedInBalanceDescription')}</FieldDescription>
-                  </FieldContent>
-                </Field>
+    <>
+      <Dialog open={open} onOpenChange={onOpenChange}>
+        <DialogContent>
+          <DialogHeader>
+            <DialogTitle>{t(account ? 'accounts.edit' : 'accounts.new')}</DialogTitle>
+          </DialogHeader>
+          <form onSubmit={onSubmit} noValidate>
+            <FieldGroup>
+              {errors.root?.message && (
+                <Alert variant="destructive">
+                  <AlertDescription>{errors.root.message}</AlertDescription>
+                </Alert>
               )}
-            />
-          </FieldGroup>
-          <DialogFooter className="mt-6">
-            <Button type="button" variant="outline" onClick={() => onOpenChange(false)}>
-              {t('common.cancel')}
-            </Button>
-            <Button type="submit" disabled={form.formState.isSubmitting}>
-              {t('common.save')}
-            </Button>
-          </DialogFooter>
-        </form>
-      </DialogContent>
-    </Dialog>
+              <Field data-invalid={!!errors.name}>
+                <FieldLabel htmlFor="account-name">{t('accounts.name')}</FieldLabel>
+                <Input id="account-name" aria-invalid={!!errors.name} {...form.register('name')} />
+                <FieldError errors={[errors.name]} />
+              </Field>
+              <Field>
+                <FieldLabel htmlFor="account-type">{t('accounts.type')}</FieldLabel>
+                <Controller
+                  control={form.control}
+                  name="type"
+                  render={({ field }) => (
+                    <Select value={field.value} onValueChange={field.onChange}>
+                      <SelectTrigger id="account-type" className="w-full">
+                        <SelectValue />
+                      </SelectTrigger>
+                      <SelectContent>
+                        {ACCOUNT_TYPES.map((type) => (
+                          <SelectItem key={type} value={type}>
+                            {t(`accounts.types.${type}`)}
+                          </SelectItem>
+                        ))}
+                      </SelectContent>
+                    </Select>
+                  )}
+                />
+              </Field>
+              <Field>
+                <FieldLabel htmlFor="account-currency">{t('accounts.currency')}</FieldLabel>
+                <Controller
+                  control={form.control}
+                  name="currencyId"
+                  render={({ field }) => (
+                    // Fixed after creation: existing transactions were recorded in this currency.
+                    <Select
+                      value={field.value === undefined ? undefined : String(field.value)}
+                      onValueChange={(value) => field.onChange(Number(value))}
+                      disabled={!!account}
+                    >
+                      <SelectTrigger id="account-currency" className="w-full">
+                        <SelectValue />
+                      </SelectTrigger>
+                      <SelectContent>
+                        {currencies.data?.map((currency) => (
+                          <SelectItem key={currency.id} value={String(currency.id)}>
+                            {currency.code} — {currency.name}
+                          </SelectItem>
+                        ))}
+                      </SelectContent>
+                    </Select>
+                  )}
+                />
+              </Field>
+              <Controller
+                control={form.control}
+                name="isIncludedInBalance"
+                render={({ field }) => (
+                  <Field orientation="horizontal">
+                    <Checkbox
+                      id="account-included"
+                      checked={field.value}
+                      onCheckedChange={(checked) => field.onChange(checked === true)}
+                    />
+                    <FieldContent>
+                      <FieldLabel htmlFor="account-included">{t('accounts.includedInBalance')}</FieldLabel>
+                      <FieldDescription>{t('accounts.includedInBalanceDescription')}</FieldDescription>
+                    </FieldContent>
+                  </Field>
+                )}
+              />
+            </FieldGroup>
+            <DialogFooter className="mt-6">
+              {account && canDelete && (
+                <Button type="button" variant="destructive" className="sm:mr-auto" onClick={() => setConfirmingDelete(true)}>
+                  {t('common.delete')}
+                </Button>
+              )}
+              <Button type="button" variant="outline" onClick={() => onOpenChange(false)}>
+                {t('common.cancel')}
+              </Button>
+              <Button type="submit" disabled={form.formState.isSubmitting}>
+                {t('common.save')}
+              </Button>
+            </DialogFooter>
+          </form>
+        </DialogContent>
+      </Dialog>
+      {account && (
+        <DeleteAccountDialog
+          groupId={groupId}
+          account={account}
+          open={confirmingDelete}
+          onOpenChange={setConfirmingDelete}
+          onDeleted={() => onOpenChange(false)}
+        />
+      )}
+    </>
   );
 }

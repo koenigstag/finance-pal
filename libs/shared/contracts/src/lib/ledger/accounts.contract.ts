@@ -51,6 +51,18 @@ const createAccountBodySchema = z.object({
 
 const updateAccountBodySchema = createAccountBodySchema.partial();
 
+// What deleting an account takes with it, for the confirmation shown before doing so.
+export const accountUsageSchema = z.object({
+  // Transactions on the account that already happened, transfers into it from other accounts
+  // included.
+  transactionCount: z.number().int(),
+  // Future-dated ones, mostly occurrences recurring rules scheduled ahead — reported apart so a
+  // confirmation doesn't present projections as history.
+  plannedTransactionCount: z.number().int(),
+  // Recurring rules that draw from or pay into it.
+  recurringRuleCount: z.number().int(),
+});
+
 const upsertAccountTargetBodySchema = z.object({
   limitAmount: moneySchema.nullable().optional(),
   goalAmount: moneySchema.nullable().optional(),
@@ -108,12 +120,20 @@ export const accountsContract = c.router(
       responses: { 200: accountSchema, 403: errorSchema, 404: errorSchema },
       summary: 'Restore an archived account',
     },
+    usage: {
+      method: 'GET',
+      path: '/groups/:groupId/accounts/:accountId/usage',
+      pathParams: accountPathParams,
+      responses: { 200: accountUsageSchema, 404: errorSchema },
+      summary: 'Count the transactions and recurring rules that deleting the account would remove',
+    },
     remove: {
       method: 'DELETE',
       path: '/groups/:groupId/accounts/:accountId',
       pathParams: accountPathParams,
       responses: { 200: accountSchema, 403: errorSchema, 404: errorSchema },
-      summary: 'Soft-delete an account',
+      summary:
+        'Delete an account together with its transactions (transfers to and from it included) and the recurring rules using it',
     },
     upsertTarget: {
       method: 'PATCH',

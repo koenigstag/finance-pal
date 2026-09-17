@@ -5,6 +5,8 @@ import { z } from 'zod';
 export const LEDGER_CHANGED_EVENT = 'ledger:changed';
 
 export const REALTIME_RESOURCE_TYPES = [
+  // A deleted account takes its transactions and recurring rules with it, and is still announced
+  // as a single Account event — a client should refresh transactions and rules on it too.
   'Account',
   'AccountTarget',
   'Category',

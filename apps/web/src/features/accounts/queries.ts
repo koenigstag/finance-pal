@@ -15,6 +15,36 @@ export function useAccounts(groupId: string) {
   });
 }
 
+export function useAccountUsage(groupId: string, accountId: string, enabled: boolean) {
+  return useQuery({
+    queryKey: queryKeys.accountUsage(groupId, accountId),
+    queryFn: () => unwrap(api.accounts.usage({ params: { groupId, accountId } }), 200),
+    enabled,
+    // Counted fresh for every confirmation: a stale count is exactly what it must not show.
+    staleTime: 0,
+    gcTime: 0,
+  });
+}
+
+export function useDeleteAccount(groupId: string) {
+  const queryClient = useQueryClient();
+
+  return useMutation({
+    mutationFn: (accountId: string) => unwrap(api.accounts.remove({ params: { groupId, accountId } }), 200),
+    // Its transactions and recurring rules went with it, and other accounts' balances changed
+    // with the transfers: everything cached for the group is suspect. Except the deleted account's
+    // own usage, which the still-open confirmation shows: refetching it would only 404 and flash
+    // an error before the dialog closes.
+    onSuccess: (_, accountId) => {
+      const usageKey = queryKeys.accountUsage(groupId, accountId);
+      return queryClient.invalidateQueries({
+        queryKey: queryKeys.group(groupId),
+        predicate: (query) => usageKey.some((part, index) => query.queryKey[index] !== part),
+      });
+    },
+  });
+}
+
 export function useSaveAccount(groupId: string) {
   const queryClient = useQueryClient();
 

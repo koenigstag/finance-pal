@@ -88,6 +88,14 @@ export class AccountsController {
     });
   }
 
+  @TsRestHandler(accountsContract.usage)
+  usage(@CurrentUser() user?: RequestUser) {
+    return tsRestHandler(accountsContract.usage, async ({ params }) => {
+      const usage = await this.accounts.usage(requireUser(user).id, params.groupId, params.accountId);
+      return { status: 200 as const, body: usage };
+    });
+  }
+
   @TsRestHandler(accountsContract.remove)
   remove(@CurrentUser() user?: RequestUser) {
     return tsRestHandler(accountsContract.remove, async ({ params }) => {

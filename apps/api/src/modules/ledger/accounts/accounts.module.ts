@@ -1,13 +1,13 @@
 import { Module } from '@nestjs/common';
 import { TypeOrmModule } from '@nestjs/typeorm';
-import { Account, AccountTarget } from '@ft/api-database';
+import { Account, AccountTarget, RecurringRule, Transaction } from '@ft/api-database';
 import { AuthzModule } from '../../_core/authz/authz.module';
 import { RealtimeModule } from '../../realtime/realtime.module';
 import { AccountsController } from './accounts.controller';
 import { AccountsService } from './accounts.service';
 
 @Module({
-  imports: [TypeOrmModule.forFeature([Account, AccountTarget]), AuthzModule, RealtimeModule],
+  imports: [TypeOrmModule.forFeature([Account, AccountTarget, Transaction, RecurringRule]), AuthzModule, RealtimeModule],
   controllers: [AccountsController],
   providers: [AccountsService],
 })
