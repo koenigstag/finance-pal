@@ -89,6 +89,11 @@ export const en = {
       debt: 'Debt',
       savings: 'Savings',
     },
+    tabs: {
+      balance: 'Balance',
+      debts: 'Debts',
+      total: 'Total',
+    },
     groups: {
       regular: 'Regular',
       savings: 'Savings',

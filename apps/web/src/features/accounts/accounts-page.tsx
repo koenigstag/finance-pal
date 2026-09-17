@@ -1,11 +1,12 @@
 import { PlusIcon, WalletIcon } from 'lucide-react';
-import { useState } from 'react';
+import { useMemo, useState } from 'react';
 import { useTranslation } from 'react-i18next';
-import { useNavigate } from 'react-router';
+import { useNavigate, useSearchParams } from 'react-router';
 import { PAGE_BOTTOM_SPACE, PageHeader } from '@/components/page-header';
 import { QueryError } from '@/components/query-error';
 import { Empty, EmptyDescription, EmptyHeader, EmptyMedia, EmptyTitle } from '@/components/ui/empty';
 import { Spinner } from '@/components/ui/spinner';
+import { ToggleGroup, ToggleGroupItem } from '@/components/ui/toggle-group';
 import { useGroupScope } from '@/features/groups/group-context';
 import type { TransactionFormValues } from '@/features/transactions/transaction-form-model';
 import { TransactionDialog } from '@/features/transactions/transaction-dialog';
@@ -15,11 +16,25 @@ import { AccountList } from './account-list';
 import { useAccounts, type Account } from './queries';
 import { cn } from '@/lib/utils';
 
+// What each tab shows: the money on hand, what's owed and owing, or everything at once.
+const TAB_TYPES = {
+  balance: ['regular', 'savings'],
+  debts: ['debt'],
+  total: ['regular', 'savings', 'debt'],
+} as const satisfies Record<string, readonly Account['type'][]>;
+
+type AccountsTab = keyof typeof TAB_TYPES;
+
+const TAB_ORDER = ['balance', 'debts', 'total'] as const satisfies readonly AccountsTab[];
+
 export function AccountsPage() {
   const { t } = useTranslation();
   const { group, ability } = useGroupScope();
   const accounts = useAccounts(group.id);
   const navigate = useNavigate();
+  const [params, setParams] = useSearchParams();
+  // In the URL, so a reload or the back button returns to the same tab.
+  const tab: AccountsTab = TAB_ORDER.find((option) => option === params.get('tab')) ?? 'balance';
   const [dialog, setDialog] = useState<{ open: boolean; account?: Account }>({ open: false });
   // By id, so the sheet shows the account as the cache has it now (a star or balance just changed).
   const [sheet, setSheet] = useState<{ open: boolean; accountId?: string }>({ open: false });
@@ -32,6 +47,11 @@ export function AccountsPage() {
   const canUpdate = ability.can('update', 'Account');
   const canDelete = ability.can('delete', 'Account');
   const canAddTransactions = ability.can('create', 'Transaction');
+
+  const visible = useMemo(
+    () => (accounts.data ?? []).filter((account) => TAB_TYPES[tab].some((type) => type === account.type)),
+    [accounts.data, tab],
+  );
 
   // The sheet closes first; each action then opens its own dialog or page.
   const onAction = (action: AccountAction, account: Account) => {
@@ -50,13 +70,32 @@ export function AccountsPage() {
       <PageHeader
         title={t('accounts.title')}
         action={canCreate ? { label: t('accounts.new'), icon: PlusIcon, onClick: () => setDialog({ open: true }) } : undefined}
-      />
+      >
+        <ToggleGroup
+          type="single"
+          variant="outline"
+          className="w-full md:w-96"
+          value={tab}
+          onValueChange={(value) => {
+            // Deselecting the active item reports ''; one tab is always chosen.
+            if (value) {
+              setParams({ tab: value }, { replace: true });
+            }
+          }}
+        >
+          {TAB_ORDER.map((option) => (
+            <ToggleGroupItem key={option} value={option} className="flex-1">
+              {t(`accounts.tabs.${option}`)}
+            </ToggleGroupItem>
+          ))}
+        </ToggleGroup>
+      </PageHeader>
 
       {accounts.isPending ? (
         <Spinner className="mx-auto size-6 text-muted-foreground" />
       ) : accounts.isError ? (
         <QueryError onRetry={() => void accounts.refetch()} />
-      ) : accounts.data.length === 0 ? (
+      ) : visible.length === 0 ? (
         <Empty className="border">
           <EmptyHeader>
             <EmptyMedia variant="icon">
@@ -67,7 +106,7 @@ export function AccountsPage() {
           </EmptyHeader>
         </Empty>
       ) : (
-        <AccountList accounts={accounts.data} onSelect={(account) => setSheet({ open: true, accountId: account.id })} />
+        <AccountList accounts={visible} onSelect={(account) => setSheet({ open: true, accountId: account.id })} />
       )}
 
       <AccountActionsSheet
