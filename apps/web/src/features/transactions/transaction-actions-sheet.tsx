@@ -81,7 +81,7 @@ export function TransactionActionsSheet({
         {transaction && (
           <>
             <DialogHeader>
-              <div className="flex items-center gap-3 pr-8">
+              <div className="flex min-w-0 items-center gap-3 pr-8">
                 <AppearanceIcon
                   icon={category?.icon}
                   color={category?.color}
@@ -89,33 +89,45 @@ export function TransactionActionsSheet({
                   size="lg"
                 />
                 <div className="min-w-0 flex-1 text-left">
-                  <DialogTitle className="flex items-center gap-1.5 truncate">
-                    {isTransfer ? t('transactions.types.transfer') : (category?.name ?? t('transactions.noCategory'))}
+                  <DialogTitle className="flex min-w-0 items-center gap-1.5">
+                    <span className="truncate">
+                      {isTransfer ? t('transactions.types.transfer') : (category?.name ?? t('transactions.noCategory'))}
+                    </span>
                     {transaction.recurringRuleId && (
                       <RepeatIcon className="size-4 shrink-0 text-muted-foreground" aria-label={t('transactions.recurring')} />
                     )}
                   </DialogTitle>
-                  <DialogDescription className="flex items-center gap-1 truncate">
-                    {new Intl.DateTimeFormat(i18n.language, {
-                      day: 'numeric',
-                      month: 'long',
-                      year: 'numeric',
-                    }).format(new Date(transaction.date))}{' '}
-                    · {account?.name ?? '—'}
-                    {isTransfer && (
-                      <>
-                        <ArrowRightIcon className="size-3.5 shrink-0" />
-                        {toAccount?.name ?? '—'}
-                      </>
-                    )}
+                  {/* The date and the account it went through, a line each: names are long, and
+                      a transfer carries two of them. */}
+                  <DialogDescription asChild>
+                    <div className="min-w-0">
+                      <p className="truncate">
+                        {new Intl.DateTimeFormat(i18n.language, {
+                          day: 'numeric',
+                          month: 'long',
+                          year: 'numeric',
+                        }).format(new Date(transaction.date))}
+                      </p>
+                      <p className="truncate">{account?.name ?? '—'}</p>
+                      {/* The other side of a transfer gets its own line too, rather than two
+                          half-readable names sharing one. */}
+                      {isTransfer && (
+                        <p className="flex min-w-0 items-center gap-1">
+                          <ArrowRightIcon className="size-3.5 shrink-0" />
+                          <span className="truncate">{toAccount?.name ?? '—'}</span>
+                        </p>
+                      )}
+                    </div>
                   </DialogDescription>
                 </div>
-                <p className={cn('font-semibold whitespace-nowrap tabular-nums', transactionTypeColor(transaction.type))}>
-                  {formatMoney(transaction.amount, currencyCodes.get(transaction.currencyId), i18n.language, {
-                    currencyDisplay: 'narrowSymbol',
-                  })}
-                </p>
               </div>
+              {/* A line of its own: account names leave no room beside them, least of all for a
+                  transfer, which names two. */}
+              <p className={cn('text-left text-lg font-semibold tabular-nums', transactionTypeColor(transaction.type))}>
+                {formatMoney(transaction.amount, currencyCodes.get(transaction.currencyId), i18n.language, {
+                  currencyDisplay: 'narrowSymbol',
+                })}
+              </p>
               {transaction.note && <p className="text-left text-sm break-words whitespace-pre-line">{transaction.note}</p>}
             </DialogHeader>
             <ul className="-mx-2 flex flex-col">

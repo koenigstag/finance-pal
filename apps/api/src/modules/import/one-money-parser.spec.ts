@@ -20,6 +20,7 @@ function backupFile(build: (db: DatabaseSync) => void): string {
   db.exec(
     'CREATE TABLE tr (_id INTEGER, _b_i INTEGER, _ty INTEGER, _da INTEGER, _sch INTEGER, _a_i INTEGER, _d_i INTEGER, _a_m TEXT, _d_m TEXT, _co TEXT)',
   );
+  db.exec('CREATE TABLE bu (_id INTEGER, _b_i INTEGER, _or INTEGER, _mo TEXT)');
   build(db);
   db.close();
   return path;
@@ -46,6 +47,10 @@ function sampleBackup(): string {
     entity(db, [110, 2, 1, UAH, 6, -21696, 'Продукты', null, 0, null, null, null]);
     entity(db, [111, 2, 0, UAH, 7, null, 'Зарплата', null, 0, null, null, null]);
     entity(db, [112, 2, 4, UAH, 8, null, 'Все счета', null, 0, null, 1, 9]);
+    // Категории carry their position here, not in `de`; 113 has none and goes last.
+    entity(db, [113, 2, 1, UAH, 9, null, 'Кафе', null, 0, null, null, null]);
+    db.prepare('INSERT INTO bu VALUES (?, ?, ?, ?)').run(110, 2, 1, null);
+    db.prepare('INSERT INTO bu VALUES (?, ?, ?, ?)').run(111, 2, 0, null);
     // type, date, scheduled, from, to, amount, dest amount, note
     transaction(db, [200, 2, 1, 1_700_000_000_000, 0, 100, 111, '500', '500', null]);
     transaction(db, [201, 2, 0, 1_700_000_100_000, 0, 100, 110, '120.5', '120.5', 'хлеб']);
@@ -97,9 +102,11 @@ describe('parseOneMoneyBackup', () => {
   it('separates categories from accounts and types them', () => {
     const { categories } = parseOneMoneyBackup(sampleBackup());
 
+    // In the order the app had them, with the one it never placed last.
     expect(categories).toEqual([
-      { sourceId: 110, name: 'Продукты', type: CategoryType.EXPENSE, color: '#FFAB40', archived: false },
-      { sourceId: 111, name: 'Зарплата', type: CategoryType.INCOME, color: null, archived: false },
+      { sourceId: 111, name: 'Зарплата', type: CategoryType.INCOME, color: null, archived: false, sortOrder: 0 },
+      { sourceId: 110, name: 'Продукты', type: CategoryType.EXPENSE, color: '#FFAB40', archived: false, sortOrder: 1 },
+      { sourceId: 113, name: 'Кафе', type: CategoryType.EXPENSE, color: null, archived: false, sortOrder: 9999 },
     ]);
   });
 

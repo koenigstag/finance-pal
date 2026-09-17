@@ -100,6 +100,7 @@ export class ImportService {
             name: parsed.name,
             type: parsed.type,
             color: parsed.color,
+            sortOrder: parsed.sortOrder,
             archived: parsed.archived,
             archivedAt: parsed.archived ? new Date() : null,
             createdBy: userId,

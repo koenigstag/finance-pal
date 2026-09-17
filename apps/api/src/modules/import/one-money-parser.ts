@@ -15,6 +15,9 @@ import { AccountType, CategoryType, TransactionType } from '@ft/api-database';
  *       or category type (0 income, 1 expense). `_a_m_b` is the account's opening balance,
  *       `_a_i_i_b` whether it counts toward the total, `_ar` archived, `_co` an ARGB colour and
  *       `_c_i` the currency. `_ty` 4 is the pseudo-account "all accounts", which isn't one.
+ *   bu  one row per entity holding `_or`, the position the user dragged it to. Accounts carry
+ *       their own order in `de._a_o`; for categories this is the only place it exists, numbered
+ *       from zero within each type.
  *   tr  transactions. `_ty` is 0 expense, 1 income, 2 transfer, but it can't be trusted on its
  *       own: 1Money writes lending to a debt account as an expense whose target is that account.
  *       What the target *is* decides. `_da` is epoch milliseconds, `_a_m`/`_d_m` the amounts on
@@ -31,6 +34,9 @@ const KNOWN_CURRENCY_IDS: Record<number, string> = {
 };
 
 const PSEUDO_ACCOUNT_TYPE = 4;
+
+// Where a category with no recorded position ends up: after every category that has one.
+const UNORDERED = 9999;
 
 const ACCOUNT_TYPES: Record<number, AccountType> = {
   0: AccountType.REGULAR,
@@ -58,6 +64,8 @@ export interface ParsedCategory {
   type: CategoryType;
   color: string | null;
   archived: boolean;
+  // Where it sits in its type's list, as arranged in the app.
+  sortOrder: number;
 }
 
 export interface ParsedTransaction {
@@ -122,6 +130,7 @@ export function parseOneMoneyBackup(filePath: string, currencyOverrides: Record<
     const currencies = { ...KNOWN_CURRENCY_IDS, ...currencyOverrides };
 
     const entities = db.prepare('SELECT * FROM de WHERE _b_i = ?').all(snapshotId) as unknown as EntityRow[];
+    const order = categoryOrder(db, snapshotId);
     const accounts: ParsedAccount[] = [];
     const categories: ParsedCategory[] = [];
     const unknown = new Map<number, string[]>();
@@ -138,6 +147,8 @@ export function parseOneMoneyBackup(filePath: string, currencyOverrides: Record<
           type: row._ty === 0 ? CategoryType.INCOME : CategoryType.EXPENSE,
           color: toHexColor(row._co),
           archived: row._ar === 1,
+          // Anything the app never gave a place goes last rather than first.
+          sortOrder: order.get(row._id) ?? UNORDERED,
         });
         continue;
       }
@@ -196,7 +207,7 @@ export function parseOneMoneyBackup(filePath: string, currencyOverrides: Record<
 
     return {
       accounts: accounts.sort((a, b) => a.sortOrder - b.sortOrder),
-      categories,
+      categories: categories.sort((a, b) => a.sortOrder - b.sortOrder),
       transactions,
       unknownCurrencies: [...unknown].map(([currencyId, names]) => ({ currencyId, accounts: names })),
     };
@@ -205,17 +216,31 @@ export function parseOneMoneyBackup(filePath: string, currencyOverrides: Record<
   }
 }
 
+// Positions from `bu`, which older backups may not carry; without it, categories keep the order
+// the file lists them in.
+function categoryOrder(db: DatabaseSync, snapshotId: number): Map<number, number> {
+  if (!tableNames(db).has('bu')) {
+    return new Map();
+  }
+  const rows = db.prepare('SELECT _id, _or FROM bu WHERE _b_i = ?').all(snapshotId) as unknown as {
+    _id: number;
+    _or: number | null;
+  }[];
+  return new Map(rows.filter((row) => row._or !== null).map((row) => [row._id, row._or as number]));
+}
+
 function assertOneMoneyBackup(db: DatabaseSync): void {
-  const tables = new Set(
-    (db.prepare("SELECT name FROM sqlite_master WHERE type = 'table'").all() as unknown as { name: string }[]).map(
-      (row) => row.name,
-    ),
-  );
+  const tables = tableNames(db);
   for (const table of ['ba', 'de', 'tr']) {
     if (!tables.has(table)) {
       throw new OneMoneyFormatError(`Not a 1Money backup: table "${table}" is missing`);
     }
   }
+}
+
+function tableNames(db: DatabaseSync): Set<string> {
+  const rows = db.prepare("SELECT name FROM sqlite_master WHERE type = 'table'").all() as unknown as { name: string }[];
+  return new Set(rows.map((row) => row.name));
 }
 
 // A backup file carries every snapshot 1Money ever wrote into it; the newest is the live data.
