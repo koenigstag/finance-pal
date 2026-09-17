@@ -11,6 +11,12 @@ export const moneySchema = z
 
 export type Money = z.infer<typeof moneySchema>;
 
+// Balances, unlike amounts, go negative (an overdrawn account, a debt account). Amounts stay on
+// the unsigned schema: a transaction's direction is carried by its type, never by the sign.
+export const signedMoneySchema = z
+  .string()
+  .regex(/^-?\d{1,12}(\.\d{1,2})?$/, 'invalid money format');
+
 // A single-comparison parse, not stored or passed anywhere — safe despite money otherwise
 // always traveling as a string, since float rounding only bites on repeated arithmetic.
 export function isPositiveMoney(value: string): boolean {

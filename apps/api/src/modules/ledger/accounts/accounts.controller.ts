@@ -1,12 +1,12 @@
 import { Controller } from '@nestjs/common';
 import { TsRestHandler, tsRestHandler } from '@ts-rest/nest';
 import { accountsContract } from '@ft/shared-contracts';
-import { Account, AccountTarget } from '@ft/api-database';
+import { AccountTarget } from '@ft/api-database';
 import { CurrentUser, type RequestUser } from '../../_core/authn/request-user';
 import { requireUser } from '../../_core/authn/require-user';
-import { AccountsService } from './accounts.service';
+import { AccountsService, type AccountWithBalance } from './accounts.service';
 
-function toAccountDto(account: Account) {
+function toAccountDto({ account, balance }: AccountWithBalance) {
   return {
     id: account.id,
     groupId: account.groupId,
@@ -21,7 +21,8 @@ function toAccountDto(account: Account) {
     sortOrder: account.sortOrder,
     archived: account.archived,
     archivedAt: account.archivedAt?.toISOString() ?? null,
-    cachedBalance: account.cachedBalance,
+    balance,
+    plannedBalance: account.cachedBalance,
     createdAt: account.createdAt.toISOString(),
     updatedAt: account.updatedAt.toISOString(),
   };

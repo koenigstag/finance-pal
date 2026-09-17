@@ -28,6 +28,32 @@ export interface UpsertAccountTargetInput {
   goalAmount?: string | null;
 }
 
+export interface AccountWithBalance {
+  account: Account;
+  // Excludes future-dated transactions; account.cachedBalance includes them. See withBalances().
+  balance: string;
+}
+
+// cached_balance is kept up to date by a trigger on transactions, which fires on insert/update/
+// delete only. A future-dated transaction becoming a past one is not a database event, so a
+// date filter inside that trigger would leave balances permanently stale. Instead the trigger
+// keeps summing everything, and the not-yet-happened tail is subtracted here on read — through
+// the very function the trigger uses, so the two can't disagree about what a row contributes.
+// Arithmetic stays in Postgres numeric; the result arrives as a string, never a JS float.
+const BALANCES_EXCLUDING_FUTURE_SQL = `
+  SELECT a.id,
+         (a.cached_balance - COALESCE(SUM(transaction_balance_contribution(
+            t.deleted_at, t.type, t.amount, t.dest_amount, t.account_id, t.to_account_id, a.id
+         )), 0))::numeric(14, 2)::text AS balance
+  FROM accounts a
+  LEFT JOIN transactions t
+    ON (t.account_id = a.id OR t.to_account_id = a.id)
+   AND t.date > now()
+   AND t.deleted_at IS NULL
+  WHERE a.id = ANY($1::uuid[])
+  GROUP BY a.id, a.cached_balance
+`;
+
 @Injectable()
 export class AccountsService {
   constructor(
@@ -37,21 +63,22 @@ export class AccountsService {
     private readonly realtime: RealtimeEmitterService,
   ) {}
 
-  async list(userId: string, groupId: string, includeArchived: boolean): Promise<Account[]> {
+  async list(userId: string, groupId: string, includeArchived: boolean): Promise<AccountWithBalance[]> {
     await this.authorize(userId, groupId, 'read', 'Account');
-    return this.accounts.find({
+    const accounts = await this.accounts.find({
       where: includeArchived ? { groupId } : { groupId, archived: false },
       order: { sortOrder: 'ASC', createdAt: 'ASC' },
     });
+    return this.withBalances(accounts);
   }
 
-  async get(userId: string, groupId: string, accountId: string): Promise<Account> {
+  async get(userId: string, groupId: string, accountId: string): Promise<AccountWithBalance> {
     await this.authorize(userId, groupId, 'read', 'Account');
-    return this.findOrFail(groupId, accountId);
+    return this.withBalance(await this.findOrFail(groupId, accountId));
   }
 
   @Transactional()
-  async create(userId: string, groupId: string, input: CreateAccountInput): Promise<Account> {
+  async create(userId: string, groupId: string, input: CreateAccountInput): Promise<AccountWithBalance> {
     await this.authorize(userId, groupId, 'create', 'Account');
     const account = this.accounts.create({
       ...input,
@@ -61,46 +88,51 @@ export class AccountsService {
     });
     const saved = await this.accounts.save(account);
     this.realtime.emitToGroup(groupId, { resourceType: 'Account', resourceId: saved.id, action: 'created', groupId });
-    return saved;
+    return this.withBalance(saved);
   }
 
   @Transactional()
-  async update(userId: string, groupId: string, accountId: string, patch: UpdateAccountInput): Promise<Account> {
+  async update(
+    userId: string,
+    groupId: string,
+    accountId: string,
+    patch: UpdateAccountInput,
+  ): Promise<AccountWithBalance> {
     await this.authorize(userId, groupId, 'update', 'Account');
     await this.findOrFail(groupId, accountId);
     await this.accounts.update({ id: accountId, groupId }, { ...patch, type: patch.type as AccountType | undefined });
     const updated = await this.findOrFail(groupId, accountId);
     this.realtime.emitToGroup(groupId, { resourceType: 'Account', resourceId: accountId, action: 'updated', groupId });
-    return updated;
+    return this.withBalance(updated);
   }
 
   @Transactional()
-  async archive(userId: string, groupId: string, accountId: string): Promise<Account> {
+  async archive(userId: string, groupId: string, accountId: string): Promise<AccountWithBalance> {
     await this.authorize(userId, groupId, 'update', 'Account');
     await this.findOrFail(groupId, accountId);
     await this.accounts.update({ id: accountId, groupId }, { archived: true, archivedAt: new Date() });
     const account = await this.findOrFail(groupId, accountId);
     this.realtime.emitToGroup(groupId, { resourceType: 'Account', resourceId: accountId, action: 'archived', groupId });
-    return account;
+    return this.withBalance(account);
   }
 
   @Transactional()
-  async restore(userId: string, groupId: string, accountId: string): Promise<Account> {
+  async restore(userId: string, groupId: string, accountId: string): Promise<AccountWithBalance> {
     await this.authorize(userId, groupId, 'update', 'Account');
     await this.findOrFail(groupId, accountId);
     await this.accounts.update({ id: accountId, groupId }, { archived: false, archivedAt: null });
     const account = await this.findOrFail(groupId, accountId);
     this.realtime.emitToGroup(groupId, { resourceType: 'Account', resourceId: accountId, action: 'restored', groupId });
-    return account;
+    return this.withBalance(account);
   }
 
   @Transactional()
-  async remove(userId: string, groupId: string, accountId: string): Promise<Account> {
+  async remove(userId: string, groupId: string, accountId: string): Promise<AccountWithBalance> {
     await this.authorize(userId, groupId, 'delete', 'Account');
-    const account = await this.findOrFail(groupId, accountId);
+    const result = await this.withBalance(await this.findOrFail(groupId, accountId));
     await this.accounts.softDelete({ id: accountId, groupId });
     this.realtime.emitToGroup(groupId, { resourceType: 'Account', resourceId: accountId, action: 'deleted', groupId });
-    return account;
+    return result;
   }
 
   @Transactional()
@@ -127,6 +159,23 @@ export class AccountsService {
       groupId,
     });
     return saved;
+  }
+
+  private async withBalance(account: Account): Promise<AccountWithBalance> {
+    const [result] = await this.withBalances([account]);
+    return result;
+  }
+
+  private async withBalances(accounts: Account[]): Promise<AccountWithBalance[]> {
+    if (accounts.length === 0) {
+      return [];
+    }
+    const rows: { id: string; balance: string }[] = await this.accounts.query(BALANCES_EXCLUDING_FUTURE_SQL, [
+      accounts.map((account) => account.id),
+    ]);
+    const balanceById = new Map(rows.map((row) => [row.id, row.balance]));
+    // Every id was just read from accounts inside this same transaction, so each has a row.
+    return accounts.map((account) => ({ account, balance: balanceById.get(account.id) as string }));
   }
 
   private async findOrFail(groupId: string, accountId: string): Promise<Account> {

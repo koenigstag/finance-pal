@@ -1,6 +1,6 @@
 import { initContract } from '@ts-rest/core';
 import { z } from 'zod';
-import { moneySchema } from '../common/money.schema.js';
+import { moneySchema, signedMoneySchema } from '../common/money.schema.js';
 import { errorSchema } from '../common/error.schema.js';
 
 const c = initContract();
@@ -22,7 +22,10 @@ export const accountSchema = z.object({
   sortOrder: z.number().int(),
   archived: z.boolean(),
   archivedAt: z.string().datetime().nullable(),
-  cachedBalance: moneySchema,
+  // Excludes transactions dated in the future (e.g. planned recurring occurrences).
+  balance: signedMoneySchema,
+  // Includes them — what the account will hold once everything already scheduled has happened.
+  plannedBalance: signedMoneySchema,
   createdAt: z.string().datetime(),
   updatedAt: z.string().datetime(),
 });
