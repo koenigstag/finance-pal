@@ -94,10 +94,21 @@ export const en = {
       debts: 'Debts',
       total: 'Total',
     },
+    summary: {
+      byType: 'Totals by kind of account',
+      byKind: 'Assets against debts',
+      owed: 'My debts',
+      lent: 'Debts to me',
+      assets: 'Assets',
+      debts: 'Debts',
+      total: 'Total',
+      ratesMissing: 'Set exchange rates in settings to total these together.',
+    },
     groups: {
       regular: 'Regular',
       savings: 'Savings',
       debt: 'Debts',
+      settled: 'Finished',
     },
     empty: {
       title: 'No accounts yet',
@@ -253,6 +264,17 @@ export const en = {
     account: {
       title: 'Account',
     },
+    rates: {
+      title: 'Exchange rates',
+      description: 'Kept by hand, and used only where a total spans currencies. One unit of each currency, valued in {{code}}.',
+      empty: 'No rates yet.',
+      rate: '1 {{code}} in {{base}}',
+      remove: 'Remove {{code}}',
+      add: 'Add a currency',
+      addAction: 'Add',
+      note: 'Nothing updates these on its own yet; fetching them daily is for later.',
+    },
+
 
     appearance: {
       title: 'Appearance',

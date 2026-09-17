@@ -11,6 +11,7 @@ function toProfileDto(profile: Profile) {
     startDayOfWeek: profile.startDayOfWeek,
     mainCurrencyId: profile.mainCurrencyId,
     language: profile.language,
+    exchangeRates: profile.exchangeRates,
   };
 }
 

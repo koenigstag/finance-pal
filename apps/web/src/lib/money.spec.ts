@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest';
-import { formatMoney, isValidAmountInput, moneySign, parseMoneyInput, sumMoney } from './money';
+import { convertMoney, formatMoney, isValidAmountInput, moneySign, parseMoneyInput, sumMoney } from './money';
 
 describe('parseMoneyInput', () => {
   it.each([
@@ -76,5 +76,19 @@ describe('sumMoney', () => {
     [['1000000000000.99', '1.01'], '1000000000002.00'],
   ])('sums %j to %j', (amounts, expected) => {
     expect(sumMoney(amounts)).toBe(expected);
+  });
+});
+
+describe('convertMoney', () => {
+  it.each([
+    ['100', '41.5', '4150.00'],
+    ['0.01', '41.5', '0.42'],
+    ['-59251.05', '1', '-59251.05'],
+    ['1296584.50', '0.02350512', '30476.37'],
+    ['0', '41.5', '0.00'],
+    ['1', '0.005', '0.01'],
+    ['1', '0.004', '0.00'],
+  ])('values %j at %j as %j', (amount, rate, expected) => {
+    expect(convertMoney(amount, rate)).toBe(expected);
   });
 });

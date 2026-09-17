@@ -10,40 +10,69 @@ import type { Account } from './queries';
 // Section order: everyday money first, then what's put aside, then what's owed.
 const GROUP_ORDER = ['regular', 'savings', 'debt'] as const satisfies readonly (typeof ACCOUNT_TYPES)[number][];
 
+// A debt at zero is a debt settled: still worth keeping, but it has nothing to do with today.
+const isSettledDebt = (account: Account) => account.type === 'debt' && moneySign(account.balance) === 0;
+
 interface AccountListProps {
   accounts: Account[];
   // Tapping a row: the accounts page opens that account's actions.
   onSelect: (account: Account) => void;
 }
 
-/** Accounts with their balances, in a section per account type; empty sections are left out. */
+/**
+ * Accounts with their balances, in a section per account type; empty sections are left out.
+ * Settled debts come last, in a section of their own, so the ones still owed stand alone.
+ */
 export function AccountList({ accounts, onSelect }: AccountListProps) {
   const { t } = useTranslation();
+  const settled = accounts.filter(isSettledDebt);
 
   return (
     <div className="flex flex-col gap-4">
-      {GROUP_ORDER.map((type) => {
-        const ofType = accounts.filter((account) => account.type === type);
-        if (ofType.length === 0) {
-          return null;
-        }
-        const headingId = `accounts-${type}`;
-        return (
-          <section key={type} aria-labelledby={headingId} className="flex flex-col gap-1">
-            <h2 id={headingId} className="px-1 text-sm font-medium text-muted-foreground">
-              {t(`accounts.groups.${type}`)}
-            </h2>
-            <ul className="divide-y rounded-xl border">
-              {ofType.map((account) => (
-                <li key={account.id}>
-                  <AccountRow account={account} onSelect={onSelect} />
-                </li>
-              ))}
-            </ul>
-          </section>
-        );
-      })}
+      {GROUP_ORDER.map((type) => (
+        <AccountSection
+          key={type}
+          id={`accounts-${type}`}
+          heading={t(`accounts.groups.${type}`)}
+          accounts={accounts.filter((account) => account.type === type && !isSettledDebt(account))}
+          onSelect={onSelect}
+        />
+      ))}
+      <AccountSection
+        id="accounts-settled"
+        heading={t('accounts.groups.settled')}
+        accounts={settled}
+        onSelect={onSelect}
+      />
     </div>
+  );
+}
+
+interface AccountSectionProps {
+  id: string;
+  heading: string;
+  accounts: Account[];
+  onSelect: (account: Account) => void;
+}
+
+function AccountSection({ id, heading, accounts, onSelect }: AccountSectionProps) {
+  if (accounts.length === 0) {
+    return null;
+  }
+
+  return (
+    <section aria-labelledby={id} className="flex flex-col gap-1">
+      <h2 id={id} className="px-1 text-sm font-medium text-muted-foreground">
+        {heading}
+      </h2>
+      <ul className="divide-y rounded-xl border">
+        {accounts.map((account) => (
+          <li key={account.id}>
+            <AccountRow account={account} onSelect={onSelect} />
+          </li>
+        ))}
+      </ul>
+    </section>
   );
 }
 

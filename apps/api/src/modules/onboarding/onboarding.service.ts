@@ -17,6 +17,7 @@ export interface ProfileUpdate {
   startDayOfWeek?: number;
   mainCurrencyId?: number;
   language?: string;
+  exchangeRates?: Record<string, string> | null;
 }
 
 export interface SeedResult {
@@ -68,6 +69,7 @@ export class OnboardingService {
         language: patch.language ?? DEFAULT_VALUES.language,
         displayName: patch.displayName ?? null,
         startDayOfWeek: patch.startDayOfWeek ?? null,
+        exchangeRates: patch.exchangeRates ?? null,
       }),
     );
   }

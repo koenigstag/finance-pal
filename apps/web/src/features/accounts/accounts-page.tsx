@@ -13,6 +13,7 @@ import { TransactionDialog } from '@/features/transactions/transaction-dialog';
 import { AccountActionsSheet, type AccountAction } from './account-actions-sheet';
 import { AccountDialog } from './account-dialog';
 import { AccountList } from './account-list';
+import { AccountsSummary } from './accounts-summary';
 import { useAccounts, type Account } from './queries';
 import { cn } from '@/lib/utils';
 
@@ -106,7 +107,13 @@ export function AccountsPage() {
           </EmptyHeader>
         </Empty>
       ) : (
-        <AccountList accounts={visible} onSelect={(account) => setSheet({ open: true, accountId: account.id })} />
+        // Total is the shape of it — what's held, in what, and what's owed — rather than a
+        // fourth copy of the list, which the other two tabs already give in full.
+        tab === 'total' ? (
+          <AccountsSummary accounts={visible} />
+        ) : (
+          <AccountList accounts={visible} onSelect={(account) => setSheet({ open: true, accountId: account.id })} />
+        )
       )}
 
       <AccountActionsSheet

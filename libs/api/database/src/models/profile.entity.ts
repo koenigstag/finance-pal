@@ -34,6 +34,11 @@ export class Profile {
   @Column({ type: 'smallint', name: 'start_day_of_week', nullable: true })
   startDayOfWeek!: number | null;
 
+  // ISO code → how much of the main currency one unit buys, as the user typed it: { "USD": "41.5" }.
+  // Only totals that span currencies use these.
+  @Column({ type: 'jsonb', name: 'exchange_rates', nullable: true })
+  exchangeRates!: Record<string, string> | null;
+
   @CreateDateColumn({ type: 'timestamptz', name: 'created_at' })
   createdAt!: Date;
 }

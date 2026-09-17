@@ -14,11 +14,14 @@ import { weekdayNames } from './week';
 
 // The contract's profile, with the fields onboarding requires made required and the language
 // narrowed to the ones the UI ships.
-const profileFormSchema = profileSchema.extend({
-  displayName: z.string().trim().min(1).max(80),
-  startDayOfWeek: z.number().int().min(0).max(6),
-  language: z.enum(SUPPORTED_LANGUAGES),
-});
+const profileFormSchema = profileSchema
+  .extend({
+    displayName: z.string().trim().min(1).max(80),
+    startDayOfWeek: z.number().int().min(0).max(6),
+    language: z.enum(SUPPORTED_LANGUAGES),
+  })
+  // Exchange rates belong to the profile but are edited in their own card, not this form.
+  .omit({ exchangeRates: true });
 
 export type ProfileFormValues = z.infer<typeof profileFormSchema>;
 

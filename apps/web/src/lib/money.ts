@@ -43,6 +43,34 @@ export function sumMoney(amounts: string[]): string {
   return `${total < 0n ? '-' : ''}${whole}${fraction}`;
 }
 
+/**
+ * An amount in one currency valued in another: `amount` times `rate`, rounded to the cent (half
+ * away from zero, as money rounding is read). Integer arithmetic throughout — a rate has up to
+ * eight decimals, which a float would already be approximating.
+ */
+export function convertMoney(amount: string, rate: string): string {
+  const [value, valueScale] = toUnits(amount);
+  const [factor, factorScale] = toUnits(rate);
+  const product = value * factor;
+  const negative = product < 0n;
+  const magnitude = negative ? -product : product;
+  // Taken to tenths of a cent first, so the last digit is the one to round on.
+  const shift = valueScale + factorScale - 3;
+  const tenths = shift <= 0 ? magnitude * 10n ** BigInt(-shift) : magnitude / 10n ** BigInt(shift);
+  const cents = (tenths + 5n) / 10n;
+  const fraction = (cents % 100n).toString().padStart(2, '0');
+  return `${negative && cents > 0n ? '-' : ''}${cents / 100n}.${fraction}`;
+}
+
+// A decimal string as an integer and the number of decimals it carried.
+function toUnits(input: string): [bigint, number] {
+  const trimmed = input.trim();
+  const negative = trimmed.startsWith('-');
+  const [whole, fraction = ''] = trimmed.replace(/^[-+]/, '').split('.');
+  const units = BigInt(`${whole || '0'}${fraction}`);
+  return [negative ? -units : units, fraction.length];
+}
+
 /** An amount the API will accept for a transaction: well-formed and above zero. */
 export function isValidAmountInput(input: string): boolean {
   const amount = parseMoneyInput(input);
