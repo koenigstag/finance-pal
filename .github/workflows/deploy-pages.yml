@@ -1,0 +1,90 @@
+name: Deploy web to GitHub Pages
+
+# Builds apps/web as a static site and publishes it to GitHub Pages. The API is not part of this:
+# it runs on the VPS (deploy/vps), and the build points the app at it through VITE_API_URL.
+#
+# One-time repository setup:
+# - Settings → Pages → Source: "GitHub Actions".
+# - Settings → Secrets and variables → Actions → Variables: VITE_API_URL, the API's origin
+#   (e.g. https://finance-api.tfc-russia.xyz). The API must allow this site's origin in
+#   CORS_ORIGINS.
+
+on:
+  push:
+    branches: [main]
+    paths:
+      - apps/web/**
+      - libs/shared/contracts/**
+      - package.json
+      - pnpm-lock.yaml
+      - pnpm-workspace.yaml
+      - .github/workflows/deploy-pages.yml
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+# One deployment at a time; a newer push waits instead of cancelling one mid-publish.
+concurrency:
+  group: pages
+  cancel-in-progress: false
+
+jobs:
+  build:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v7
+
+      - name: Require the API URL
+        env:
+          VITE_API_URL: ${{ vars.VITE_API_URL }}
+        run: |
+          if [ -z "$VITE_API_URL" ]; then
+            echo "::error::Set the VITE_API_URL repository variable to the API's origin."
+            exit 1
+          fi
+
+      # pnpm's version comes from packageManager in package.json.
+      - uses: pnpm/action-setup@v6
+
+      - uses: actions/setup-node@v7
+        with:
+          node-version-file: .nvmrc
+          cache: pnpm
+
+      - run: pnpm install --frozen-lockfile
+
+      - id: pages
+        uses: actions/configure-pages@v6
+
+      - name: Build
+        run: pnpm nx build web
+        env:
+          NX_DAEMON: 'false'
+          NX_NO_CLOUD: 'true'
+          # "/finance-pal" for a project site, "" for a custom domain; Vite wants a trailing slash.
+          VITE_BASE_PATH: ${{ steps.pages.outputs.base_path }}/
+          VITE_API_URL: ${{ vars.VITE_API_URL }}
+
+      # Pages has no rewrite rules: a reload on a client route like /finance-pal/g/… would 404.
+      # Its 404 page is served for any unknown path, so making it the app itself lets the router
+      # take over (the response status is still 404, which browsers ignore for rendering).
+      - name: Add SPA fallback
+        run: cp apps/web/dist/index.html apps/web/dist/404.html
+
+      - uses: actions/upload-pages-artifact@v5
+        with:
+          path: apps/web/dist
+
+  deploy:
+    needs: build
+    runs-on: ubuntu-latest
+    permissions:
+      pages: write
+      id-token: write
+    environment:
+      name: github-pages
+      url: ${{ steps.deployment.outputs.page_url }}
+    steps:
+      - id: deployment
+        uses: actions/deploy-pages@v5

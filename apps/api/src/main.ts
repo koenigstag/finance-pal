@@ -36,12 +36,32 @@ async function bootstrap() {
 
   const app = await NestFactory.create(AppModule);
 
+  // The web app is served from another origin in production (GitHub Pages), so browsers need
+  // CORS. Development doesn't: the Vite dev server proxies /api on the app's own origin.
+  // Auth travels in the Authorization header, never cookies, so no credentials mode is needed.
+  const corsOrigins = parseList(process.env.CORS_ORIGINS);
+  if (corsOrigins.length > 0) {
+    app.enableCors({ origin: corsOrigins });
+  }
+
   // No global prefix here on purpose: every route path, including the /api prefix,
   // is declared in the ts-rest contracts so the client derives it from the same source.
   const port = process.env.PORT || 3000;
-  await app.listen(port);
+  // HOST=127.0.0.1 keeps the API reachable only through the reverse proxy on the same machine.
+  if (process.env.HOST) {
+    await app.listen(port, process.env.HOST);
+  } else {
+    await app.listen(port);
+  }
 
   Logger.log(`Application is running on: http://localhost:${port}/api`);
+}
+
+function parseList(value: string | undefined): string[] {
+  return (value ?? '')
+    .split(',')
+    .map((item) => item.trim())
+    .filter(Boolean);
 }
 
 bootstrap();

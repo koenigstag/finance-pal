@@ -9,6 +9,7 @@ import {
   recurringRulesContract,
   transactionsContract,
 } from '@ft/shared-contracts';
+import { API_ORIGIN } from './api-url';
 import { ApiError, toApiError } from './errors';
 import { refreshSession } from './refresh';
 import { rootStore } from '@/stores/root-store';
@@ -33,9 +34,9 @@ const authorizedFetch: ApiFetcher = async (args) => {
 };
 
 const clientArgs = {
-  // Same origin: the Vite dev server proxies /api to the API, and production serves both
-  // behind one host.
-  baseUrl: '',
+  // Same origin in development (the Vite dev server proxies /api); a static deployment such as
+  // GitHub Pages points this at wherever the API is hosted.
+  baseUrl: API_ORIGIN,
   baseHeaders: {},
   api: authorizedFetch,
   validateResponse: false,

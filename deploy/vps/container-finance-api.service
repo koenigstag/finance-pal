@@ -1,0 +1,25 @@
+# Finance Pal API: node running the build in ~/services/finance-pal, behind nginx on
+# finance-api.tfc-russia.xyz. Same shape as the other container-*.service user units here.
+# Installed and restarted by update.sh.
+[Unit]
+Description=Podman container-finance-api.service
+Wants=network-online.target
+After=network-online.target
+# A user unit cannot order itself after the system's PostgreSQL. If the database is not up yet,
+# the API's first connection fails, it exits, and systemd retries.
+StartLimitIntervalSec=0
+
+[Service]
+Environment=PODMAN_SYSTEMD_UNIT=%n
+Restart=on-failure
+RestartSec=10
+TimeoutStopSec=70
+ExecStartPre=/bin/rm -f %t/%n.ctr-id
+ExecStart=/usr/bin/podman run --cidfile=%t/%n.ctr-id --cgroups=no-conmon --rm --sdnotify=conmon --replace -d --network host --name finance-api --env-file=%h/.config/containers/env/finance-api.env -v %h/services/finance-pal:%h/services/finance-pal -w %h/services/finance-pal/apps/api docker.io/library/node:22.22.3-bookworm node dist/main.js
+ExecStop=/usr/bin/podman stop --ignore --cidfile=%t/%n.ctr-id
+ExecStopPost=/usr/bin/podman rm -f --ignore --cidfile=%t/%n.ctr-id
+Type=notify
+NotifyAccess=all
+
+[Install]
+WantedBy=default.target

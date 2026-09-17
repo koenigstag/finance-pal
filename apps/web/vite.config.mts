@@ -10,6 +10,9 @@ const API_TARGET = process.env.VITE_API_PROXY_TARGET ?? 'http://localhost:3000';
 
 export default defineConfig(() => ({
   root: import.meta.dirname,
+  // The path the app is served under: "/" by default, the repository path on a GitHub Pages
+  // project site (set by the deploy workflow).
+  base: process.env.VITE_BASE_PATH ?? '/',
   cacheDir: '../../node_modules/.vite/apps/web',
   resolve: {
     // '@ft/source' makes workspace libraries (@ft/shared-contracts) resolve to their TypeScript

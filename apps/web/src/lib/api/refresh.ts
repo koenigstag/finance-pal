@@ -1,5 +1,6 @@
 import { rootStore } from '@/stores/root-store';
 import type { Session } from '@/stores/session-store';
+import { API_ORIGIN } from './api-url';
 
 const LOCK_NAME = 'ft-token-refresh';
 
@@ -51,7 +52,7 @@ async function refreshUnderLock(failedAccessToken: string): Promise<Session | nu
     return session;
   }
 
-  const response = await fetch('/api/auth/refresh', {
+  const response = await fetch(`${API_ORIGIN}/api/auth/refresh`, {
     method: 'POST',
     headers: { 'Content-Type': 'application/json' },
     body: JSON.stringify({ refreshToken: session.refreshToken }),
