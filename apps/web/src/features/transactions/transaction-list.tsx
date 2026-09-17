@@ -8,6 +8,7 @@ import type { Account } from '@/features/accounts/queries';
 import type { Category } from '@/features/categories/queries';
 import { useCurrencyCodes } from '@/features/currencies/queries';
 import { formatMoney } from '@/lib/money';
+import { transactionTypeColor } from '@/lib/money-colors';
 import { cn } from '@/lib/utils';
 import type { Transaction } from './queries';
 
@@ -73,11 +74,12 @@ function TransactionRow({ transaction, planned, accountsById, categoriesById, on
 
   const category = transaction.categoryId ? categoriesById.get(transaction.categoryId) : undefined;
   const title = isTransfer ? t('transactions.types.transfer') : (category?.name ?? t('transactions.noCategory'));
-  const sign = transaction.type === 'expense' ? '−' : transaction.type === 'income' ? '+' : '';
-  const amount = formatMoney(transaction.amount, currencyCodes.get(transaction.currencyId), i18n.language);
+  // Symbols rather than codes (₴, not UAH or грн.), as in the account list.
+  const narrow = { currencyDisplay: 'narrowSymbol' } as const;
+  const amount = formatMoney(transaction.amount, currencyCodes.get(transaction.currencyId), i18n.language, narrow);
   const destAmount =
     isTransfer && transaction.destAmount && toAccount
-      ? formatMoney(transaction.destAmount, currencyCodes.get(toAccount.currencyId), i18n.language)
+      ? formatMoney(transaction.destAmount, currencyCodes.get(toAccount.currencyId), i18n.language, narrow)
       : null;
 
   const content = (
@@ -114,12 +116,9 @@ function TransactionRow({ transaction, planned, accountsById, categoriesById, on
       </div>
       <div className="text-right">
         <p
-          className={cn(
-            'font-medium whitespace-nowrap tabular-nums',
-            transaction.type === 'income' && 'text-emerald-600 dark:text-emerald-400',
-          )}
+          className={cn('font-medium whitespace-nowrap tabular-nums', transactionTypeColor(transaction.type))}
         >
-          {sign}
+          {/* No + or −: the color already says which way the money went. */}
           {amount}
         </p>
         {destAmount && <p className="text-sm whitespace-nowrap text-muted-foreground tabular-nums">→ {destAmount}</p>}

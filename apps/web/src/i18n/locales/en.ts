@@ -85,6 +85,11 @@ export const en = {
       debt: 'Debt',
       savings: 'Savings',
     },
+    groups: {
+      regular: 'Regular',
+      savings: 'Savings',
+      debt: 'Debts',
+    },
     empty: {
       title: 'No accounts yet',
       description: 'Add an account to start recording transactions.',

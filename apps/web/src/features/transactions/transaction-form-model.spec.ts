@@ -99,6 +99,15 @@ describe('pickDefaultAccountId', () => {
     expect(pickDefaultAccountId(list, eur.id)).toBe(eur.id);
   });
 
+  it('prefers a regular account over one listed earlier when none is a favourite', () => {
+    const typed = [
+      { ...usd, isFavourite: false, type: 'savings' },
+      { ...usd2, isFavourite: false, type: 'regular' },
+    ];
+    expect(pickDefaultAccountId(typed)).toBe(usd2.id);
+    expect(pickDefaultAccountId(typed.map((account) => ({ ...account, type: 'debt' })))).toBe(usd.id);
+  });
+
   it('falls back to the first favourite, then to the first account', () => {
     expect(pickDefaultAccountId(list)).toBe(usd2.id);
     expect(pickDefaultAccountId(list, 'deleted-account')).toBe(usd2.id);

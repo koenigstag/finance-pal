@@ -11,16 +11,22 @@ interface AccountLike {
 
 /**
  * The account a new transaction starts on: the one asked for (e.g. the account the list is
- * filtered by) if it exists, otherwise the favourite, otherwise the first. Without a request this
- * is also the account the UI shows as favourite, starred or not. Accounts come in list order, so
- * should several ever be marked, the first one listed wins.
+ * filtered by) if it exists, otherwise the favourite, otherwise the first regular account (the top
+ * of the accounts page, which lists regular accounts first), otherwise the first at all. Without a
+ * request this is also the account the UI shows as favourite, starred or not. Accounts come in list
+ * order, so should several ever be marked, the first one listed wins.
  */
 export function pickDefaultAccountId(
-  accounts: (AccountLike & { isFavourite: boolean })[],
+  accounts: (AccountLike & { isFavourite: boolean; type?: string })[],
   requestedId?: string,
 ): string | undefined {
   const requested = requestedId ? accounts.find((account) => account.id === requestedId) : undefined;
-  return (requested ?? accounts.find((account) => account.isFavourite) ?? accounts[0])?.id;
+  return (
+    requested ??
+    accounts.find((account) => account.isFavourite) ??
+    accounts.find((account) => account.type === 'regular') ??
+    accounts[0]
+  )?.id;
 }
 
 // What the inputs hold: strings as typed, '' for "nothing chosen". Converted to the contract's

@@ -8,7 +8,6 @@ import { Empty, EmptyDescription, EmptyHeader, EmptyMedia, EmptyTitle } from '@/
 import { Spinner } from '@/components/ui/spinner';
 import { useGroupScope } from '@/features/groups/group-context';
 import type { TransactionFormValues } from '@/features/transactions/transaction-form-model';
-import { pickDefaultAccountId } from '@/features/transactions/transaction-form-model';
 import { TransactionDialog } from '@/features/transactions/transaction-dialog';
 import { AccountActionsSheet, type AccountAction } from './account-actions-sheet';
 import { AccountDialog } from './account-dialog';
@@ -21,7 +20,8 @@ export function AccountsPage() {
   const accounts = useAccounts(group.id);
   const navigate = useNavigate();
   const [dialog, setDialog] = useState<{ open: boolean; account?: Account }>({ open: false });
-  const [sheet, setSheet] = useState<{ open: boolean; account?: Account }>({ open: false });
+  // By id, so the sheet shows the account as the cache has it now (a star or balance just changed).
+  const [sheet, setSheet] = useState<{ open: boolean; accountId?: string }>({ open: false });
   const [newTransaction, setNewTransaction] = useState<{
     open: boolean;
     accountId?: string;
@@ -66,11 +66,13 @@ export function AccountsPage() {
           </EmptyHeader>
         </Empty>
       ) : (
-        <AccountList accounts={accounts.data} onSelect={(account) => setSheet({ open: true, account })} />
+        <AccountList accounts={accounts.data} onSelect={(account) => setSheet({ open: true, accountId: account.id })} />
       )}
 
       <AccountActionsSheet
-        account={sheet.account}
+        groupId={group.id}
+        accounts={accounts.data ?? []}
+        accountId={sheet.accountId}
         open={sheet.open}
         onOpenChange={(open) => setSheet((current) => ({ ...current, open }))}
         canEdit={canUpdate}
@@ -90,11 +92,6 @@ export function AccountsPage() {
         groupId={group.id}
         account={dialog.account}
         accountCount={accounts.data?.length ?? 0}
-        implicitFavourite={
-          !!dialog.account &&
-          !dialog.account.isFavourite &&
-          pickDefaultAccountId(accounts.data ?? []) === dialog.account.id
-        }
         canDelete={canDelete}
         open={dialog.open}
         onOpenChange={(open) => setDialog((current) => ({ ...current, open }))}

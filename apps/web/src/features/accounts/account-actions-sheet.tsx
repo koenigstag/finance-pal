@@ -11,14 +11,20 @@ import { useTranslation } from 'react-i18next';
 import { AppearanceIcon } from '@/components/appearance/appearance-icon';
 import { Dialog, DialogContent, DialogDescription, DialogHeader, DialogTitle } from '@/components/ui/dialog';
 import { useCurrencyCodes } from '@/features/currencies/queries';
+import { pickDefaultAccountId } from '@/features/transactions/transaction-form-model';
 import { formatMoney } from '@/lib/money';
 import { cn } from '@/lib/utils';
+import { FavouriteToggle } from './favourite-toggle';
 import type { Account } from './queries';
+import { useFavouriteToggle } from './use-favourite-toggle';
 
 export type AccountAction = 'edit' | 'transactions' | 'income' | 'expense' | 'transfer';
 
 interface AccountActionsSheetProps {
-  account?: Account;
+  groupId: string;
+  // The group's accounts as currently cached, and which of them the sheet is for.
+  accounts: Account[];
+  accountId?: string;
   open: boolean;
   onOpenChange: (open: boolean) => void;
   // Whether the caller may edit accounts and add transactions; actions they can't take are left out.
@@ -39,7 +45,9 @@ interface ActionItem {
  * dialog's small-screen layout), a dialog from sm up.
  */
 export function AccountActionsSheet({
-  account,
+  groupId,
+  accounts,
+  accountId,
   open,
   onOpenChange,
   canEdit,
@@ -48,6 +56,15 @@ export function AccountActionsSheet({
 }: AccountActionsSheetProps) {
   const { t, i18n } = useTranslation();
   const currencyCodes = useCurrencyCodes();
+  const toggleFavourite = useFavouriteToggle(groupId);
+  const account = accounts.find((candidate) => candidate.id === accountId);
+  // The favourite is the starred account, or the first one when none is.
+  const favouriteId = pickDefaultAccountId(accounts);
+  const isFavourite = !!account && account.id === favouriteId;
+  // Unstarring the account that's the default anyway (when none is starred) would change nothing,
+  // so its filled star stays put.
+  const fallbackId = pickDefaultAccountId(accounts.map((candidate) => ({ ...candidate, isFavourite: false })));
+  const canToggleFavourite = canEdit && !(isFavourite && account?.id === fallbackId);
 
   const actions: ActionItem[] = [];
   if (canEdit) {
@@ -74,13 +91,22 @@ export function AccountActionsSheet({
             <DialogHeader>
               <div className="flex items-center gap-3 pr-8">
                 <AppearanceIcon icon={account.icon} color={account.color} fallbackIcon="wallet" size="lg" />
-                <div className="min-w-0 text-left">
+                <div className="min-w-0 flex-1 text-left">
                   <DialogTitle className="truncate">{account.name}</DialogTitle>
                   <DialogDescription className="tabular-nums">
                     {t(`accounts.types.${account.type}`)} ·{' '}
-                    {formatMoney(account.balance, currencyCodes.get(account.currencyId), i18n.language)}
+                    {formatMoney(account.balance, currencyCodes.get(account.currencyId), i18n.language, { currencyDisplay: 'narrowSymbol' })}
                   </DialogDescription>
                 </div>
+                {canEdit ? (
+                  <FavouriteToggle
+                    favourite={isFavourite}
+                    disabled={!canToggleFavourite}
+                    onToggle={() => toggleFavourite(account.id)}
+                  />
+                ) : (
+                  isFavourite && <FavouriteToggle favourite disabled onToggle={() => undefined} />
+                )}
               </div>
             </DialogHeader>
             <ul className="-mx-2 flex flex-col">

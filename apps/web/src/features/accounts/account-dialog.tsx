@@ -17,14 +17,12 @@ import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@
 import { useCurrencies } from '@/features/currencies/queries';
 import { useProfile } from '@/features/profile/queries';
 import { DeleteAccountDialog } from './delete-account-dialog';
-import { FavouriteToggle } from './favourite-toggle';
 import { useSaveAccount, type Account } from './queries';
 
 const accountFormSchema = accountsContract.create.body.extend({
   name: z.string().trim().min(1).max(120),
   type: z.enum(ACCOUNT_TYPES),
   isIncludedInBalance: z.boolean(),
-  isFavourite: z.boolean(),
   icon: z.string().nullable(),
   color: z.string().nullable(),
 });
@@ -37,9 +35,6 @@ interface AccountDialogProps {
   account?: Account;
   // How many accounts the group has, to suggest the next palette color for a new one.
   accountCount?: number;
-  // Whether this account is the default for new transactions without being starred (it's first
-  // and no account is): its star shows filled all the same.
-  implicitFavourite?: boolean;
   // Whether the caller may delete the account being edited.
   canDelete?: boolean;
   open: boolean;
@@ -50,7 +45,6 @@ export function AccountDialog({
   groupId,
   account,
   accountCount = 0,
-  implicitFavourite = false,
   canDelete = false,
   open,
   onOpenChange,
@@ -74,7 +68,6 @@ export function AccountDialog({
               type: account.type,
               currencyId: account.currencyId,
               isIncludedInBalance: account.isIncludedInBalance,
-              isFavourite: account.isFavourite,
               icon: account.icon,
               color: account.color,
             }
@@ -83,7 +76,6 @@ export function AccountDialog({
               type: 'regular',
               currencyId: profile.data?.mainCurrencyId ?? currencies.data?.[0]?.id ?? 1,
               isIncludedInBalance: true,
-              isFavourite: false,
               ...defaultAppearance(undefined, accountCount, 'wallet'),
             },
       );
@@ -106,21 +98,10 @@ export function AccountDialog({
           <DialogHeader>
             <DialogTitle>{t(account ? 'accounts.edit' : 'accounts.new')}</DialogTitle>
           </DialogHeader>
-          {/* How the account will look in lists, as it's being edited, with its favourite star. */}
-          <div className="flex items-center gap-3 rounded-lg bg-muted/50 py-1 pr-1 pl-3">
-            <div className="flex min-w-0 flex-1 items-center gap-3" aria-hidden>
-              <AppearanceIcon icon={previewIcon} color={previewColor} fallbackIcon="wallet" />
-              <span className="truncate font-medium">{previewName?.trim() || t('accounts.name')}</span>
-            </div>
-            <Controller
-              control={form.control}
-              name="isFavourite"
-              render={({ field }) => (
-                // Unstarring hands the default back to the first account; starring the first account
-                // while it's only the default saves it, so reordering accounts won't move the default.
-                <FavouriteToggle favourite={field.value || implicitFavourite} onToggle={() => field.onChange(!field.value)} />
-              )}
-            />
+          {/* How the account will look in lists, as it's being edited. */}
+          <div className="flex items-center gap-3 rounded-lg bg-muted/50 px-3 py-2" aria-hidden>
+            <AppearanceIcon icon={previewIcon} color={previewColor} fallbackIcon="wallet" />
+            <span className="truncate font-medium">{previewName?.trim() || t('accounts.name')}</span>
           </div>
           <form onSubmit={onSubmit} noValidate>
             <FieldGroup>

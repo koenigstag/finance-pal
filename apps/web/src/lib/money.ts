@@ -16,6 +16,14 @@ export function parseMoneyInput(input: string): string | null {
   return moneySchema.safeParse(normalized).success ? normalized : null;
 }
 
+/** The sign of a money string, read from its text (no float parsing): "-0.00" and "0" are zero. */
+export function moneySign(amount: string): -1 | 0 | 1 {
+  if (!/[1-9]/.test(amount)) {
+    return 0;
+  }
+  return amount.trim().startsWith('-') ? -1 : 1;
+}
+
 /** An amount the API will accept for a transaction: well-formed and above zero. */
 export function isValidAmountInput(input: string): boolean {
   const amount = parseMoneyInput(input);

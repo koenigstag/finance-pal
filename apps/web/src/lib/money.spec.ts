@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest';
-import { formatMoney, isValidAmountInput, parseMoneyInput } from './money';
+import { formatMoney, isValidAmountInput, moneySign, parseMoneyInput } from './money';
 
 describe('parseMoneyInput', () => {
   it.each([
@@ -20,6 +20,19 @@ describe('parseMoneyInput', () => {
 
   it.each(['', 'abc', '-5', '1.234', '12.3.4', '1,2,3', '1e5', '1234567890123'])('rejects %j', (input) => {
     expect(parseMoneyInput(input)).toBeNull();
+  });
+});
+
+describe('moneySign', () => {
+  it.each([
+    ['12.50', 1],
+    ['0.01', 1],
+    ['-3.00', -1],
+    ['0.00', 0],
+    ['-0.00', 0],
+    ['0', 0],
+  ])('%s → %i', (amount, sign) => {
+    expect(moneySign(amount)).toBe(sign);
   });
 });
 

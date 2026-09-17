@@ -87,6 +87,11 @@ export const ru: Catalog<typeof en> = {
       debt: 'Долг',
       savings: 'Накопления',
     },
+    groups: {
+      regular: 'Обычные',
+      savings: 'Накопления',
+      debt: 'Долги',
+    },
     empty: {
       title: 'Счетов пока нет',
       description: 'Добавьте счёт, чтобы записывать операции.',
