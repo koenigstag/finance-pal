@@ -238,6 +238,12 @@ export const ru: Catalog<typeof en> = {
   appearance: {
     searchIcons: 'Поиск иконок',
     noIcons: 'Иконка с таким названием не найдена.',
+    loadingIcons: 'Загружаем набор…',
+    sources: {
+      app: 'Иконки',
+      tabler: 'Ещё',
+      simple: 'Бренды',
+    },
   },
   data: {
     title: 'Данные',

@@ -3,6 +3,7 @@ import { fileURLToPath } from 'node:url';
 import { defineConfig, defaultClientConditions } from 'vite';
 import react from '@vitejs/plugin-react';
 import tailwindcss from '@tailwindcss/vite';
+import { iconSetsPlugin } from '../../tools/icon-sets.mjs';
 
 // Where the API runs in development. Both REST and Socket.io are proxied through the Vite dev
 // server, so the browser only ever talks to its own origin and the API needs no CORS setup.
@@ -39,7 +40,8 @@ export default defineConfig(() => ({
       '/socket.io': { target: API_TARGET, changeOrigin: true, ws: true },
     },
   },
-  plugins: [react(), tailwindcss()],
+  // The extra icon sets are generated into public/icons from their packages, never committed.
+  plugins: [react(), tailwindcss(), iconSetsPlugin(fileURLToPath(new URL('./public/icons', import.meta.url)))],
   build: {
     outDir: './dist',
     emptyOutDir: true,

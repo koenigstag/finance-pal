@@ -237,6 +237,12 @@ export const en = {
   appearance: {
     searchIcons: 'Search icons',
     noIcons: 'No icon by that name.',
+    loadingIcons: 'Fetching the set…',
+    sources: {
+      app: 'Icons',
+      tabler: 'More',
+      simple: 'Brands',
+    },
   },
   data: {
     title: 'Data',

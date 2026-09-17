@@ -59,3 +59,7 @@ apps/**/.env.local
 
 vite.config.*.timestamp*
 vitest.config.*.timestamp*
+
+# Icon sets generated from their packages at build time (tools/icon-sets.mjs)
+apps/web/public/icons/
+
