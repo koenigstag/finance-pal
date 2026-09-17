@@ -43,7 +43,7 @@ function sampleBackup(): string {
     entity(db, [102, 2, 1, UAH, 3, null, 'Валера', '', 0, null, 0, 2]);
     entity(db, [103, 2, 0, UAH, 4, null, 'Ощад', '', 1, null, 1, -1]);
     entity(db, [104, 2, 0, 19999, 5, null, 'Neznakomaya', '', 0, null, 1, 3]);
-    entity(db, [110, 2, 1, UAH, 6, -21696, 'Продукты', null, 0, null, null, null]);
+    entity(db, [110, 2, 1, UAH, 81, -21696, 'Продукты', null, 0, null, null, null]);
     entity(db, [111, 2, 0, UAH, 7, null, 'Зарплата', null, 0, null, null, null]);
     entity(db, [112, 2, 4, UAH, 8, null, 'Все счета', null, 0, null, 1, 9]);
     // Категории carry their position here, not in `de`; 113 has none and goes last.
@@ -79,6 +79,8 @@ describe('parseOneMoneyBackup', () => {
     expect(accounts.find((account) => account.name === 'Наличные')).toMatchObject({
       type: 'regular',
       currencyCode: 'UAH',
+      // `_ic` 1 is the three dots 1Money puts on "Other".
+      icon: 'dots-horizontal',
       openingBalance: '3000.00',
       description: 'Расходные',
       isIncludedInBalance: true,
@@ -103,9 +105,9 @@ describe('parseOneMoneyBackup', () => {
 
     // In the order the app had them, with the one it never placed last.
     expect(categories).toEqual([
-      { sourceId: 111, name: 'Зарплата', type: 'income', color: null, archived: false, sortOrder: 0 },
-      { sourceId: 110, name: 'Продукты', type: 'expense', color: '#FFAB40', archived: false, sortOrder: 1 },
-      { sourceId: 113, name: 'Кафе', type: 'expense', color: null, archived: false, sortOrder: 9999 },
+      { sourceId: 111, name: 'Зарплата', type: 'income', icon: null, color: null, archived: false, sortOrder: 0 },
+      { sourceId: 110, name: 'Продукты', type: 'expense', icon: 'wrench', color: '#FFAB40', archived: false, sortOrder: 1 },
+      { sourceId: 113, name: 'Кафе', type: 'expense', icon: null, color: null, archived: false, sortOrder: 9999 },
     ]);
   });
 

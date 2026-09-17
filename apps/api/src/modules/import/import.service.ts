@@ -67,6 +67,7 @@ export class ImportService {
           // The parser speaks the shared string union; the entity wants its own enum, whose
           // members are those same strings.
           type: parsed.type as AccountType,
+          icon: parsed.icon,
           currencyId: currencyIds.get(parsed.currencyCode),
           isIncludedInBalance: parsed.isIncludedInBalance,
           archived: parsed.archived,
@@ -92,6 +93,7 @@ export class ImportService {
             groupId: group.id,
             name: parsed.name,
             type: parsed.type as CategoryType,
+            icon: parsed.icon,
             color: parsed.color,
             sortOrder: parsed.sortOrder,
             archived: parsed.archived,

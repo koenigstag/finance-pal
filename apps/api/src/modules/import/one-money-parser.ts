@@ -41,6 +41,48 @@ const KNOWN_CURRENCY_IDS: Record<number, string> = {
 
 const PSEUDO_ACCOUNT_TYPE = 4;
 
+/**
+ * 1Money's icons by the number it stores, named in this app's own set.
+ *
+ * The number indexes its asset list, which says nothing on its own; each entry below was read off
+ * the app's own screens, and the comment says what the picture is. Where this app has nothing like
+ * it, the nearest in meaning stands in (a burger becomes a pizza, a washing machine becomes water).
+ * Anything not listed arrives without an icon rather than a wrong one, which is easily set by hand.
+ */
+const ICONS: Record<number, string> = {
+  1: 'dots-horizontal', // three dots — the "Other" category
+  2: 'landmark', // a bank's columns, which every lending account here uses
+  14: 'shopping-cart', // shopping basket — Groceries
+  15: 'utensils', // fork and knife — Restaurant
+  16: 'ticket', // a ticket — Leisure
+  17: 'bus', // a bus — Transport
+  19: 'users', // a smiling face — Family
+  20: 'heart', // a heart held in two hands — Health
+  21: 'bag', // a shopping bag — Shopping
+  24: 'gift', // a wrapped gift — Gifts
+  30: 'banknote', // banknotes
+  62: 'home', // a sofa
+  81: 'wrench', // a wrench
+  82: 'wifi', // a globe, for anything subscribed to
+  85: 'dumbbell', // a dumbbell
+  106: 'smartphone', // a telephone handset
+  110: 'droplets', // a washing machine
+  119: 'shopping-cart', // a shopping trolley
+  121: 'pizza', // a burger
+  253: 'sparkles', // someone having a massage
+  266: 'gift', // a parcel
+  285: 'hand-coins', // a hand holding something out
+  286: 'handshake', // two hands shaking
+  290: 'hand-coins', // a hand passing a card
+  302: 'receipt', // price tags
+  308: 'receipt', // a written page
+  324: 'receipt', // a till receipt
+  325: 'coins', // arrows in a circle
+  334: 'scissors', // comb and scissors
+  370: 'bolt', // a battery charging
+  373: 'shield', // a stop sign
+};
+
 // Where a category with no recorded position ends up: after every category that has one.
 const UNORDERED = 9999;
 
@@ -49,6 +91,7 @@ const ACCOUNT_TYPE_BY_CODE: Record<number, AccountType> = { 0: 'regular', 1: 'de
 export interface ParsedAccount {
   sourceId: number;
   name: string;
+  icon: string | null;
   description: string | null;
   type: AccountType;
   currencyCode: string;
@@ -63,6 +106,7 @@ export interface ParsedAccount {
 export interface ParsedCategory {
   sourceId: number;
   name: string;
+  icon: string | null;
   type: CategoryType;
   color: string | null;
   archived: boolean;
@@ -147,6 +191,7 @@ export function parseOneMoneyBackup(filePath: string, currencyOverrides: Record<
           sourceId: row._id,
           name,
           type: row._ty === 0 ? 'income' : 'expense',
+          icon: (row._ic !== null && ICONS[row._ic]) || null,
           color: toHexColor(row._co),
           archived: row._ar === 1,
           // Anything the app never gave a place goes last rather than first.
@@ -165,6 +210,7 @@ export function parseOneMoneyBackup(filePath: string, currencyOverrides: Record<
         name,
         description: row._de?.trim() || null,
         type: ACCOUNT_TYPE_BY_CODE[row._ty] ?? 'regular',
+        icon: (row._ic !== null && ICONS[row._ic]) || null,
         currencyCode,
         openingBalance: toAmount(row._a_m_b) ?? '0',
         isIncludedInBalance: row._a_i_i_b === 1,
