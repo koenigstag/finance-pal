@@ -1,5 +1,6 @@
 import { initContract } from '@ts-rest/core';
 import { z } from 'zod';
+import { errorSchema } from '../common/error.schema.js';
 
 const c = initContract();
 
@@ -32,6 +33,12 @@ export const onboardingContract = c.router(
       path: '/onboarding/status',
       responses: { 200: onboardingStatusSchema },
       summary: 'Whether the caller has completed onboarding, and which fields are still missing',
+    },
+    getProfile: {
+      method: 'GET',
+      path: '/onboarding/profile',
+      responses: { 200: profileSchema, 404: errorSchema },
+      summary: "The caller's profile; 404 until the first updateProfile creates it",
     },
     updateProfile: {
       method: 'PATCH',

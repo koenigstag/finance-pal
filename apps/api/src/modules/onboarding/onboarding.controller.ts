@@ -1,4 +1,4 @@
-import { Controller, UnauthorizedException } from '@nestjs/common';
+import { Controller, NotFoundException, UnauthorizedException } from '@nestjs/common';
 import { TsRestHandler, tsRestHandler } from '@ts-rest/nest';
 import { onboardingContract } from '@ft/shared-contracts';
 import type { Profile } from '@ft/api-database';
@@ -23,6 +23,17 @@ export class OnboardingController {
     return tsRestHandler(onboardingContract.status, async () => {
       const status = await this.onboarding.getStatus(requireUser(user).id);
       return { status: 200 as const, body: status };
+    });
+  }
+
+  @TsRestHandler(onboardingContract.getProfile)
+  getProfile(@CurrentUser() user?: RequestUser) {
+    return tsRestHandler(onboardingContract.getProfile, async () => {
+      const profile = await this.onboarding.getProfile(requireUser(user).id);
+      if (!profile) {
+        throw new NotFoundException('Profile not found');
+      }
+      return { status: 200 as const, body: toProfileDto(profile) };
     });
   }
 

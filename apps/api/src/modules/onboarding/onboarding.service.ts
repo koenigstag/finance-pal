@@ -33,6 +33,10 @@ export class OnboardingService {
     @InjectRepository(Category) private readonly categories: Repository<Category>,
   ) {}
 
+  getProfile(userId: string): Promise<Profile | null> {
+    return this.profiles.findOneBy({ id: userId });
+  }
+
   async getStatus(userId: string): Promise<OnboardingStatus> {
     const profile = await this.profiles.findOneBy({ id: userId });
     const missingFields = ONBOARDING_REQUIRED_FIELDS.filter((field) => !profile || profile[field] == null);
