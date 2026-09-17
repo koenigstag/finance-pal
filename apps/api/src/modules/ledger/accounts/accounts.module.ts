@@ -10,5 +10,6 @@ import { AccountsService } from './accounts.service';
   imports: [TypeOrmModule.forFeature([Account, AccountTarget, Transaction, RecurringRule]), AuthzModule, RealtimeModule],
   controllers: [AccountsController],
   providers: [AccountsService],
+  exports: [AccountsService],
 })
 export class AccountsModule {}
