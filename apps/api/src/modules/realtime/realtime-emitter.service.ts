@@ -23,9 +23,14 @@ export class RealtimeEmitterService {
   }
 
   emitToGroup(groupId: string, event: RealtimeEvent): void {
-    runOnTransactionCommit(() => {
-      this.server?.to(`group:${groupId}`).emit(LEDGER_CHANGED_EVENT, event);
-    });
+    runOnTransactionCommit(() => this.emitToGroupNow(groupId, event));
+  }
+
+  // For callers outside a typeorm-transactional context — the recurring scheduler runs its own
+  // QueryRunner transactions, where runOnTransactionCommit has no hook to attach to. Only call
+  // this after the caller's own commit has succeeded.
+  emitToGroupNow(groupId: string, event: RealtimeEvent): void {
+    this.server?.to(`group:${groupId}`).emit(LEDGER_CHANGED_EVENT, event);
   }
 
   // Makes an already-connected user's sockets start receiving group:<groupId> events without

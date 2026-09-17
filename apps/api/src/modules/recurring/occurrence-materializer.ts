@@ -77,8 +77,12 @@ export async function materializeOccurrences(manager: EntityManager, rule: Recur
   }
 
   const frontier = occurrenceAt(schedule, k);
-  await manager.update(RecurringRule, { id: rule.id }, { nextRunDate: frontier });
-  rule.nextRunDate = frontier;
+  // Skipped when nothing moved: the scheduler runs this for every candidate rule each hour, and
+  // a no-op UPDATE would still bump updated_at through its trigger on every one of them.
+  if (frontier.getTime() !== rule.nextRunDate.getTime()) {
+    await manager.update(RecurringRule, { id: rule.id }, { nextRunDate: frontier });
+    rule.nextRunDate = frontier;
+  }
   return inserted;
 }
 
