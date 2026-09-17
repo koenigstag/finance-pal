@@ -154,6 +154,7 @@ export const en = {
       firstDescription: 'Create your first group to start tracking money. You can share it with others later.',
       name: 'Name',
       namePlaceholder: 'Personal',
+      defaultName: 'Personal',
       seed: 'Add starter accounts and categories',
       seedDescription: 'A wallet, a card and common expense and income categories.',
       submit: 'Create group',

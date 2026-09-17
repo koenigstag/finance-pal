@@ -157,6 +157,7 @@ export const ru: Catalog<typeof en> = {
       firstDescription: 'Создайте первую группу, чтобы начать учёт. Позже ею можно будет поделиться.',
       name: 'Название',
       namePlaceholder: 'Личное',
+      defaultName: 'Личное',
       seed: 'Добавить стартовые счета и категории',
       seedDescription: 'Кошелек, карта и основные категории расходов и доходов.',
       submit: 'Создать группу',

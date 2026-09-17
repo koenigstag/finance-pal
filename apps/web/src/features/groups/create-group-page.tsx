@@ -1,4 +1,5 @@
 import { zodResolver } from '@hookform/resolvers/zod';
+import { useEffect } from 'react';
 import { Controller, useForm } from 'react-hook-form';
 import { useTranslation } from 'react-i18next';
 import { Link, useNavigate } from 'react-router';
@@ -30,6 +31,15 @@ export function CreateGroupPage() {
   });
   const errors = form.formState.errors;
   const isFirstGroup = groups.data?.length === 0;
+
+  // The first group gets a ready name, so creating it can be a single click. Filled in once the
+  // groups list confirms it's the first (and again on a language switch), but never over
+  // something the user typed. Further groups start empty: another "Personal" would only confuse.
+  useEffect(() => {
+    if (isFirstGroup && !form.getFieldState('name').isDirty) {
+      form.setValue('name', t('groups.create.defaultName'));
+    }
+  }, [isFirstGroup, form, t]);
 
   const onSubmit = form.handleSubmit(async (values) => {
     try {

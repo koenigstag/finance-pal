@@ -41,9 +41,13 @@ interface ProfileFormProps {
   onSubmit: (values: ProfileFormValues) => Promise<unknown>;
   // Rendered under the submit button, e.g. a "saved" confirmation.
   footer?: (state: { isDirty: boolean }) => ReactNode;
+  // The currency a language implies. When given, picking a language also picks that currency,
+  // as long as the currency hasn't been chosen by hand — for first-time setup, where both are
+  // still guesses. Settings leaves it out: switching the UI language there shouldn't touch money.
+  currencyForLanguage?: (language: ProfileFormValues['language']) => number | undefined;
 }
 
-export function ProfileForm({ defaultValues, currencies, submitLabel, onSubmit, footer }: ProfileFormProps) {
+export function ProfileForm({ defaultValues, currencies, submitLabel, onSubmit, footer, currencyForLanguage }: ProfileFormProps) {
   const { t, i18n } = useTranslation();
   const form = useForm<ProfileFormValues>({
     resolver: zodResolver(profileFormSchema),
@@ -128,7 +132,16 @@ export function ProfileForm({ defaultValues, currencies, submitLabel, onSubmit, 
             control={form.control}
             name="language"
             render={({ field }) => (
-              <Select value={field.value} onValueChange={field.onChange}>
+              <Select
+                value={field.value}
+                onValueChange={(value) => {
+                  field.onChange(value);
+                  const currencyId = currencyForLanguage?.(value as ProfileFormValues['language']);
+                  if (currencyId !== undefined && !form.getFieldState('mainCurrencyId').isDirty) {
+                    form.setValue('mainCurrencyId', currencyId);
+                  }
+                }}
+              >
                 <SelectTrigger id="language" className="w-full">
                   <SelectValue />
                 </SelectTrigger>
