@@ -1,9 +1,11 @@
-import { ChevronLeftIcon, ChevronRightIcon, PlusIcon, ReceiptTextIcon } from 'lucide-react';
+import { ChevronLeftIcon, ChevronRightIcon, ListFilterIcon, PlusIcon, ReceiptTextIcon } from 'lucide-react';
 import { useEffect, useMemo, useRef, useState } from 'react';
 import { useTranslation } from 'react-i18next';
 import { useSearchParams } from 'react-router';
 import { TRANSACTION_TYPES } from '@ft/shared-contracts';
+import { PageHeader } from '@/components/page-header';
 import { QueryError } from '@/components/query-error';
+import { Badge } from '@/components/ui/badge';
 import { Button } from '@/components/ui/button';
 import { Empty, EmptyDescription, EmptyHeader, EmptyMedia, EmptyTitle } from '@/components/ui/empty';
 import { Input } from '@/components/ui/input';
@@ -14,6 +16,7 @@ import { categoryOptions, useCategories } from '@/features/categories/queries';
 import { useGroupScope } from '@/features/groups/group-context';
 import { monthRange, parseMonthParam, shiftMonth, toMonthParam } from '@/lib/dates';
 import { capitalizeFirst } from '@/lib/text';
+import { cn } from '@/lib/utils';
 import { useTransactionPages, type Transaction, type TransactionFilters } from './queries';
 import { TransactionDialog } from './transaction-dialog';
 import { TransactionList } from './transaction-list';
@@ -32,6 +35,8 @@ export function TransactionsPage() {
   const accounts = useAccounts(group.id);
   const categories = useCategories(group.id);
   const [dialog, setDialog] = useState<{ open: boolean; transaction?: Transaction }>({ open: false });
+  // Phones show only the month and search until asked; the other filters take a screenful.
+  const [filtersOpen, setFiltersOpen] = useState(false);
 
   // Filters live in the URL, so a reload, the back button or a shared link keep them.
   const month = parseMonthParam(params.get('month'));
@@ -63,6 +68,7 @@ export function TransactionsPage() {
   const pages = useTransactionPages(group.id, filters);
   const transactions = useMemo(() => pages.data?.pages.flatMap((page) => page.items) ?? [], [pages.data]);
 
+  const activeFilterCount = [accountId, categoryId, type].filter(Boolean).length;
   const canCreate = ability.can('create', 'Transaction');
   const canUpdate = ability.can('update', 'Transaction');
   const monthLabel = capitalizeFirst(
@@ -81,17 +87,12 @@ export function TransactionsPage() {
 
   return (
     <section className="flex flex-col gap-4">
-      <div className="flex items-center justify-between gap-2">
-        <h1 className="text-2xl font-semibold">{t('transactions.title')}</h1>
-        {canCreate && (
-          <Button onClick={() => setDialog({ open: true })}>
-            <PlusIcon />
-            {t('transactions.new')}
-          </Button>
-        )}
-      </div>
+      <PageHeader
+        title={t('transactions.title')}
+        action={canCreate ? { label: t('transactions.new'), icon: PlusIcon, onClick: () => setDialog({ open: true }) } : undefined}
+      />
 
-      <div className="flex items-center gap-1">
+      <div className="flex items-center justify-between gap-1 md:justify-start">
         <Button
           variant="ghost"
           size="icon"
@@ -100,7 +101,7 @@ export function TransactionsPage() {
         >
           <ChevronLeftIcon />
         </Button>
-        <span className="min-w-40 text-center font-medium">{monthLabel}</span>
+        <span className="min-w-40 flex-1 text-center font-medium md:flex-none">{monthLabel}</span>
         <Button
           variant="ghost"
           size="icon"
@@ -111,8 +112,29 @@ export function TransactionsPage() {
         </Button>
       </div>
 
-      <div className="grid grid-cols-1 gap-2 sm:grid-cols-2 lg:grid-cols-4">
-        <SearchInput value={search} onChange={(value) => setParam('q', value || undefined)} />
+      <div className="flex gap-2 md:hidden">
+        <div className="flex-1">
+          <SearchInput value={search} onChange={(value) => setParam('q', value || undefined)} />
+        </div>
+        <Button
+          variant="outline"
+          aria-expanded={filtersOpen}
+          aria-controls="transaction-filters"
+          onClick={() => setFiltersOpen((open) => !open)}
+        >
+          <ListFilterIcon />
+          {t('transactions.filters.toggle')}
+          {activeFilterCount > 0 && <Badge className="ml-0.5 h-5 min-w-5 px-1.5">{activeFilterCount}</Badge>}
+        </Button>
+      </div>
+
+      <div
+        id="transaction-filters"
+        className={cn('grid-cols-1 gap-2 md:grid md:grid-cols-2 lg:grid-cols-4', filtersOpen ? 'grid' : 'hidden')}
+      >
+        <div className="hidden md:block">
+          <SearchInput value={search} onChange={(value) => setParam('q', value || undefined)} />
+        </div>
         <Select value={accountId ?? ALL} onValueChange={(value) => setParam('account', value === ALL ? undefined : value)}>
           <SelectTrigger className="w-full" aria-label={t('transactions.account')}>
             <SelectValue />

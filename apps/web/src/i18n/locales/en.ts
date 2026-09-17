@@ -96,6 +96,7 @@ export const en = {
     },
     filters: {
       search: 'Search notes',
+      toggle: 'Filters',
       type: 'Type',
       allAccounts: 'All accounts',
       allTypes: 'All types',

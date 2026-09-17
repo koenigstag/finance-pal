@@ -99,6 +99,7 @@ export const ru: Catalog<typeof en> = {
     },
     filters: {
       search: 'Поиск по заметкам',
+      toggle: 'Фильтры',
       type: 'Тип',
       allAccounts: 'Все счета',
       allTypes: 'Все типы',
@@ -128,7 +129,7 @@ export const ru: Catalog<typeof en> = {
     appearance: {
       title: 'Оформление',
       description: 'Действует только на этом устройстве.',
-      system: 'Как в системе',
+      system: 'Системная',
       light: 'Светлая',
       dark: 'Тёмная',
     },

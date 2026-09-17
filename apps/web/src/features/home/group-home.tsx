@@ -3,6 +3,7 @@ import { PlusIcon } from 'lucide-react';
 import { useMemo, useState } from 'react';
 import { useTranslation } from 'react-i18next';
 import { Link } from 'react-router';
+import { PageHeader } from '@/components/page-header';
 import { QueryError } from '@/components/query-error';
 import { Button } from '@/components/ui/button';
 import { Spinner } from '@/components/ui/spinner';
@@ -33,21 +34,11 @@ export function GroupHome() {
 
   return (
     <div className="flex flex-col gap-6">
-      <div className="flex items-center justify-between gap-2">
-        <div>
-          <h1 className="text-2xl font-semibold">{group.name}</h1>
-          <p className="text-sm text-muted-foreground">
-            {t(`groups.roles.${group.role}`)}
-            {!canCreate && ` · ${t('groups.readOnly')}`}
-          </p>
-        </div>
-        {canCreate && (
-          <Button onClick={() => setDialog({ open: true })}>
-            <PlusIcon />
-            {t('transactions.new')}
-          </Button>
-        )}
-      </div>
+      <PageHeader
+        title={group.name}
+        description={`${t(`groups.roles.${group.role}`)}${canCreate ? '' : ` · ${t('groups.readOnly')}`}`}
+        action={canCreate ? { label: t('transactions.new'), icon: PlusIcon, onClick: () => setDialog({ open: true }) } : undefined}
+      />
 
       <section className="flex flex-col gap-2">
         <SectionHeader title={t('accounts.title')} to={`/g/${group.id}/accounts`} />

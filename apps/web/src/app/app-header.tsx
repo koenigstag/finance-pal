@@ -26,11 +26,11 @@ export const AppHeader = observer(function AppHeader({ currentGroupId }: { curre
   const current = groups.data?.find((group) => group.id === currentGroupId);
 
   return (
-    <header className="border-b">
+    <header className="sticky top-0 z-40 border-b bg-background/95 pt-[env(safe-area-inset-top)] backdrop-blur supports-backdrop-filter:bg-background/80">
       <div className="mx-auto flex h-14 max-w-5xl items-center justify-between gap-2 px-4">
         <DropdownMenu>
           <DropdownMenuTrigger asChild>
-            <Button variant="ghost" className="max-w-64 justify-between gap-2">
+            <Button variant="ghost" className="-ml-2 max-w-[70vw] justify-between gap-2 md:ml-0 md:max-w-64">
               <span className="truncate">{current?.name ?? t('groups.switcher.placeholder')}</span>
               <ChevronsUpDownIcon className="text-muted-foreground" />
             </Button>

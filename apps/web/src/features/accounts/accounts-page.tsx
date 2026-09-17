@@ -1,8 +1,8 @@
 import { PlusIcon, WalletIcon } from 'lucide-react';
 import { useState } from 'react';
 import { useTranslation } from 'react-i18next';
+import { PageHeader } from '@/components/page-header';
 import { QueryError } from '@/components/query-error';
-import { Button } from '@/components/ui/button';
 import { Empty, EmptyDescription, EmptyHeader, EmptyMedia, EmptyTitle } from '@/components/ui/empty';
 import { Spinner } from '@/components/ui/spinner';
 import { useGroupScope } from '@/features/groups/group-context';
@@ -20,15 +20,10 @@ export function AccountsPage() {
 
   return (
     <section className="flex flex-col gap-4">
-      <div className="flex items-center justify-between gap-2">
-        <h1 className="text-2xl font-semibold">{t('accounts.title')}</h1>
-        {canCreate && (
-          <Button onClick={() => setDialog({ open: true })}>
-            <PlusIcon />
-            {t('accounts.new')}
-          </Button>
-        )}
-      </div>
+      <PageHeader
+        title={t('accounts.title')}
+        action={canCreate ? { label: t('accounts.new'), icon: PlusIcon, onClick: () => setDialog({ open: true }) } : undefined}
+      />
 
       {accounts.isPending ? (
         <Spinner className="mx-auto size-6 text-muted-foreground" />

@@ -55,7 +55,7 @@ export function OnboardingPage() {
   };
 
   return (
-    <main className="flex min-h-svh items-center justify-center p-4">
+    <main className="flex min-h-svh items-start justify-center p-4 pt-[calc(1rem+env(safe-area-inset-top))] sm:items-center">
       <Card className="w-full max-w-sm">
         <CardHeader>
           <CardTitle>{t('onboarding.title')}</CardTitle>

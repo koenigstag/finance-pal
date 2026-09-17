@@ -55,7 +55,7 @@ export const AuthPage = observer(function AuthPage({ mode }: { mode: Mode }) {
   const rootError = form.formState.errors.root?.message;
 
   return (
-    <main className="flex min-h-svh items-center justify-center p-4">
+    <main className="flex min-h-svh items-start justify-center p-4 pt-[calc(1rem+env(safe-area-inset-top))] sm:items-center">
       <Card className="w-full max-w-sm">
         <CardHeader>
           <CardTitle>{t(mode === 'login' ? 'auth.login.title' : 'auth.register.title')}</CardTitle>

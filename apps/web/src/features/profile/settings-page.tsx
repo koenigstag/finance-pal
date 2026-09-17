@@ -66,7 +66,7 @@ export function SettingsPage() {
   return (
     <>
       <AppHeader currentGroupId={lastGroupId} />
-      <main className="mx-auto flex max-w-xl flex-col gap-4 p-4">
+      <main className="mx-auto flex max-w-xl flex-col gap-4 p-4 pb-[calc(1rem+env(safe-area-inset-bottom))]">
         <div className="flex items-center gap-2">
           <Button variant="ghost" size="icon" asChild>
             <Link to="/" aria-label={t('common.back')}>
