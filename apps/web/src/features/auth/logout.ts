@@ -1,16 +1,10 @@
-import { useSyncExternalStore } from 'react';
 import { api } from '@/lib/api/client';
-import { tokenStore, type Session } from '@/lib/api/token-store';
 import { queryClient } from '@/lib/query-client';
-
-/** The current session, re-rendering on login, logout and token changes — in any tab. */
-export function useSession(): Session | null {
-  return useSyncExternalStore(tokenStore.subscribe, tokenStore.get);
-}
+import { rootStore } from '@/stores/root-store';
 
 export async function logout(): Promise<void> {
-  const session = tokenStore.get();
-  tokenStore.clear();
+  const session = rootStore.session.session;
+  rootStore.session.clear();
   // Cached data belongs to the user who just left; the next one must not see it even briefly.
   queryClient.clear();
   if (session) {

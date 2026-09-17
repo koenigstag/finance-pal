@@ -127,4 +127,10 @@
   html {
     @apply font-sans;
     }
+  /* Tailwind v4's preflight leaves buttons on the browser's default cursor; restore the pointer
+     for everything clickable. Disabled controls keep the not-allowed cursor their classes set. */
+  button:not(:disabled),
+  [role="button"]:not([aria-disabled="true"]) {
+    cursor: pointer;
+  }
 }

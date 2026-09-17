@@ -11,7 +11,7 @@ import {
 } from '@ft/shared-contracts';
 import { ApiError, toApiError } from './errors';
 import { refreshSession } from './refresh';
-import { tokenStore } from './token-store';
+import { rootStore } from '@/stores/root-store';
 
 // Attaches the access token and, on a 401 from a protected route, refreshes once and retries
 // once. Auth routes are exempt: a 401 from login means bad credentials, not an expired token.
@@ -22,7 +22,7 @@ const authorizedFetch: ApiFetcher = async (args) => {
       headers: accessToken ? { ...args.headers, authorization: `Bearer ${accessToken}` } : args.headers,
     });
 
-  const session = tokenStore.get();
+  const session = rootStore.session.session;
   const response = await send(session?.accessToken);
   if (response.status !== 401 || !session || args.path.includes('/api/auth/')) {
     return response;

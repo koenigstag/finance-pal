@@ -2,11 +2,12 @@ import { ArrowLeftIcon } from 'lucide-react';
 import { useTranslation } from 'react-i18next';
 import { Link } from 'react-router';
 import { AppHeader } from '@/app/app-header';
-import { FullPageSpinner } from '@/components/full-page-spinner';
 import { QueryError } from '@/components/query-error';
 import { Button } from '@/components/ui/button';
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card';
+import { Spinner } from '@/components/ui/spinner';
 import { detectLanguage, isSupportedLanguage } from '@/i18n';
+import { AppearanceCard } from '@/theme/appearance-card';
 import { readLastGroupId } from '@/features/groups/last-group';
 import { ProfileForm } from './profile-form';
 import { useCurrencies } from '@/features/currencies/queries';
@@ -21,7 +22,7 @@ export function SettingsPage() {
 
   let content;
   if (profile.isPending || currencies.isPending) {
-    content = <FullPageSpinner />;
+    content = <Spinner className="mx-auto size-6 text-muted-foreground" />;
   } else if (profile.isError || currencies.isError || !profile.data) {
     // No profile can't happen past RequireOnboarded; treat it like a failed load if it does.
     content = (
@@ -74,6 +75,7 @@ export function SettingsPage() {
           </Button>
           <h1 className="text-xl font-semibold">{t('settings.title')}</h1>
         </div>
+        <AppearanceCard />
         {content}
       </main>
     </>

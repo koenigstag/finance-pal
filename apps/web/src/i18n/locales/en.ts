@@ -122,6 +122,13 @@ export const en = {
   settings: {
     title: 'Settings',
     saved: 'Saved',
+    appearance: {
+      title: 'Appearance',
+      description: 'Applies to this device only.',
+      system: 'System',
+      light: 'Light',
+      dark: 'Dark',
+    },
     profile: {
       title: 'Profile',
       description: 'The language also applies to starter categories in groups you create later.',

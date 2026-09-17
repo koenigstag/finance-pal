@@ -2,7 +2,7 @@ import { useEffect } from 'react';
 import { Navigate, Outlet } from 'react-router';
 import { FullPageSpinner } from '@/components/full-page-spinner';
 import { QueryError } from '@/components/query-error';
-import { setPreferredLanguage } from '@/i18n';
+import { useStores } from '@/stores/stores-context';
 import { useOnboardingStatus, useProfile } from './queries';
 
 /**
@@ -10,17 +10,18 @@ import { useOnboardingStatus, useProfile } from './queries';
  * Also where the profile's language takes over the UI from browser detection.
  */
 export function RequireOnboarded() {
+  const { locale } = useStores();
   const status = useOnboardingStatus();
   const profile = useProfile();
   const language = profile.data?.language ?? null;
 
   useEffect(() => {
-    setPreferredLanguage(language);
-  }, [language]);
+    locale.setProfileLanguage(language);
+  }, [locale, language]);
 
   // Leaving the signed-in part of the app (logout, session expiry) hands the UI back to the
   // browser's language, so the login page doesn't stay in the previous user's.
-  useEffect(() => () => setPreferredLanguage(null), []);
+  useEffect(() => () => locale.setProfileLanguage(null), [locale]);
 
   if (status.isPending || profile.isPending) {
     return <FullPageSpinner />;

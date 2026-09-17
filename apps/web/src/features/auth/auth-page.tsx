@@ -1,4 +1,5 @@
 import { zodResolver } from '@hookform/resolvers/zod';
+import { observer } from 'mobx-react-lite';
 import { useForm } from 'react-hook-form';
 import { useTranslation } from 'react-i18next';
 import { Link, Navigate, useLocation } from 'react-router';
@@ -9,8 +10,7 @@ import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/com
 import { Field, FieldError, FieldGroup, FieldLabel } from '@/components/ui/field';
 import { Input } from '@/components/ui/input';
 import { ApiError, api, unwrap } from '@/lib/api/client';
-import { tokenStore } from '@/lib/api/token-store';
-import { useSession } from './use-session';
+import { useStores } from '@/stores/stores-context';
 
 type Mode = 'login' | 'register';
 
@@ -27,16 +27,16 @@ interface RedirectState {
   from?: string;
 }
 
-export function AuthPage({ mode }: { mode: Mode }) {
+export const AuthPage = observer(function AuthPage({ mode }: { mode: Mode }) {
   const { t } = useTranslation();
-  const session = useSession();
+  const { session } = useStores();
   const location = useLocation();
   const form = useForm<Credentials>({
     resolver: zodResolver(credentialsSchema),
     defaultValues: { email: '', password: '' },
   });
 
-  if (session) {
+  if (session.isSignedIn) {
     return <Navigate to={(location.state as RedirectState | null)?.from ?? '/'} replace />;
   }
 
@@ -46,7 +46,7 @@ export function AuthPage({ mode }: { mode: Mode }) {
         mode === 'login'
           ? await unwrap(api.auth.login({ body: credentials }), 200)
           : await unwrap(api.auth.register({ body: credentials }), 201);
-      tokenStore.set({ user: { id: user.id, email: user.email }, accessToken, refreshToken });
+      session.set({ user: { id: user.id, email: user.email }, accessToken, refreshToken });
     } catch (error) {
       form.setError('root', { message: authErrorMessage(error, mode, t) });
     }
@@ -111,7 +111,7 @@ export function AuthPage({ mode }: { mode: Mode }) {
       </Card>
     </main>
   );
-}
+});
 
 function authErrorMessage(error: unknown, mode: Mode, t: (key: 'auth.errors.invalidCredentials' | 'auth.errors.emailTaken' | 'errors.generic') => string): string {
   if (error instanceof ApiError) {

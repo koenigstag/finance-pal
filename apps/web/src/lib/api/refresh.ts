@@ -1,4 +1,5 @@
-import { tokenStore, type Session } from './token-store';
+import { rootStore } from '@/stores/root-store';
+import type { Session } from '@/stores/session-store';
 
 const LOCK_NAME = 'ft-token-refresh';
 
@@ -41,7 +42,7 @@ async function refreshUnderLock(failedAccessToken: string): Promise<Session | nu
   // Storage, not the in-memory copy: a tab that just released this lock after rotating may not
   // have had its `storage` event delivered here yet, and refreshing with the rotated-away token
   // would trip reuse detection.
-  const session = tokenStore.getFresh();
+  const session = rootStore.session.syncFromStorage();
   if (!session) {
     return null;
   }
@@ -58,7 +59,7 @@ async function refreshUnderLock(failedAccessToken: string): Promise<Session | nu
 
   if (response.status === 401) {
     // Expired, revoked or reused: the session is over for every tab.
-    tokenStore.clear();
+    rootStore.session.clear();
     return null;
   }
   if (!response.ok) {
@@ -67,5 +68,5 @@ async function refreshUnderLock(failedAccessToken: string): Promise<Session | nu
   }
 
   const { accessToken, refreshToken } = (await response.json()) as { accessToken: string; refreshToken: string };
-  return tokenStore.updateTokens(accessToken, refreshToken);
+  return rootStore.session.updateTokens(accessToken, refreshToken);
 }

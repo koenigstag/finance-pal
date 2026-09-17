@@ -125,6 +125,13 @@ export const ru: Catalog<typeof en> = {
   settings: {
     title: 'Настройки',
     saved: 'Сохранено',
+    appearance: {
+      title: 'Оформление',
+      description: 'Действует только на этом устройстве.',
+      system: 'Как в системе',
+      light: 'Светлая',
+      dark: 'Тёмная',
+    },
     profile: {
       title: 'Профиль',
       description: 'Язык также применяется к стартовым категориям в группах, созданных позже.',

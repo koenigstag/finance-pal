@@ -7,6 +7,21 @@
 
     <meta name="viewport" content="width=device-width, initial-scale=1" />
     <link rel="icon" type="image/x-icon" href="/favicon.ico" />
+    <script>
+      // Applies the theme before first paint, so a dark page doesn't flash light while the bundle
+      // loads. Mirrors src/stores/theme-store.ts, which takes over once the app starts.
+      (function () {
+        var preference = 'system';
+        try {
+          preference = localStorage.getItem('ft.theme') || 'system';
+        } catch (error) {}
+        var dark =
+          preference === 'dark' ||
+          (preference !== 'light' && window.matchMedia('(prefers-color-scheme: dark)').matches);
+        document.documentElement.classList.toggle('dark', dark);
+        document.documentElement.style.colorScheme = dark ? 'dark' : 'light';
+      })();
+    </script>
   </head>
   <body>
     <div id="root"></div>

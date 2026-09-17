@@ -1,3 +1,4 @@
+import { observer } from 'mobx-react-lite';
 import { ChevronsUpDownIcon, LogOutIcon, PlusIcon, SettingsIcon, UserIcon } from 'lucide-react';
 import { useTranslation } from 'react-i18next';
 import { Link, useNavigate } from 'react-router';
@@ -12,14 +13,15 @@ import {
   DropdownMenuSeparator,
   DropdownMenuTrigger,
 } from '@/components/ui/dropdown-menu';
-import { logout, useSession } from '@/features/auth/use-session';
+import { logout } from '@/features/auth/logout';
 import { useGroups } from '@/features/groups/queries';
+import { useStores } from '@/stores/stores-context';
 
 /** Top bar for the signed-in app: group switcher on the left, account menu on the right. */
-export function AppHeader({ currentGroupId }: { currentGroupId?: string }) {
+export const AppHeader = observer(function AppHeader({ currentGroupId }: { currentGroupId?: string }) {
   const { t } = useTranslation();
   const navigate = useNavigate();
-  const session = useSession();
+  const { session } = useStores();
   const groups = useGroups();
   const current = groups.data?.find((group) => group.id === currentGroupId);
 
@@ -60,7 +62,7 @@ export function AppHeader({ currentGroupId }: { currentGroupId?: string }) {
             </Button>
           </DropdownMenuTrigger>
           <DropdownMenuContent align="end" className="w-56">
-            <DropdownMenuLabel className="truncate font-normal text-muted-foreground">{session?.user.email}</DropdownMenuLabel>
+            <DropdownMenuLabel className="truncate font-normal text-muted-foreground">{session.session?.user.email}</DropdownMenuLabel>
             <DropdownMenuSeparator />
             <DropdownMenuItem asChild>
               <Link to="/settings">
@@ -77,4 +79,4 @@ export function AppHeader({ currentGroupId }: { currentGroupId?: string }) {
       </div>
     </header>
   );
-}
+});

@@ -1,6 +1,9 @@
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
+import { rootStore } from '@/stores/root-store';
+import type { Session } from '@/stores/session-store';
 import { refreshSession } from './refresh';
-import { tokenStore, type Session } from './token-store';
+
+const sessionStore = rootStore.session;
 
 const user = { id: 'u1', email: 'a@example.com' };
 const session = (n: number): Session => ({ accessToken: `access-${n}`, refreshToken: `refresh-${n}`, user });
@@ -13,7 +16,7 @@ describe('refreshSession', () => {
 
   beforeEach(() => {
     localStorage.clear();
-    tokenStore.clear();
+    sessionStore.clear();
     fetchMock.mockReset();
     vi.stubGlobal('fetch', fetchMock);
   });
@@ -23,7 +26,7 @@ describe('refreshSession', () => {
   });
 
   it('rotates tokens with the current refresh token', async () => {
-    tokenStore.set(session(1));
+    sessionStore.set(session(1));
     fetchMock.mockResolvedValueOnce(jsonResponse(200, { accessToken: 'access-2', refreshToken: 'refresh-2' }));
 
     const result = await refreshSession('access-1');
@@ -31,11 +34,11 @@ describe('refreshSession', () => {
     expect(fetchMock).toHaveBeenCalledTimes(1);
     expect(JSON.parse(fetchMock.mock.calls[0][1]?.body as string)).toEqual({ refreshToken: 'refresh-1' });
     expect(result).toEqual(session(2));
-    expect(tokenStore.get()).toEqual(session(2));
+    expect(sessionStore.session).toEqual(session(2));
   });
 
   it('refreshes once for concurrent callers in the same tab, and all get the new tokens', async () => {
-    tokenStore.set(session(1));
+    sessionStore.set(session(1));
     fetchMock.mockResolvedValueOnce(jsonResponse(200, { accessToken: 'access-2', refreshToken: 'refresh-2' }));
 
     const results = await Promise.all([refreshSession('access-1'), refreshSession('access-1'), refreshSession('access-1')]);
@@ -45,11 +48,11 @@ describe('refreshSession', () => {
   });
 
   it('does not refresh when another tab already rotated the tokens in storage', async () => {
-    tokenStore.set(session(1));
+    sessionStore.set(session(1));
     // Another tab rotated and wrote storage, but its `storage` event hasn't reached this tab:
     // the in-memory copy still holds access-1.
     localStorage.setItem('ft.session', JSON.stringify(session(2)));
-    expect(tokenStore.get()).toEqual(session(1));
+    expect(sessionStore.session).toEqual(session(1));
 
     const result = await refreshSession('access-1');
 
@@ -58,20 +61,20 @@ describe('refreshSession', () => {
   });
 
   it('ends the session when the refresh token is rejected', async () => {
-    tokenStore.set(session(1));
+    sessionStore.set(session(1));
     fetchMock.mockResolvedValueOnce(jsonResponse(401, { statusCode: 401, message: 'Refresh token reuse detected' }));
 
     expect(await refreshSession('access-1')).toBeNull();
-    expect(tokenStore.get()).toBeNull();
+    expect(sessionStore.session).toBeNull();
     expect(localStorage.getItem('ft.session')).toBeNull();
   });
 
   it('keeps the session on a server error', async () => {
-    tokenStore.set(session(1));
+    sessionStore.set(session(1));
     fetchMock.mockResolvedValueOnce(jsonResponse(502));
 
     await expect(refreshSession('access-1')).rejects.toThrow('502');
-    expect(tokenStore.get()).toEqual(session(1));
+    expect(sessionStore.session).toEqual(session(1));
   });
 
   it('returns null without calling the API when there is no session', async () => {
@@ -80,7 +83,7 @@ describe('refreshSession', () => {
   });
 
   it('runs under a cross-tab Web Lock when the browser has one', async () => {
-    tokenStore.set(session(1));
+    sessionStore.set(session(1));
     fetchMock.mockResolvedValueOnce(jsonResponse(200, { accessToken: 'access-2', refreshToken: 'refresh-2' }));
     const request = vi.fn((_name: string, callback: () => Promise<unknown>) => callback());
     vi.stubGlobal('navigator', { ...navigator, locks: { request } });

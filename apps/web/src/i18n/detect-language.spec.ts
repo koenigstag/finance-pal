@@ -1,5 +1,5 @@
 import { afterEach, describe, expect, it, vi } from 'vitest';
-import { detectLanguage } from './index';
+import { detectLanguage } from './languages';
 
 describe('detectLanguage', () => {
   afterEach(() => {
