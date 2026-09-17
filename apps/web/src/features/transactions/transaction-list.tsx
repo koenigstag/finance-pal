@@ -102,7 +102,11 @@ function TransactionRow({ transaction, planned, accountsById, categoriesById, on
   const isTransfer = transaction.type === 'transfer';
 
   const category = transaction.categoryId ? categoriesById.get(transaction.categoryId) : undefined;
-  const title = isTransfer ? t('transactions.types.transfer') : (category?.name ?? t('transactions.noCategory'));
+  // A transfer is named after where the money ended up — that's what the row is about — with the
+  // account it left showing below it. Everything else is named after its category.
+  const title = isTransfer
+    ? (toAccount?.name ?? t('transactions.types.transfer'))
+    : (category?.name ?? t('transactions.noCategory'));
   // Symbols rather than codes (₴, not UAH or грн.), as in the account list.
   const narrow = { currencyDisplay: 'narrowSymbol' } as const;
   const amount = formatMoney(transaction.amount, currencyCodes.get(transaction.currencyId), i18n.language, narrow);
@@ -114,9 +118,10 @@ function TransactionRow({ transaction, planned, accountsById, categoriesById, on
   const content = (
     <>
       <AppearanceIcon
-        icon={category?.icon}
-        color={category?.color}
-        placeholder={isTransfer ? 'transfer' : category ? undefined : 'none'}
+        icon={isTransfer ? toAccount?.icon : category?.icon}
+        color={isTransfer ? toAccount?.color : category?.color}
+        fallbackIcon={isTransfer ? 'wallet' : undefined}
+        placeholder={isTransfer ? (toAccount ? undefined : 'transfer') : category ? undefined : 'none'}
         className="mt-0.5"
       />
       <div className="min-w-0 flex-1">
@@ -130,8 +135,8 @@ function TransactionRow({ transaction, planned, accountsById, categoriesById, on
           {account?.name ?? '—'}
           {isTransfer && (
             <>
+              {/* The arrow points at the title above: this is where it came from. */}
               <ArrowRightIcon className="size-3.5 shrink-0" />
-              {toAccount?.name ?? '—'}
             </>
           )}
           {transaction.note && <span className="truncate"> · {transaction.note}</span>}
