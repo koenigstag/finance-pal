@@ -218,12 +218,38 @@ export const ru: Catalog<typeof en> = {
     startDayOfWeek: 'Первый день недели',
     language: 'Язык',
   },
+  data: {
+    title: 'Данные',
+    description: 'Перенести историю в приложение или забрать её с собой',
+    soon: 'Скоро',
+    export: {
+      title: 'Экспорт',
+      description: 'Пока не сделан',
+    },
+    import: {
+      title: 'Импорт',
+      description: 'Из другого приложения',
+      oneMoney: {
+        title: '1Money',
+        short: 'Из файла резервной копии',
+        step1: 'В 1Money создайте резервную копию и сохраните файл на это устройство.',
+        step2: 'Выберите этот файл ниже.',
+        step3: 'Всё попадёт в новую группу с названием файла: счета, категории, операции и запланированные.',
+        file: 'Файл резервной копии',
+        submit: 'Импортировать',
+        importing: 'Импортируем…',
+        counts: 'Счетов: {{accounts}}, категорий: {{categories}}, операций: {{transactions}}',
+        open: 'Открыть группу',
+      },
+    },
+  },
   settings: {
     title: 'Настройки',
     saved: 'Сохранено',
     account: {
       title: 'Аккаунт',
     },
+
     appearance: {
       title: 'Оформление',
       description: 'Действует только на этом устройстве.',

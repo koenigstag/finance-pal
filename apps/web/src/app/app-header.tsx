@@ -1,5 +1,5 @@
 import { observer } from 'mobx-react-lite';
-import { ChevronRightIcon, SettingsIcon, UserIcon, WalletIcon } from 'lucide-react';
+import { ChevronRightIcon, DatabaseIcon, SettingsIcon, UserIcon, WalletIcon } from 'lucide-react';
 import { useState } from 'react';
 import { useTranslation } from 'react-i18next';
 import { Link } from 'react-router';
@@ -14,6 +14,7 @@ import {
   DropdownMenuTrigger,
 } from '@/components/ui/dropdown-menu';
 import { AccountsTotal } from '@/features/accounts/accounts-total';
+import { DataSheet } from '@/features/import/data-sheet';
 import { GroupSettingsSheet } from '@/features/groups/group-settings-sheet';
 import { GroupsSheet } from '@/features/groups/groups-sheet';
 import { useGroups, type Group } from '@/features/groups/queries';
@@ -32,6 +33,7 @@ export const AppHeader = observer(function AppHeader({ currentGroupId }: { curre
   const current = groups.data?.find((group) => group.id === currentGroupId);
   const [groupsOpen, setGroupsOpen] = useState(false);
   const [settingsGroup, setSettingsGroup] = useState<Group | undefined>();
+  const [dataOpen, setDataOpen] = useState(false);
 
   // One menu per screen size rather than one moved around: each is its own trigger, and only
   // the one for the current width is rendered.
@@ -50,6 +52,10 @@ export const AppHeader = observer(function AppHeader({ currentGroupId }: { curre
           <ChevronRightIcon className="text-muted-foreground" />
         </DropdownMenuItem>
         <DropdownMenuSeparator />
+        <DropdownMenuItem onSelect={() => setDataOpen(true)}>
+          <DatabaseIcon />
+          {t('data.title')}
+        </DropdownMenuItem>
         <DropdownMenuItem asChild>
           <Link to="/settings">
             <SettingsIcon />
@@ -88,6 +94,7 @@ export const AppHeader = observer(function AppHeader({ currentGroupId }: { curre
         onOpenChange={setGroupsOpen}
         onOpenSettings={setSettingsGroup}
       />
+      <DataSheet open={dataOpen} onOpenChange={setDataOpen} />
       <GroupSettingsSheet
         // Kept after closing so the sheet keeps its content while it animates out.
         group={settingsGroup}

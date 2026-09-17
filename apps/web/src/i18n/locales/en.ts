@@ -217,12 +217,38 @@ export const en = {
     startDayOfWeek: 'Week starts on',
     language: 'Language',
   },
+  data: {
+    title: 'Data',
+    description: 'Bring your money history in or take it with you',
+    soon: 'Soon',
+    export: {
+      title: 'Export',
+      description: 'Not built yet',
+    },
+    import: {
+      title: 'Import',
+      description: 'From another app',
+      oneMoney: {
+        title: '1Money',
+        short: 'From a backup file',
+        step1: 'In 1Money, make a backup and save the file to this device.',
+        step2: 'Choose that file below.',
+        step3: 'Everything lands in a new group named after the file: accounts, categories, transactions and planned ones.',
+        file: 'Backup file',
+        submit: 'Import',
+        importing: 'Importing…',
+        counts: '{{accounts}} accounts, {{categories}} categories, {{transactions}} transactions',
+        open: 'Open the group',
+      },
+    },
+  },
   settings: {
     title: 'Settings',
     saved: 'Saved',
     account: {
       title: 'Account',
     },
+
     appearance: {
       title: 'Appearance',
       description: 'Applies to this device only.',
