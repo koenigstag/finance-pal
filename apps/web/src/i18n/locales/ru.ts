@@ -235,6 +235,10 @@ export const ru: Catalog<typeof en> = {
     startDayOfWeek: 'Первый день недели',
     language: 'Язык',
   },
+  appearance: {
+    searchIcons: 'Поиск иконок',
+    noIcons: 'Иконка с таким названием не найдена.',
+  },
   data: {
     title: 'Данные',
     description: 'Перенести историю в приложение или забрать её с собой',

@@ -1,6 +1,8 @@
 import { ArrowLeftRightIcon, CircleDashedIcon, ShapesIcon } from 'lucide-react';
+import { DynamicIcon } from 'lucide-react/dynamic';
 import { cn } from '@/lib/utils';
 import { ICONS, validColor } from './appearance';
+import { isIconName } from './icon-library';
 
 const SIZES = {
   sm: 'size-6 [&_svg]:size-3.5',
@@ -32,7 +34,9 @@ export function AppearanceIcon({ icon, color, placeholder, fallbackIcon, size = 
       ? ArrowLeftRightIcon
       : placeholder === 'none'
         ? CircleDashedIcon
-        : (icon && ICONS[icon]) || (fallbackIcon && ICONS[fallbackIcon]) || ShapesIcon;
+        : (icon && ICONS[icon]) || (!icon && fallbackIcon && ICONS[fallbackIcon]) || null;
+  // Not one of the bundled icons: lucide fetches it by name, on its own, once.
+  const lazyName = !Icon && !placeholder && icon && isIconName(icon) ? icon : null;
 
   return (
     <span
@@ -46,7 +50,7 @@ export function AppearanceIcon({ icon, color, placeholder, fallbackIcon, size = 
       // The color at about 15% opacity behind the icon in full color: legible in light and dark.
       style={tint ? { backgroundColor: `${tint}26`, color: tint } : undefined}
     >
-      <Icon />
+      {Icon ? <Icon /> : lazyName ? <DynamicIcon name={lazyName as never} /> : <ShapesIcon />}
     </span>
   );
 }

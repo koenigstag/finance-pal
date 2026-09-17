@@ -234,6 +234,10 @@ export const en = {
     startDayOfWeek: 'Week starts on',
     language: 'Language',
   },
+  appearance: {
+    searchIcons: 'Search icons',
+    noIcons: 'No icon by that name.',
+  },
   data: {
     title: 'Data',
     description: 'Bring your money history in or take it with you',
