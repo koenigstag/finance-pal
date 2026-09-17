@@ -6,6 +6,7 @@ import { enableRowLevelSecurity } from './20260726120000-enable-rls.js';
 import { fixGroupsSelectOwnerVisibility } from './20260726130000-fix-groups-select-owner-visibility.js';
 import { addProfileOnboardingFields } from './20260726140000-add-profile-onboarding-fields.js';
 import { addRecurringOccurrences } from './20260917120000-add-recurring-occurrences.js';
+import { addRecurringRuleStartsAt } from './20260917130000-add-recurring-rule-starts-at.js';
 
 export const migrations: readonly Migration[] = [
   createAuthTables,
@@ -15,6 +16,7 @@ export const migrations: readonly Migration[] = [
   fixGroupsSelectOwnerVisibility,
   addProfileOnboardingFields,
   addRecurringOccurrences,
+  addRecurringRuleStartsAt,
 ];
 
 export * from './migration.interface.js';

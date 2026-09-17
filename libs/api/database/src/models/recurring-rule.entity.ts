@@ -80,6 +80,11 @@ export class RecurringRule {
   @Column({ type: 'int', name: 'interval_value', default: 1 })
   intervalValue!: number;
 
+  // anchor of the series: occurrence k = startsAt + k·interval, never advanced from the last one
+  @Column({ type: 'timestamptz', name: 'starts_at' })
+  startsAt!: Date;
+
+  // first occurrence not yet materialized as a transaction (the scheduler's frontier)
   @Column({ type: 'timestamptz', name: 'next_run_date' })
   nextRunDate!: Date;
 

@@ -10,6 +10,9 @@ export const REALTIME_RESOURCE_TYPES = [
   'Category',
   'Tag',
   'Transaction',
+  // One event per rule change, not one per occurrence it materialized — a client should refresh
+  // rules, transactions and account balances together when it sees this.
+  'RecurringRule',
   'Group',
   'GroupMember',
 ] as const;

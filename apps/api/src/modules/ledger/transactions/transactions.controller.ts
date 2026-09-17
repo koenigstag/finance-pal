@@ -1,32 +1,10 @@
 import { Controller } from '@nestjs/common';
 import { TsRestHandler, tsRestHandler } from '@ts-rest/nest';
 import { transactionsContract } from '@ft/shared-contracts';
-import { Transaction } from '@ft/api-database';
 import { CurrentUser, type RequestUser } from '../../_core/authn/request-user';
 import { requireUser } from '../../_core/authn/require-user';
+import { toTransactionDto } from './transaction.dto';
 import { TransactionsService } from './transactions.service';
-
-function toTransactionDto(transaction: Transaction, tagIds: string[]) {
-  return {
-    id: transaction.id,
-    groupId: transaction.groupId,
-    type: transaction.type,
-    date: transaction.date.toISOString(),
-    amount: transaction.amount,
-    currencyId: transaction.currencyId,
-    accountId: transaction.accountId,
-    categoryId: transaction.categoryId,
-    toAccountId: transaction.toAccountId,
-    destAmount: transaction.destAmount,
-    note: transaction.note,
-    tagIds,
-    recurringRuleId: transaction.recurringRuleId,
-    recurrenceDate: transaction.recurrenceDate?.toISOString() ?? null,
-    isCustomized: transaction.isCustomized,
-    createdAt: transaction.createdAt.toISOString(),
-    updatedAt: transaction.updatedAt.toISOString(),
-  };
-}
 
 @Controller()
 export class TransactionsController {

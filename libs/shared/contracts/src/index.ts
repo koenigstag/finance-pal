@@ -1,5 +1,6 @@
 export * from './lib/common/money.schema.js';
 export * from './lib/common/error.schema.js';
+export * from './lib/common/timezone.schema.js';
 export * from './lib/health/health.contract.js';
 export * from './lib/auth/auth.contract.js';
 export * from './lib/authz/ability.js';
@@ -10,4 +11,5 @@ export * from './lib/ledger/accounts.contract.js';
 export * from './lib/ledger/categories.contract.js';
 export * from './lib/ledger/tags.contract.js';
 export * from './lib/ledger/transactions.contract.js';
+export * from './lib/ledger/recurring-rules.contract.js';
 export * from './lib/realtime/realtime-event.js';
