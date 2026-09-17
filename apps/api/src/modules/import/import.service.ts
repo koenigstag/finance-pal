@@ -2,16 +2,7 @@ import { Injectable, UnprocessableEntityException } from '@nestjs/common';
 import { InjectRepository } from '@nestjs/typeorm';
 import { In, Repository } from 'typeorm';
 import { Transactional } from 'typeorm-transactional';
-import {
-  Account,
-  Category,
-  Currency,
-  Group,
-  GroupMember,
-  MemberRole,
-  Transaction,
-  TransactionType,
-} from '@ft/api-database';
+import { Account, AccountType, Category, CategoryType, Currency, Group, GroupMember, MemberRole, Transaction, TransactionType } from '@ft/api-database';
 import { AccountsService } from '../ledger/accounts/accounts.service';
 import type { ParsedBackup } from './one-money-parser';
 
@@ -73,7 +64,9 @@ export class ImportService {
           groupId: group.id,
           name: parsed.name,
           description: parsed.description,
-          type: parsed.type,
+          // The parser speaks the shared string union; the entity wants its own enum, whose
+          // members are those same strings.
+          type: parsed.type as AccountType,
           currencyId: currencyIds.get(parsed.currencyCode),
           isIncludedInBalance: parsed.isIncludedInBalance,
           archived: parsed.archived,
@@ -98,7 +91,7 @@ export class ImportService {
           this.categories.create({
             groupId: group.id,
             name: parsed.name,
-            type: parsed.type,
+            type: parsed.type as CategoryType,
             color: parsed.color,
             sortOrder: parsed.sortOrder,
             archived: parsed.archived,
@@ -143,7 +136,7 @@ export class ImportService {
     for (const parsed of backup.transactions) {
       const accountId = accountIds.get(parsed.accountSourceId);
       const toAccountId = parsed.toAccountSourceId === null ? null : (accountIds.get(parsed.toAccountSourceId) ?? null);
-      if (!accountId || (parsed.type === TransactionType.TRANSFER && !toAccountId)) {
+      if (!accountId || (parsed.type === 'transfer' && !toAccountId)) {
         continue;
       }
       if (parsed.date.getTime() > now) {
@@ -151,7 +144,7 @@ export class ImportService {
       }
       rows.push({
         groupId: group.id,
-        type: parsed.type,
+        type: parsed.type as TransactionType,
         date: parsed.date,
         amount: parsed.amount,
         currencyId: currencyOf.get(parsed.accountSourceId),

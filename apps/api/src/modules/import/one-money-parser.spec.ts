@@ -2,7 +2,6 @@ import { mkdtempSync, rmSync } from 'node:fs';
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
 import { DatabaseSync } from 'node:sqlite';
-import { AccountType, CategoryType, TransactionType } from '@ft/api-database';
 import { OneMoneyFormatError, parseOneMoneyBackup } from './one-money-parser';
 
 const UAH = 10057;
@@ -78,7 +77,7 @@ describe('parseOneMoneyBackup', () => {
 
     expect(accounts.map((account) => account.name)).toEqual(['Ощад', 'Наличные', 'Payoneer', 'Валера']);
     expect(accounts.find((account) => account.name === 'Наличные')).toMatchObject({
-      type: AccountType.REGULAR,
+      type: 'regular',
       currencyCode: 'UAH',
       openingBalance: '3000.00',
       description: 'Расходные',
@@ -87,12 +86,12 @@ describe('parseOneMoneyBackup', () => {
       color: '#26A69A',
     });
     expect(accounts.find((account) => account.name === 'Payoneer')).toMatchObject({
-      type: AccountType.SAVINGS,
+      type: 'savings',
       currencyCode: 'USD',
       openingBalance: '1860.02',
     });
     expect(accounts.find((account) => account.name === 'Валера')).toMatchObject({
-      type: AccountType.DEBT,
+      type: 'debt',
       openingBalance: '0',
       isIncludedInBalance: false,
     });
@@ -104,9 +103,9 @@ describe('parseOneMoneyBackup', () => {
 
     // In the order the app had them, with the one it never placed last.
     expect(categories).toEqual([
-      { sourceId: 111, name: 'Зарплата', type: CategoryType.INCOME, color: null, archived: false, sortOrder: 0 },
-      { sourceId: 110, name: 'Продукты', type: CategoryType.EXPENSE, color: '#FFAB40', archived: false, sortOrder: 1 },
-      { sourceId: 113, name: 'Кафе', type: CategoryType.EXPENSE, color: null, archived: false, sortOrder: 9999 },
+      { sourceId: 111, name: 'Зарплата', type: 'income', color: null, archived: false, sortOrder: 0 },
+      { sourceId: 110, name: 'Продукты', type: 'expense', color: '#FFAB40', archived: false, sortOrder: 1 },
+      { sourceId: 113, name: 'Кафе', type: 'expense', color: null, archived: false, sortOrder: 9999 },
     ]);
   });
 
@@ -114,12 +113,12 @@ describe('parseOneMoneyBackup', () => {
     const { transactions } = parseOneMoneyBackup(sampleBackup());
 
     expect(transactions.map((item) => [item.type, item.amount])).toEqual([
-      [TransactionType.INCOME, '500.00'],
-      [TransactionType.EXPENSE, '120.50'],
+      ['income', '500.00'],
+      ['expense', '120.50'],
       // Labelled an expense by 1Money, but the money went to another account.
-      [TransactionType.TRANSFER, '300.00'],
-      [TransactionType.TRANSFER, '10.00'],
-      [TransactionType.EXPENSE, '7.00'],
+      ['transfer', '300.00'],
+      ['transfer', '10.00'],
+      ['expense', '7.00'],
     ]);
     expect(transactions[2]).toMatchObject({ toAccountSourceId: 102, categorySourceId: null, destAmount: null });
     // Different currencies on each side, so what arrived is kept.

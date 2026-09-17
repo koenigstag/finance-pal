@@ -1,4 +1,4 @@
-import { PlusIcon, ShapesIcon } from 'lucide-react';
+import { ArrowDownIcon, ArrowUpIcon, PlusIcon, ShapesIcon, type LucideIcon } from 'lucide-react';
 import { useMemo, useState } from 'react';
 import { useTranslation } from 'react-i18next';
 import { useNavigate, useSearchParams } from 'react-router';
@@ -19,6 +19,9 @@ type CategoryType = Category['type'];
 
 // Same order as the transaction type picker: income first.
 const TYPE_ORDER = ['income', 'expense'] as const satisfies readonly (typeof CATEGORY_TYPES)[number][];
+
+// The arrows the transaction form uses for the same two things: money in, money out.
+const TYPE_ICONS: Record<CategoryType, LucideIcon> = { income: ArrowUpIcon, expense: ArrowDownIcon };
 
 interface DialogState {
   open: boolean;
@@ -69,11 +72,15 @@ export function CategoriesPage() {
             }
           }}
         >
-          {TYPE_ORDER.map((option) => (
-            <ToggleGroupItem key={option} value={option} className="flex-1">
-              {t(`categories.types.${option}`)}
-            </ToggleGroupItem>
-          ))}
+          {TYPE_ORDER.map((option) => {
+            const Icon = TYPE_ICONS[option];
+            return (
+              <ToggleGroupItem key={option} value={option} className="flex-1">
+                <Icon />
+                {t(`categories.types.${option}`)}
+              </ToggleGroupItem>
+            );
+          })}
         </ToggleGroup>
       </PageHeader>
 

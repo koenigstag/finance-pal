@@ -1,5 +1,11 @@
 import { DatabaseSync } from 'node:sqlite';
-import { AccountType, CategoryType, TransactionType } from '@ft/api-database';
+import type { ACCOUNT_TYPES, CATEGORY_TYPES, TRANSACTION_TYPES } from '@ft/shared-contracts';
+
+// The shared string unions rather than the database's enums: this file reads a file and nothing
+// else, and api-database wants a configured environment the moment it is imported.
+type AccountType = (typeof ACCOUNT_TYPES)[number];
+type CategoryType = (typeof CATEGORY_TYPES)[number];
+type TransactionType = (typeof TRANSACTION_TYPES)[number];
 
 /**
  * Reads a 1Money Android backup (a SQLite file) into plain data, ready to be written as a group.
@@ -38,11 +44,7 @@ const PSEUDO_ACCOUNT_TYPE = 4;
 // Where a category with no recorded position ends up: after every category that has one.
 const UNORDERED = 9999;
 
-const ACCOUNT_TYPES: Record<number, AccountType> = {
-  0: AccountType.REGULAR,
-  1: AccountType.DEBT,
-  2: AccountType.SAVINGS,
-};
+const ACCOUNT_TYPE_BY_CODE: Record<number, AccountType> = { 0: 'regular', 1: 'debt', 2: 'savings' };
 
 export interface ParsedAccount {
   sourceId: number;
@@ -144,7 +146,7 @@ export function parseOneMoneyBackup(filePath: string, currencyOverrides: Record<
         categories.push({
           sourceId: row._id,
           name,
-          type: row._ty === 0 ? CategoryType.INCOME : CategoryType.EXPENSE,
+          type: row._ty === 0 ? 'income' : 'expense',
           color: toHexColor(row._co),
           archived: row._ar === 1,
           // Anything the app never gave a place goes last rather than first.
@@ -162,7 +164,7 @@ export function parseOneMoneyBackup(filePath: string, currencyOverrides: Record<
         sourceId: row._id,
         name,
         description: row._de?.trim() || null,
-        type: ACCOUNT_TYPES[row._ty] ?? AccountType.REGULAR,
+        type: ACCOUNT_TYPE_BY_CODE[row._ty] ?? 'regular',
         currencyCode,
         openingBalance: toAmount(row._a_m_b) ?? '0',
         isIncludedInBalance: row._a_i_i_b === 1,
@@ -188,7 +190,7 @@ export function parseOneMoneyBackup(filePath: string, currencyOverrides: Record<
       }
       const toAccount = row._d_i !== null && accountIds.has(row._d_i) ? row._d_i : null;
       const category = row._d_i !== null && categoryIds.has(row._d_i) ? row._d_i : null;
-      const type = toAccount !== null ? TransactionType.TRANSFER : row._ty === 1 ? TransactionType.INCOME : TransactionType.EXPENSE;
+      const type: TransactionType = toAccount !== null ? 'transfer' : row._ty === 1 ? 'income' : 'expense';
       const destAmount = toAccount !== null ? toAmount(row._d_m) : null;
       transactions.push({
         type,
@@ -199,7 +201,7 @@ export function parseOneMoneyBackup(filePath: string, currencyOverrides: Record<
         destAmount: destAmount && destAmount !== amount ? destAmount : null,
         accountSourceId: row._a_i,
         toAccountSourceId: toAccount,
-        categorySourceId: type === TransactionType.TRANSFER ? null : category,
+        categorySourceId: type === 'transfer' ? null : category,
         note: row._co?.trim() || null,
         scheduled: row._sch === 1,
       });
