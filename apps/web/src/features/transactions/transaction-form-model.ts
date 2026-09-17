@@ -87,9 +87,13 @@ export function transactionFormSchema(accounts: AccountLike[], messages: Transac
 // their content on focus, so typing replaces the zero instead of appending to it.
 const EMPTY_AMOUNT = '0';
 
-export function defaultTransactionFormValues(defaults: { accountId?: string; now?: Date }): TransactionFormValues {
+export function defaultTransactionFormValues(defaults: {
+  accountId?: string;
+  type?: TransactionFormValues['type'];
+  now?: Date;
+}): TransactionFormValues {
   return {
-    type: 'expense',
+    type: defaults.type ?? 'expense',
     amount: EMPTY_AMOUNT,
     accountId: defaults.accountId ?? '',
     toAccountId: '',

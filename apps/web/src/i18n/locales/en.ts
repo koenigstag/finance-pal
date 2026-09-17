@@ -30,6 +30,7 @@ export const en = {
     cancel: 'Cancel',
     back: 'Back',
     delete: 'Delete',
+    edit: 'Edit',
     comingSoon: {
       title: 'Coming soon',
       description: 'This section is being built.',
@@ -54,7 +55,6 @@ export const en = {
     icon: 'Icon',
     includedInBalance: 'Include in total balance',
     includedInBalanceDescription: 'Turn off for accounts you only want to track, like a loan.',
-    excluded: 'not in total',
     favourite: 'Favourite',
     favouriteDescription: 'Preselected when you add a transaction.',
     markFavourite: 'Make favourite',

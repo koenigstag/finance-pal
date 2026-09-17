@@ -38,6 +38,12 @@ describe('formatMoney', () => {
     expect(formatMoney('1234.5', 'USD', 'en-US')).toBe('$1,234.50');
   });
 
+  it('can use the narrow symbol instead of a code', () => {
+    // Intl separates a code from the number with a no-break space.
+    expect(formatMoney('1234.5', 'UAH', 'en-US')).toBe('UAH 1,234.50');
+    expect(formatMoney('1234.5', 'UAH', 'en-US', { currencyDisplay: 'narrowSymbol' })).toBe('₴1,234.50');
+  });
+
   it('keeps the sign of a negative balance', () => {
     expect(formatMoney('-20', 'EUR', 'en-US')).toBe('-€20.00');
   });

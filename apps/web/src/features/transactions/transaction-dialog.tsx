@@ -49,11 +49,13 @@ interface TransactionDialogProps {
   transaction?: Transaction;
   // Preselected account for a new transaction, e.g. the one the list is filtered by.
   defaultAccountId?: string;
+  // Preselected type for a new transaction, e.g. from an account's Income action. Expense otherwise.
+  defaultType?: TransactionFormValues['type'];
   open: boolean;
   onOpenChange: (open: boolean) => void;
 }
 
-export function TransactionDialog({ groupId, transaction, defaultAccountId, open, onOpenChange }: TransactionDialogProps) {
+export function TransactionDialog({ groupId, transaction, defaultAccountId, defaultType, open, onOpenChange }: TransactionDialogProps) {
   const { t } = useTranslation();
   const accounts = useAccounts(groupId);
   const categories = useCategories(groupId);
@@ -86,7 +88,7 @@ export function TransactionDialog({ groupId, transaction, defaultAccountId, open
   const fallbackAccountId = pickDefaultAccountId(accountList, defaultAccountId);
   useEffect(() => {
     if (open) {
-      form.reset(transaction ? transactionToFormValues(transaction) : defaultTransactionFormValues({ accountId: fallbackAccountId }));
+      form.reset(transaction ? transactionToFormValues(transaction) : defaultTransactionFormValues({ accountId: fallbackAccountId, type: defaultType }));
     }
     // Only on opening: re-running when accounts refetch would wipe what's being typed.
     // eslint-disable-next-line react-hooks/exhaustive-deps

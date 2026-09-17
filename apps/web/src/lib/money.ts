@@ -25,11 +25,19 @@ export function isValidAmountInput(input: string): boolean {
 /**
  * Display-only formatting. The Number() conversion never feeds back into stored or summed
  * values, so float rounding can't accumulate — it's one conversion per rendered figure.
+ *
+ * `currencyDisplay: 'narrowSymbol'` prefers the bare sign where Intl has one (₴ rather than "UAH"
+ * in English), for tight spots; currencies without one keep their code.
  */
-export function formatMoney(amount: string, currencyCode: string | undefined, locale: string): string {
+export function formatMoney(
+  amount: string,
+  currencyCode: string | undefined,
+  locale: string,
+  { currencyDisplay = 'symbol' }: { currencyDisplay?: 'symbol' | 'narrowSymbol' } = {},
+): string {
   const value = Number(amount);
   if (!currencyCode) {
     return new Intl.NumberFormat(locale, { minimumFractionDigits: 2, maximumFractionDigits: 2 }).format(value);
   }
-  return new Intl.NumberFormat(locale, { style: 'currency', currency: currencyCode }).format(value);
+  return new Intl.NumberFormat(locale, { style: 'currency', currency: currencyCode, currencyDisplay }).format(value);
 }

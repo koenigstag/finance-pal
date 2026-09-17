@@ -33,6 +33,7 @@ export const ru: Catalog<typeof en> = {
     cancel: 'Отмена',
     back: 'Назад',
     delete: 'Удалить',
+    edit: 'Изменить',
     comingSoon: {
       title: 'Скоро',
       description: 'Этот раздел в разработке.',
@@ -57,7 +58,6 @@ export const ru: Catalog<typeof en> = {
     icon: 'Иконка',
     includedInBalance: 'Учитывать в общем балансе',
     includedInBalanceDescription: 'Отключите для счетов, которые нужно только отслеживать, например кредита.',
-    excluded: 'не в общем балансе',
     favourite: 'Избранный',
     favouriteDescription: 'Выбирается по умолчанию при добавлении операции.',
     markFavourite: 'Сделать избранным',

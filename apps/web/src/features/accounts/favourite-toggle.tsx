@@ -5,26 +5,17 @@ import { cn } from '@/lib/utils';
 
 interface FavouriteToggleProps {
   favourite: boolean;
-  // Absent for callers who can't change it: the star then only shows the state.
-  onToggle?: () => void;
+  onToggle: () => void;
   disabled?: boolean;
   className?: string;
 }
 
-/** A star: filled for the favourite account (preselected for new transactions), outlined otherwise. */
+/**
+ * The account dialog's star: filled for the favourite account (preselected for new transactions),
+ * outlined otherwise.
+ */
 export function FavouriteToggle({ favourite, onToggle, disabled, className }: FavouriteToggleProps) {
   const { t } = useTranslation();
-  const star = (
-    <StarIcon className={cn('transition-colors', favourite ? 'fill-amber-400 text-amber-400' : 'text-muted-foreground')} />
-  );
-
-  if (!onToggle) {
-    return favourite ? (
-      <span role="img" aria-label={t('accounts.favourite')} className={cn('inline-flex size-10 items-center justify-center md:size-8 [&_svg]:size-4', className)}>
-        {star}
-      </span>
-    ) : null;
-  }
 
   return (
     <Button
@@ -38,7 +29,7 @@ export function FavouriteToggle({ favourite, onToggle, disabled, className }: Fa
       onClick={onToggle}
       className={className}
     >
-      {star}
+      <StarIcon className={cn('transition-colors', favourite ? 'fill-amber-400 text-amber-400' : 'text-muted-foreground')} />
     </Button>
   );
 }

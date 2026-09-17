@@ -116,6 +116,8 @@ export function AccountDialog({
               control={form.control}
               name="isFavourite"
               render={({ field }) => (
+                // Unstarring hands the default back to the first account; starring the first account
+                // while it's only the default saves it, so reordering accounts won't move the default.
                 <FavouriteToggle favourite={field.value || implicitFavourite} onToggle={() => field.onChange(!field.value)} />
               )}
             />

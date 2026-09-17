@@ -38,34 +38,6 @@ export function useDeleteAccount(groupId: string) {
   });
 }
 
-/**
- * Stars or unstars an account right away in the list, reverting if the API refuses. Starring
- * unstars the others, as the API does.
- */
-export function useSetFavouriteAccount(groupId: string) {
-  const queryClient = useQueryClient();
-  const key = queryKeys.accounts(groupId);
-
-  return useMutation({
-    mutationFn: ({ accountId, isFavourite }: { accountId: string; isFavourite: boolean }) =>
-      unwrap(api.accounts.update({ params: { groupId, accountId }, body: { isFavourite } }), 200),
-    onMutate: async ({ accountId, isFavourite }) => {
-      await queryClient.cancelQueries({ queryKey: key });
-      const previous = queryClient.getQueryData<Account[]>(key);
-      queryClient.setQueryData<Account[]>(key, (accounts) =>
-        accounts?.map((account) =>
-          account.id === accountId ? { ...account, isFavourite } : isFavourite ? { ...account, isFavourite: false } : account,
-        ),
-      );
-      return { previous };
-    },
-    onError: (_error, _input, context) => {
-      queryClient.setQueryData(key, context?.previous);
-    },
-    onSettled: () => queryClient.invalidateQueries({ queryKey: key }),
-  });
-}
-
 export function useSaveAccount(groupId: string) {
   const queryClient = useQueryClient();
 
