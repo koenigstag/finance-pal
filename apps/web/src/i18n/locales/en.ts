@@ -109,6 +109,7 @@ export const en = {
       savings: 'Savings',
       debt: 'Debts',
       settled: 'Finished',
+      archived: 'Archived',
     },
     empty: {
       title: 'No accounts yet',

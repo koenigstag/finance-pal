@@ -65,14 +65,21 @@ function AccountSection({ id, heading, accounts, onSelect }: AccountSectionProps
       <h2 id={id} className="px-1 text-sm font-medium text-muted-foreground">
         {heading}
       </h2>
-      <ul className="divide-y rounded-xl border">
-        {accounts.map((account) => (
-          <li key={account.id}>
-            <AccountRow account={account} onSelect={onSelect} />
-          </li>
-        ))}
-      </ul>
+      <AccountRows accounts={accounts} onSelect={onSelect} />
     </section>
+  );
+}
+
+/** The rows on their own, for a caller that brings its own heading. */
+export function AccountRows({ accounts, onSelect }: { accounts: Account[]; onSelect: (account: Account) => void }) {
+  return (
+    <ul className="divide-y rounded-xl border">
+      {accounts.map((account) => (
+        <li key={account.id}>
+          <AccountRow account={account} onSelect={onSelect} />
+        </li>
+      ))}
+    </ul>
   );
 }
 

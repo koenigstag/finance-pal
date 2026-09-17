@@ -8,10 +8,14 @@ export type Account = ClientInferResponseBody<typeof accountsContract.get, 200>;
 export type CreateAccountBody = ClientInferRequest<typeof accountsContract.create>['body'];
 export type UpdateAccountBody = ClientInferRequest<typeof accountsContract.update>['body'];
 
-export function useAccounts(groupId: string) {
+/**
+ * The group's accounts. Archived ones are left out unless asked for — they belong in the past, not
+ * in a picker — and are cached apart, so a screen that wants them doesn't push them at the rest.
+ */
+export function useAccounts(groupId: string, includeArchived = false) {
   return useQuery({
-    queryKey: queryKeys.accounts(groupId),
-    queryFn: () => unwrap(api.accounts.list({ params: { groupId }, query: {} }), 200),
+    queryKey: includeArchived ? queryKeys.allAccounts(groupId) : queryKeys.accounts(groupId),
+    queryFn: () => unwrap(api.accounts.list({ params: { groupId }, query: { includeArchived: includeArchived ? 'true' : undefined } }), 200),
   });
 }
 

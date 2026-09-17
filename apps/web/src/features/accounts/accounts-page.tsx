@@ -1,4 +1,4 @@
-import { PlusIcon, WalletIcon } from 'lucide-react';
+import { ChevronDownIcon, PlusIcon, WalletIcon } from 'lucide-react';
 import { useMemo, useState } from 'react';
 import { useTranslation } from 'react-i18next';
 import { useNavigate, useSearchParams } from 'react-router';
@@ -12,7 +12,7 @@ import type { TransactionFormValues } from '@/features/transactions/transaction-
 import { TransactionDialog } from '@/features/transactions/transaction-dialog';
 import { AccountActionsSheet, type AccountAction } from './account-actions-sheet';
 import { AccountDialog } from './account-dialog';
-import { AccountList } from './account-list';
+import { AccountList, AccountRows } from './account-list';
 import { AccountsSummary } from './accounts-summary';
 import { useAccounts, type Account } from './queries';
 import { cn } from '@/lib/utils';
@@ -31,7 +31,8 @@ const TAB_ORDER = ['balance', 'debts', 'total'] as const satisfies readonly Acco
 export function AccountsPage() {
   const { t } = useTranslation();
   const { group, ability } = useGroupScope();
-  const accounts = useAccounts(group.id);
+  // Archived ones too: they're kept out of the tabs and put away in a fold of their own.
+  const accounts = useAccounts(group.id, true);
   const navigate = useNavigate();
   const [params, setParams] = useSearchParams();
   // In the URL, so a reload or the back button returns to the same tab.
@@ -50,9 +51,13 @@ export function AccountsPage() {
   const canAddTransactions = ability.can('create', 'Transaction');
 
   const visible = useMemo(
-    () => (accounts.data ?? []).filter((account) => TAB_TYPES[tab].some((type) => type === account.type)),
+    () =>
+      (accounts.data ?? []).filter(
+        (account) => !account.archived && TAB_TYPES[tab].some((type) => type === account.type),
+      ),
     [accounts.data, tab],
   );
+  const archived = useMemo(() => (accounts.data ?? []).filter((account) => account.archived), [accounts.data]);
 
   // The sheet closes first; each action then opens its own dialog or page.
   const onAction = (action: AccountAction, account: Account) => {
@@ -96,7 +101,7 @@ export function AccountsPage() {
         <Spinner className="mx-auto size-6 text-muted-foreground" />
       ) : accounts.isError ? (
         <QueryError onRetry={() => void accounts.refetch()} />
-      ) : visible.length === 0 ? (
+      ) : visible.length === 0 && !(tab === 'balance' && archived.length > 0) ? (
         <Empty className="border">
           <EmptyHeader>
             <EmptyMedia variant="icon">
@@ -112,7 +117,22 @@ export function AccountsPage() {
         tab === 'total' ? (
           <AccountsSummary accounts={visible} />
         ) : (
-          <AccountList accounts={visible} onSelect={(account) => setSheet({ open: true, accountId: account.id })} />
+          <>
+            <AccountList accounts={visible} onSelect={(account) => setSheet({ open: true, accountId: account.id })} />
+            {/* Closed to begin with: an archived account is there to be looked up, not looked at. */}
+            {tab === 'balance' && archived.length > 0 && (
+              <details className="group flex flex-col gap-1">
+                <summary className="flex cursor-pointer list-none items-center gap-1 px-1 text-sm font-medium text-muted-foreground marker:content-none">
+                  {t('accounts.groups.archived')}
+                  <span className="tabular-nums">({archived.length})</span>
+                  <ChevronDownIcon className="size-4 transition-transform group-open:rotate-180" />
+                </summary>
+                <div className="pt-1">
+                  <AccountRows accounts={archived} onSelect={(account) => setSheet({ open: true, accountId: account.id })} />
+                </div>
+              </details>
+            )}
+          </>
         )
       )}
 

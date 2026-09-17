@@ -111,6 +111,7 @@ export const ru: Catalog<typeof en> = {
       savings: 'Накопления',
       debt: 'Долги',
       settled: 'Завершённые',
+      archived: 'Архив',
     },
     empty: {
       title: 'Счетов пока нет',
