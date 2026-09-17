@@ -61,6 +61,8 @@ export function DeleteGroupDialog({ group, open, onOpenChange, onDeleted }: Dele
           <AlertDialogDescription>
             {t(confirmed ? 'groups.delete.confirmName' : 'groups.delete.description')}
           </AlertDialogDescription>
+          {/* Said again, in red, right where the name is typed: the last chance to stop. */}
+          {confirmed && <p className="text-sm font-medium text-destructive">{t('groups.delete.irreversible')}</p>}
         </AlertDialogHeader>
 
         {confirmed && (

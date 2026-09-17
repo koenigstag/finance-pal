@@ -274,6 +274,7 @@ export const en = {
         'Everything in this group goes with it, for every member: accounts, categories, transactions and recurring rules. This cannot be undone.',
       continue: 'Continue',
       confirmName: 'Type the name of the group to confirm.',
+      irreversible: 'Deleting the group also deletes all of its accounts and transactions, with no way to restore them.',
       nameLabel: 'Type {{name}}',
       submit: 'Delete group',
     },
