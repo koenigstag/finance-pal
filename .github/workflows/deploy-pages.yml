@@ -5,7 +5,7 @@ name: Deploy web to GitHub Pages
 #
 # One-time repository setup:
 # - Settings → Pages → Source: "GitHub Actions".
-# - Settings → Secrets and variables → Actions → Variables: VITE_API_URL, the API's origin
+# - Settings → Environments → github-pages → Variables: VITE_API_URL, the API's origin
 #   (e.g. https://finance-api.tfc-russia.xyz). The API must allow this site's origin in
 #   CORS_ORIGINS.
 
@@ -30,8 +30,17 @@ concurrency:
   cancel-in-progress: false
 
 jobs:
-  build:
+  # One job, not build + deploy: VITE_API_URL is an environment variable of github-pages, and
+  # only a job that runs in that environment can read it — the build is where it's needed.
+  deploy:
     runs-on: ubuntu-latest
+    permissions:
+      contents: read
+      pages: write
+      id-token: write
+    environment:
+      name: github-pages
+      url: ${{ steps.deployment.outputs.page_url }}
     steps:
       - uses: actions/checkout@v7
 
@@ -40,7 +49,7 @@ jobs:
           VITE_API_URL: ${{ vars.VITE_API_URL }}
         run: |
           if [ -z "$VITE_API_URL" ]; then
-            echo "::error::Set the VITE_API_URL repository variable to the API's origin."
+            echo "::error::Set VITE_API_URL on the github-pages environment to the API's origin."
             exit 1
           fi
 
@@ -76,15 +85,5 @@ jobs:
         with:
           path: apps/web/dist
 
-  deploy:
-    needs: build
-    runs-on: ubuntu-latest
-    permissions:
-      pages: write
-      id-token: write
-    environment:
-      name: github-pages
-      url: ${{ steps.deployment.outputs.page_url }}
-    steps:
       - id: deployment
         uses: actions/deploy-pages@v5
