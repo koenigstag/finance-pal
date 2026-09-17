@@ -69,13 +69,17 @@ export function transactionFormSchema(accounts: AccountLike[], messages: Transac
     });
 }
 
+// Amounts start at "0" rather than empty, so the field always shows a number; the inputs select
+// their content on focus, so typing replaces the zero instead of appending to it.
+const EMPTY_AMOUNT = '0';
+
 export function defaultTransactionFormValues(defaults: { accountId?: string; now?: Date }): TransactionFormValues {
   return {
     type: 'expense',
-    amount: '',
+    amount: EMPTY_AMOUNT,
     accountId: defaults.accountId ?? '',
     toAccountId: '',
-    destAmount: '',
+    destAmount: EMPTY_AMOUNT,
     categoryId: '',
     day: todayInput(defaults.now),
     note: '',
@@ -88,7 +92,7 @@ export function transactionToFormValues(transaction: Transaction): TransactionFo
     amount: transaction.amount,
     accountId: transaction.accountId,
     toAccountId: transaction.toAccountId ?? '',
-    destAmount: transaction.destAmount ?? '',
+    destAmount: transaction.destAmount ?? EMPTY_AMOUNT,
     categoryId: transaction.categoryId ?? '',
     day: toDayInput(transaction.date),
     note: transaction.note ?? '',

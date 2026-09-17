@@ -10,7 +10,9 @@ export function parseMoneyInput(input: string): string | null {
     .replace(/\s/g, '')
     .replace(',', '.')
     // "12." is a half-typed "12.50"; accept it as 12.
-    .replace(/\.$/, '');
+    .replace(/\.$/, '')
+    // "012" from typing after a leftover zero; keep a single zero before the point ("0.5").
+    .replace(/^0+(?=\d)/, '');
   return moneySchema.safeParse(normalized).success ? normalized : null;
 }
 

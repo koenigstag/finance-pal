@@ -11,6 +11,9 @@ describe('parseMoneyInput', () => {
     ['1 234', '1234'],
     ['12.', '12'],
     [' 7 ', '7'],
+    ['012', '12'],
+    ['00.5', '0.5'],
+    ['0', '0'],
   ])('accepts %j as %j', (input, expected) => {
     expect(parseMoneyInput(input)).toBe(expected);
   });

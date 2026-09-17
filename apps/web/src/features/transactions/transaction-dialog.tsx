@@ -1,6 +1,6 @@
 import { zodResolver } from '@hookform/resolvers/zod';
 import { RepeatIcon } from 'lucide-react';
-import { useEffect, useMemo, useRef, useState } from 'react';
+import { useEffect, useMemo, useRef, useState, type FocusEvent } from 'react';
 import { Controller, useForm, useWatch } from 'react-hook-form';
 import { useTranslation } from 'react-i18next';
 import { Alert, AlertDescription } from '@/components/ui/alert';
@@ -34,6 +34,9 @@ import {
   type TransactionFormValues,
 } from './transaction-form-model';
 import { TRANSACTION_TYPE_ORDER } from './transaction-types';
+
+// Amount fields start at "0": selecting on focus lets typing replace it rather than append.
+const selectOnFocus = (event: FocusEvent<HTMLInputElement>) => event.currentTarget.select();
 
 // Radix Select can't hold an empty value, so "no category" needs a stand-in.
 const NO_CATEGORY = 'none';
@@ -196,6 +199,7 @@ export function TransactionDialog({ groupId, transaction, defaultAccountId, open
                   inputMode="decimal"
                   autoComplete="off"
                   aria-invalid={!!errors.amount}
+                  onFocus={selectOnFocus}
                   {...form.register('amount')}
                 />
                 <FieldError errors={[errors.amount]} />
@@ -224,6 +228,7 @@ export function TransactionDialog({ groupId, transaction, defaultAccountId, open
                         inputMode="decimal"
                         autoComplete="off"
                         aria-invalid={!!errors.destAmount}
+                        onFocus={selectOnFocus}
                         {...form.register('destAmount')}
                       />
                       <FieldError errors={[errors.destAmount]} />
