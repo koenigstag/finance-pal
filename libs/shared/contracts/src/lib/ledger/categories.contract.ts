@@ -32,7 +32,22 @@ const createCategoryBodySchema = z.object({
   sortOrder: z.number().int().optional(),
 });
 
-const updateCategoryBodySchema = createCategoryBodySchema.partial();
+// The type is fixed once a category exists: its subcategories, transactions and recurring rules
+// were all filed under that type.
+const updateCategoryBodySchema = createCategoryBodySchema.omit({ type: true }).partial();
+
+// What deleting a category takes with it, for the confirmation shown before doing so.
+export const categoryUsageSchema = z.object({
+  // Subcategories, deleted along with it.
+  subcategoryCount: z.number().int(),
+  // Transactions filed under it or its subcategories that already happened; they're kept and
+  // become uncategorized.
+  transactionCount: z.number().int(),
+  // Future-dated ones, mostly occurrences recurring rules scheduled ahead.
+  plannedTransactionCount: z.number().int(),
+  // Recurring rules using it or its subcategories; also kept, without a category.
+  recurringRuleCount: z.number().int(),
+});
 
 const groupPathParams = z.object({ groupId: z.string().uuid() });
 const categoryPathParams = z.object({ groupId: z.string().uuid(), categoryId: z.string().uuid() });
@@ -86,12 +101,20 @@ export const categoriesContract = c.router(
       responses: { 200: categorySchema, 403: errorSchema, 404: errorSchema },
       summary: 'Restore an archived category',
     },
+    usage: {
+      method: 'GET',
+      path: '/groups/:groupId/categories/:categoryId/usage',
+      pathParams: categoryPathParams,
+      responses: { 200: categoryUsageSchema, 404: errorSchema },
+      summary: 'Count what deleting the category would affect: subcategories, transactions, recurring rules',
+    },
     remove: {
       method: 'DELETE',
       path: '/groups/:groupId/categories/:categoryId',
       pathParams: categoryPathParams,
       responses: { 200: categorySchema, 403: errorSchema, 404: errorSchema },
-      summary: 'Soft-delete a category',
+      summary:
+        'Delete a category with its subcategories; transactions and recurring rules that used them become uncategorized',
     },
   },
   { pathPrefix: '/api' },

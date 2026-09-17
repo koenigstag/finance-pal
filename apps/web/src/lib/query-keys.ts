@@ -1,3 +1,5 @@
+import type { QueryClient, QueryKey } from '@tanstack/react-query';
+
 // One place for every cache key, so invalidation after a mutation (or a realtime event) can't
 // miss a query that was keyed slightly differently somewhere else.
 //
@@ -12,5 +14,23 @@ export const queryKeys = {
   accounts: (groupId: string) => ['group', groupId, 'accounts'] as const,
   accountUsage: (groupId: string, accountId: string) => ['group', groupId, 'accounts', accountId, 'usage'] as const,
   categories: (groupId: string) => ['group', groupId, 'categories'] as const,
+  categoryUsage: (groupId: string, categoryId: string) =>
+    ['group', groupId, 'categories', categoryId, 'usage'] as const,
   transactions: (groupId: string) => ['group', groupId, 'transactions'] as const,
 };
+
+function startsWith(key: QueryKey, prefix: QueryKey): boolean {
+  return prefix.every((part, index) => key[index] === part);
+}
+
+/**
+ * Refetches everything cached for a group after a delete that cascades through it, except the
+ * deleted item's own usage query: the confirmation dialog still shows it while closing, and
+ * refetching a deleted item would only 404 and flash an error there.
+ */
+export function invalidateGroupAfterDelete(queryClient: QueryClient, groupId: string, deletedUsageKey: QueryKey) {
+  return queryClient.invalidateQueries({
+    queryKey: queryKeys.group(groupId),
+    predicate: (query) => !startsWith(query.queryKey, deletedUsageKey),
+  });
+}

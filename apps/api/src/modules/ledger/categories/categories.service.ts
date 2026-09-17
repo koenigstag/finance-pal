@@ -1,8 +1,8 @@
 import { BadRequestException, ForbiddenException, Injectable, NotFoundException } from '@nestjs/common';
 import { InjectRepository } from '@nestjs/typeorm';
-import { Repository } from 'typeorm';
+import { In, IsNull, Repository } from 'typeorm';
 import { Transactional } from 'typeorm-transactional';
-import { Category, CategoryType } from '@ft/api-database';
+import { Category, CategoryType, RecurringRule, Transaction } from '@ft/api-database';
 import { CATEGORY_TYPES, type Action, type AppAbility, type Subject } from '@ft/shared-contracts';
 import { AbilityFactory } from '../../_core/authz/ability.factory';
 import { RealtimeEmitterService } from '../../realtime/realtime-emitter.service';
@@ -18,12 +18,22 @@ export interface CreateCategoryInput {
   sortOrder?: number;
 }
 
-export type UpdateCategoryInput = Partial<CreateCategoryInput>;
+// No type: it's fixed after creation (see the update contract).
+export type UpdateCategoryInput = Partial<Omit<CreateCategoryInput, 'type'>>;
+
+export interface CategoryUsage {
+  subcategoryCount: number;
+  transactionCount: number;
+  plannedTransactionCount: number;
+  recurringRuleCount: number;
+}
 
 @Injectable()
 export class CategoriesService {
   constructor(
     @InjectRepository(Category) private readonly categories: Repository<Category>,
+    @InjectRepository(Transaction) private readonly transactions: Repository<Transaction>,
+    @InjectRepository(RecurringRule) private readonly recurringRules: Repository<RecurringRule>,
     private readonly abilities: AbilityFactory,
     private readonly realtime: RealtimeEmitterService,
   ) {}
@@ -45,7 +55,7 @@ export class CategoriesService {
   async create(userId: string, groupId: string, input: CreateCategoryInput): Promise<Category> {
     await this.authorize(userId, groupId, 'create', 'Category');
     if (input.parentId) {
-      await this.findOrFail(groupId, input.parentId);
+      await this.assertValidParent(groupId, input.parentId, input.type);
     }
     const category = this.categories.create({
       ...input,
@@ -62,20 +72,20 @@ export class CategoriesService {
   @Transactional()
   async update(userId: string, groupId: string, categoryId: string, patch: UpdateCategoryInput): Promise<Category> {
     await this.authorize(userId, groupId, 'update', 'Category');
-    await this.findOrFail(groupId, categoryId);
+    const category = await this.findOrFail(groupId, categoryId);
 
-    if (patch.parentId !== undefined && patch.parentId !== null) {
+    if (patch.parentId !== undefined && patch.parentId !== null && patch.parentId !== category.parentId) {
       if (patch.parentId === categoryId) {
         throw new BadRequestException('A category cannot be its own parent');
       }
-      await this.findOrFail(groupId, patch.parentId);
-      await this.assertNoCycle(groupId, categoryId, patch.parentId);
+      await this.assertValidParent(groupId, patch.parentId, category.type);
+      // Moving a category that has subcategories under another would make a third level.
+      if (await this.categories.exists({ where: { groupId, parentId: categoryId } })) {
+        throw new BadRequestException('A category with subcategories cannot become a subcategory');
+      }
     }
 
-    await this.categories.update(
-      { id: categoryId, groupId },
-      { ...patch, type: patch.type as CategoryType | undefined },
-    );
+    await this.categories.update({ id: categoryId, groupId }, patch);
     const updated = await this.findOrFail(groupId, categoryId);
     this.realtime.emitToGroup(groupId, { resourceType: 'Category', resourceId: categoryId, action: 'updated', groupId });
     return updated;
@@ -101,27 +111,64 @@ export class CategoriesService {
     return category;
   }
 
+  async usage(userId: string, groupId: string, categoryId: string): Promise<CategoryUsage> {
+    await this.authorize(userId, groupId, 'read', 'Category');
+    await this.findOrFail(groupId, categoryId);
+    const subcategoryIds = await this.subcategoryIds(groupId, categoryId);
+    const ids = [categoryId, ...subcategoryIds];
+
+    // One after another: the request's RLS transaction holds a single connection.
+    const now = new Date();
+    const transactionCount = await this.transactionsIn(groupId, ids).andWhere('date <= :now', { now }).getCount();
+    const plannedTransactionCount = await this.transactionsIn(groupId, ids).andWhere('date > :now', { now }).getCount();
+    const recurringRuleCount = await this.recurringRules.count({ where: { groupId, categoryId: In(ids) } });
+    return { subcategoryCount: subcategoryIds.length, transactionCount, plannedTransactionCount, recurringRuleCount };
+  }
+
+  /**
+   * Deletes the category and its subcategories. What was filed under them keeps its money and
+   * history: transactions and recurring rules only lose the category. Leaving them pointing at a
+   * deleted row would break them instead — the transaction validator rejects a deleted category,
+   * so they couldn't even be edited any more.
+   */
   @Transactional()
   async remove(userId: string, groupId: string, categoryId: string): Promise<Category> {
     await this.authorize(userId, groupId, 'delete', 'Category');
     const category = await this.findOrFail(groupId, categoryId);
-    await this.categories.softDelete({ id: categoryId, groupId });
+    const ids = [categoryId, ...(await this.subcategoryIds(groupId, categoryId))];
+
+    // Plain column updates: a category isn't part of an account balance, and an occurrence whose
+    // rule loses the same category stays in step with it, so nothing here counts as customizing.
+    await this.transactions.update({ groupId, categoryId: In(ids), deletedAt: IsNull() }, { categoryId: null });
+    await this.recurringRules.update({ groupId, categoryId: In(ids) }, { categoryId: null });
+    await this.categories.softDelete({ groupId, id: In(ids) });
     this.realtime.emitToGroup(groupId, { resourceType: 'Category', resourceId: categoryId, action: 'deleted', groupId });
     return category;
   }
 
-  // Walks the proposed parent's ancestor chain up to the root, rejecting if it passes through
-  // the category being moved — that would turn the tree into a cycle. Trees are shallow and
-  // scoped to one group, so this is cheap even without a depth cap.
-  private async assertNoCycle(groupId: string, categoryId: string, proposedParentId: string): Promise<void> {
-    let currentId: string | null = proposedParentId;
-    while (currentId) {
-      if (currentId === categoryId) {
-        throw new BadRequestException('This would make the category its own ancestor');
-      }
-      const current: Category | null = await this.categories.findOneBy({ id: currentId, groupId });
-      currentId = current?.parentId ?? null;
+  // Categories are two levels deep: a parent must be a top-level category of the same type. That
+  // also rules out cycles — together with update() refusing to nest a category that has
+  // subcategories of its own — without walking ancestor chains.
+  private async assertValidParent(groupId: string, parentId: string, type: CategoryType | `${CategoryType}`): Promise<void> {
+    const parent = await this.findOrFail(groupId, parentId);
+    if (parent.type !== type) {
+      throw new BadRequestException('A subcategory must have the same type as its parent');
     }
+    if (parent.parentId !== null) {
+      throw new BadRequestException('A subcategory cannot have subcategories of its own');
+    }
+  }
+
+  private async subcategoryIds(groupId: string, categoryId: string): Promise<string[]> {
+    const children = await this.categories.find({ select: { id: true }, where: { groupId, parentId: categoryId } });
+    return children.map((child) => child.id);
+  }
+
+  private transactionsIn(groupId: string, categoryIds: string[]) {
+    return this.transactions
+      .createQueryBuilder('transaction')
+      .where('transaction.group_id = :groupId', { groupId })
+      .andWhere('transaction.category_id IN (:...categoryIds)', { categoryIds });
   }
 
   private async findOrFail(groupId: string, categoryId: string): Promise<Category> {

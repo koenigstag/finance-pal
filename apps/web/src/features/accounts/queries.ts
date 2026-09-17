@@ -2,7 +2,7 @@ import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
 import type { ClientInferRequest, ClientInferResponseBody } from '@ts-rest/core';
 import type { accountsContract } from '@ft/shared-contracts';
 import { api, unwrap } from '@/lib/api/client';
-import { queryKeys } from '@/lib/query-keys';
+import { invalidateGroupAfterDelete, queryKeys } from '@/lib/query-keys';
 
 export type Account = ClientInferResponseBody<typeof accountsContract.get, 200>;
 export type CreateAccountBody = ClientInferRequest<typeof accountsContract.create>['body'];
@@ -32,16 +32,9 @@ export function useDeleteAccount(groupId: string) {
   return useMutation({
     mutationFn: (accountId: string) => unwrap(api.accounts.remove({ params: { groupId, accountId } }), 200),
     // Its transactions and recurring rules went with it, and other accounts' balances changed
-    // with the transfers: everything cached for the group is suspect. Except the deleted account's
-    // own usage, which the still-open confirmation shows: refetching it would only 404 and flash
-    // an error before the dialog closes.
-    onSuccess: (_, accountId) => {
-      const usageKey = queryKeys.accountUsage(groupId, accountId);
-      return queryClient.invalidateQueries({
-        queryKey: queryKeys.group(groupId),
-        predicate: (query) => usageKey.some((part, index) => query.queryKey[index] !== part),
-      });
-    },
+    // with the transfers: everything cached for the group is suspect.
+    onSuccess: (_, accountId) =>
+      invalidateGroupAfterDelete(queryClient, groupId, queryKeys.accountUsage(groupId, accountId)),
   });
 }
 
