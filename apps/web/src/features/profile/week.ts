@@ -1,13 +1,12 @@
+import { capitalizeFirst } from '@/lib/text';
+
 // startDayOfWeek follows Date.getDay() and date-fns' weekStartsOn: 0 = Sunday … 6 = Saturday.
 
 /** Localized weekday names indexed by startDayOfWeek, capitalized for use as option labels. */
 export function weekdayNames(locale: string): string[] {
   const format = new Intl.DateTimeFormat(locale, { weekday: 'long', timeZone: 'UTC' });
   // 2024-01-07 was a Sunday.
-  return Array.from({ length: 7 }, (_, day) => {
-    const name = format.format(Date.UTC(2024, 0, 7 + day));
-    return name.charAt(0).toLocaleUpperCase(locale) + name.slice(1);
-  });
+  return Array.from({ length: 7 }, (_, day) => capitalizeFirst(format.format(Date.UTC(2024, 0, 7 + day)), locale));
 }
 
 interface WeekInfo {

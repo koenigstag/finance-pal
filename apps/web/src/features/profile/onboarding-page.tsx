@@ -5,7 +5,8 @@ import { QueryError } from '@/components/query-error';
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card';
 import { detectLanguage, isSupportedLanguage } from '@/i18n';
 import { ProfileForm, type ProfileFormValues } from './profile-form';
-import { useCurrencies, useOnboardingStatus, useProfile, useUpdateProfile } from './queries';
+import { useCurrencies } from '@/features/currencies/queries';
+import { useOnboardingStatus, useProfile, useUpdateProfile } from './queries';
 import { detectStartDayOfWeek } from './week';
 
 export function OnboardingPage() {

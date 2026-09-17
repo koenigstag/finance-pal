@@ -9,7 +9,8 @@ import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/com
 import { detectLanguage, isSupportedLanguage } from '@/i18n';
 import { readLastGroupId } from '@/features/groups/last-group';
 import { ProfileForm } from './profile-form';
-import { useCurrencies, useProfile, useUpdateProfile } from './queries';
+import { useCurrencies } from '@/features/currencies/queries';
+import { useProfile, useUpdateProfile } from './queries';
 
 export function SettingsPage() {
   const { t } = useTranslation();

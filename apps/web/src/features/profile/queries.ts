@@ -40,12 +40,3 @@ export function useUpdateProfile() {
     },
   });
 }
-
-export function useCurrencies() {
-  return useQuery({
-    queryKey: queryKeys.currencies,
-    queryFn: () => unwrap(api.currencies.list(), 200),
-    // Reference data that only changes with a migration.
-    staleTime: Infinity,
-  });
-}

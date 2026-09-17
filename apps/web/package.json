@@ -18,6 +18,7 @@
     "@ts-rest/core": "3.52.1",
     "class-variance-authority": "^0.7.1",
     "cn": "^0.3.0",
+    "date-fns": "^4.4.0",
     "i18next": "^26.4.2",
     "lucide-react": "^1.46.0",
     "radix-ui": "^1.6.7",

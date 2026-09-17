@@ -1,4 +1,5 @@
 import { createBrowserRouter } from 'react-router';
+import { AccountsPage } from '@/features/accounts/accounts-page';
 import { AuthPage } from '@/features/auth/auth-page';
 import { RequireSession } from '@/features/auth/require-session';
 import { CreateGroupPage } from '@/features/groups/create-group-page';
@@ -8,6 +9,7 @@ import { GroupHome } from '@/features/home/group-home';
 import { OnboardingPage } from '@/features/profile/onboarding-page';
 import { RequireOnboarded } from '@/features/profile/require-onboarded';
 import { SettingsPage } from '@/features/profile/settings-page';
+import { TransactionsPage } from '@/features/transactions/transactions-page';
 
 export const router = createBrowserRouter([
   { path: '/login', element: <AuthPage mode="login" /> },
@@ -26,7 +28,11 @@ export const router = createBrowserRouter([
           {
             path: '/g/:groupId',
             element: <GroupLayout />,
-            children: [{ index: true, element: <GroupHome /> }],
+            children: [
+              { index: true, element: <GroupHome /> },
+              { path: 'accounts', element: <AccountsPage /> },
+              { path: 'transactions', element: <TransactionsPage /> },
+            ],
           },
         ],
       },
