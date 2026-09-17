@@ -75,17 +75,24 @@ export class OnboardingService {
    * onboarding's.
    */
   @Transactional()
-  async seedGroup(groupId: string, userId: string, language: string = DEFAULT_VALUES.language): Promise<SeedResult> {
+  async seedGroup(groupId: string, userId: string, requestedLanguage?: string): Promise<SeedResult> {
     const alreadySeeded = await this.accounts.exists({ where: { groupId } });
     if (alreadySeeded) {
       throw new ConflictException('Group already has accounts — seed only applies to a fresh group');
     }
 
+    // The starter accounts follow the caller's own profile: someone who picked EUR during
+    // onboarding shouldn't find their first accounts in USD. Defaults only cover a caller who
+    // seeds before creating a profile.
+    const profile = await this.profiles.findOneBy({ id: userId });
+    const currencyId = profile?.mainCurrencyId ?? DEFAULT_VALUES.currencyId;
+    const language = requestedLanguage ?? profile?.language ?? DEFAULT_VALUES.language;
+
     const accountRows = ACCOUNT_TEMPLATES.filter((t) => t.lang === language).map((t) =>
       this.accounts.create({
         groupId,
         createdBy: userId,
-        currencyId: DEFAULT_VALUES.currencyId,
+        currencyId,
         type: t.type,
         name: t.name,
         icon: t.icon,

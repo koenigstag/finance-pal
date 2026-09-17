@@ -1,5 +1,6 @@
 import { initContract } from '@ts-rest/core';
 import { z } from 'zod';
+import { booleanQuerySchema } from '../common/boolean-query.schema.js';
 import { moneySchema, signedMoneySchema } from '../common/money.schema.js';
 import { errorSchema } from '../common/error.schema.js';
 
@@ -64,7 +65,7 @@ export const accountsContract = c.router(
       method: 'GET',
       path: '/groups/:groupId/accounts',
       pathParams: groupPathParams,
-      query: z.object({ includeArchived: z.coerce.boolean().optional() }),
+      query: z.object({ includeArchived: booleanQuerySchema.optional() }),
       responses: { 200: z.array(accountSchema), 404: errorSchema },
       summary: 'List accounts in a group (archived hidden by default)',
     },

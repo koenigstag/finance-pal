@@ -1,4 +1,5 @@
 export * from './lib/common/money.schema.js';
+export * from './lib/common/boolean-query.schema.js';
 export * from './lib/common/error.schema.js';
 export * from './lib/common/timezone.schema.js';
 export * from './lib/health/health.contract.js';

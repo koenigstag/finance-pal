@@ -1,5 +1,6 @@
 import { initContract } from '@ts-rest/core';
 import { z } from 'zod';
+import { booleanQuerySchema } from '../common/boolean-query.schema.js';
 import { moneySchema } from '../common/money.schema.js';
 import { errorSchema } from '../common/error.schema.js';
 import { timezoneSchema } from '../common/timezone.schema.js';
@@ -63,7 +64,7 @@ export const recurringRulesContract = c.router(
       method: 'GET',
       path: '/groups/:groupId/recurring-rules',
       pathParams: groupPathParams,
-      query: z.object({ includeInactive: z.coerce.boolean().optional() }),
+      query: z.object({ includeInactive: booleanQuerySchema.optional() }),
       responses: { 200: z.array(recurringRuleSchema), 404: errorSchema },
       summary: 'List recurring rules in a group (paused ones hidden by default)',
     },
