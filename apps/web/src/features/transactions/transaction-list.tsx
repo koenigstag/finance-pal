@@ -4,6 +4,7 @@ import { useMemo } from 'react';
 import { useTranslation } from 'react-i18next';
 import { Badge } from '@/components/ui/badge';
 import type { Account } from '@/features/accounts/queries';
+import { CategoryIcon } from '@/features/categories/category-icon';
 import type { Category } from '@/features/categories/queries';
 import { useCurrencyCodes } from '@/features/currencies/queries';
 import { formatMoney } from '@/lib/money';
@@ -70,9 +71,8 @@ function TransactionRow({ transaction, planned, accountsById, categoriesById, on
   const toAccount = transaction.toAccountId ? accountsById.get(transaction.toAccountId) : undefined;
   const isTransfer = transaction.type === 'transfer';
 
-  const title = isTransfer
-    ? t('transactions.types.transfer')
-    : (transaction.categoryId && categoriesById.get(transaction.categoryId)?.name) || t('transactions.noCategory');
+  const category = transaction.categoryId ? categoriesById.get(transaction.categoryId) : undefined;
+  const title = isTransfer ? t('transactions.types.transfer') : (category?.name ?? t('transactions.noCategory'));
   const sign = transaction.type === 'expense' ? '−' : transaction.type === 'income' ? '+' : '';
   const amount = formatMoney(transaction.amount, currencyCodes.get(transaction.currencyId), i18n.language);
   const destAmount =
@@ -82,6 +82,12 @@ function TransactionRow({ transaction, planned, accountsById, categoriesById, on
 
   const content = (
     <>
+      <CategoryIcon
+        icon={category?.icon}
+        color={category?.color}
+        placeholder={isTransfer ? 'transfer' : category ? undefined : 'none'}
+        className="mt-0.5"
+      />
       <div className="min-w-0 flex-1">
         <p className="flex items-center gap-1.5 truncate font-medium">
           {title}

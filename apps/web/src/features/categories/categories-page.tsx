@@ -12,6 +12,7 @@ import { ToggleGroup, ToggleGroupItem } from '@/components/ui/toggle-group';
 import { useGroupScope } from '@/features/groups/group-context';
 import { cn } from '@/lib/utils';
 import { CategoryDialog } from './category-dialog';
+import { CategoryIcon } from './category-icon';
 import { useCategories, type Category } from './queries';
 
 type CategoryType = Category['type'];
@@ -137,6 +138,7 @@ function CategoryRow({ category, nested = false, detail, onSelect, onAddSubcateg
   const { t } = useTranslation();
   const content = (
     <>
+      <CategoryIcon icon={category.icon} color={category.color} size={nested ? 'sm' : 'md'} />
       <div className="min-w-0 flex-1">
         <p className={cn('truncate', nested ? 'text-sm' : 'font-medium')}>{category.name}</p>
         {detail && <p className="text-sm text-muted-foreground">{detail}</p>}
@@ -144,7 +146,8 @@ function CategoryRow({ category, nested = false, detail, onSelect, onAddSubcateg
       {onSelect && <ChevronRightIcon className="size-4 shrink-0 text-muted-foreground" />}
     </>
   );
-  const rowClass = cn('flex min-h-12 flex-1 items-center gap-3 px-4 py-2 text-left', nested && 'pl-10');
+  // Subcategories line their smaller icon up under the parent's name.
+  const rowClass = cn('flex min-h-12 flex-1 items-center gap-3 px-4 py-2 text-left', nested && 'pl-[3.75rem]');
 
   return (
     <div className="flex items-center pr-2">

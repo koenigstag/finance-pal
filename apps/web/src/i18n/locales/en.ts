@@ -90,6 +90,8 @@ export const en = {
     edit: 'Edit category',
     name: 'Name',
     parent: 'Parent category',
+    color: 'Color',
+    icon: 'Icon',
     topLevel: 'None (top level)',
     hasSubcategories: 'It has subcategories, so it stays at the top level.',
     addSubcategory: 'Add a subcategory to {{name}}',

@@ -12,6 +12,7 @@ import { Input } from '@/components/ui/input';
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select';
 import { Spinner } from '@/components/ui/spinner';
 import { useAccounts } from '@/features/accounts/queries';
+import { CategoryIcon } from '@/features/categories/category-icon';
 import { categoryOptions, useCategories } from '@/features/categories/queries';
 import { useGroupScope } from '@/features/groups/group-context';
 import { monthRange, parseMonthParam, shiftMonth, toMonthParam } from '@/lib/dates';
@@ -192,7 +193,10 @@ export function TransactionsPage() {
             <SelectItem value={ALL}>{t('transactions.filters.allCategories')}</SelectItem>
             {categoryFilterOptions.map(({ category, depth }) => (
               <SelectItem key={category.id} value={category.id}>
-                <span style={{ paddingInlineStart: `${depth}rem` }}>{category.name}</span>
+                <span className="flex items-center gap-2" style={{ paddingInlineStart: `${depth}rem` }}>
+                  <CategoryIcon icon={category.icon} color={category.color} size="sm" />
+                  {category.name}
+                </span>
               </SelectItem>
             ))}
           </SelectContent>

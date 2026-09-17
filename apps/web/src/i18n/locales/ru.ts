@@ -92,6 +92,8 @@ export const ru: Catalog<typeof en> = {
     edit: 'Изменить категорию',
     name: 'Название',
     parent: 'Родительская категория',
+    color: 'Цвет',
+    icon: 'Иконка',
     topLevel: 'Нет (верхний уровень)',
     hasSubcategories: 'У неё есть подкатегории, поэтому она остаётся на верхнем уровне.',
     addSubcategory: 'Добавить подкатегорию в {{name}}',

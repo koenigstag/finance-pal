@@ -27,8 +27,14 @@ const createCategoryBodySchema = z.object({
   parentId: z.string().uuid().nullable().optional(),
   type: categoryTypeSchema,
   name: z.string().min(1).max(120),
-  icon: z.string().optional(),
-  color: z.string().optional(),
+  // A name from the client's icon set (e.g. "shopping-cart"); null clears it.
+  icon: z.string().min(1).max(40).nullable().optional(),
+  // #RRGGBB; null clears it.
+  color: z
+    .string()
+    .regex(/^#[0-9a-fA-F]{6}$/, 'color must be #RRGGBB')
+    .nullable()
+    .optional(),
   sortOrder: z.number().int().optional(),
 });
 

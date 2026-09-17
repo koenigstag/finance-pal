@@ -13,8 +13,8 @@ export interface CreateCategoryInput {
   parentId?: string | null;
   type: (typeof CATEGORY_TYPES)[number];
   name: string;
-  icon?: string;
-  color?: string;
+  icon?: string | null;
+  color?: string | null;
   sortOrder?: number;
 }
 

@@ -22,6 +22,7 @@ import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@
 import { Textarea } from '@/components/ui/textarea';
 import { ToggleGroup, ToggleGroupItem } from '@/components/ui/toggle-group';
 import { useAccounts } from '@/features/accounts/queries';
+import { CategoryIcon } from '@/features/categories/category-icon';
 import { categoryOptions, useCategories } from '@/features/categories/queries';
 import { useCurrencyCodes } from '@/features/currencies/queries';
 import { useDeleteTransaction, useSaveTransaction, type Transaction } from './queries';
@@ -250,10 +251,16 @@ export function TransactionDialog({ groupId, transaction, defaultAccountId, open
                           <SelectValue />
                         </SelectTrigger>
                         <SelectContent>
-                          <SelectItem value={NO_CATEGORY}>{t('transactions.noCategory')}</SelectItem>
+                          <SelectItem value={NO_CATEGORY}>
+                            <CategoryIcon placeholder="none" size="sm" />
+                            {t('transactions.noCategory')}
+                          </SelectItem>
                           {options.map(({ category, depth }) => (
                             <SelectItem key={category.id} value={category.id}>
-                              <span style={{ paddingInlineStart: `${depth}rem` }}>{category.name}</span>
+                              <span className="flex items-center gap-2" style={{ paddingInlineStart: `${depth}rem` }}>
+                                <CategoryIcon icon={category.icon} color={category.color} size="sm" />
+                                {category.name}
+                              </span>
                             </SelectItem>
                           ))}
                         </SelectContent>
