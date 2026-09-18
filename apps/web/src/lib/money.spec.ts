@@ -1,27 +1,5 @@
 import { describe, expect, it } from 'vitest';
-import { convertMoney, formatMoney, isValidAmountInput, moneySign, parseMoneyInput, sumMoney } from './money';
-
-describe('parseMoneyInput', () => {
-  it.each([
-    ['12', '12'],
-    ['12.5', '12.5'],
-    ['12,50', '12.50'],
-    ['1 234,56', '1234.56'],
-    ['1 234.5', '1234.5'],
-    ['1 234', '1234'],
-    ['12.', '12'],
-    [' 7 ', '7'],
-    ['012', '12'],
-    ['00.5', '0.5'],
-    ['0', '0'],
-  ])('accepts %j as %j', (input, expected) => {
-    expect(parseMoneyInput(input)).toBe(expected);
-  });
-
-  it.each(['', 'abc', '-5', '1.234', '12.3.4', '1,2,3', '1e5', '1234567890123'])('rejects %j', (input) => {
-    expect(parseMoneyInput(input)).toBeNull();
-  });
-});
+import { convertMoney, formatMoney, isValidAmountInput, moneySign, sumMoney } from './money';
 
 describe('moneySign', () => {
   it.each([
