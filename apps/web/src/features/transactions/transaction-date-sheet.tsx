@@ -96,7 +96,16 @@ export function TransactionDateSheet({ groupId, transaction, rule, accounts, ope
       title={t(series ? 'transactions.nextDate' : 'transactions.date')}
       value={value}
       canRepeat={!!series || canStartSeries}
-      repeatBlocked={!series && acrossCurrencies ? t('transactions.errors.repeatCurrency') : undefined}
+      repeatBlocked={
+        series
+          ? undefined
+          : acrossCurrencies
+            ? t('transactions.errors.repeatCurrency')
+            : // A series has a fixed amount, so one worked out as a percentage stays a one-off.
+              transaction?.percentage
+              ? t('transactions.errors.repeatPercentage')
+              : undefined
+      }
       currentRepeat={series ? repeatOf(series) : null}
       // A series moves on from today: its next date can't be in the past.
       minDay={series ? todayInput() : undefined}

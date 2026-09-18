@@ -1,5 +1,5 @@
 import { zodResolver } from '@hookform/resolvers/zod';
-import { CalendarDaysIcon, ChevronRightIcon, RepeatIcon } from 'lucide-react';
+import { BanknoteIcon, CalendarDaysIcon, ChevronRightIcon, RepeatIcon } from 'lucide-react';
 import { useEffect, useMemo, useRef, useState, type ReactNode } from 'react';
 import { Controller, useForm, useWatch } from 'react-hook-form';
 import { useTranslation } from 'react-i18next';
@@ -131,6 +131,7 @@ export function TransactionDialog({
           pastNextDate: t('transactions.errors.pastNextDate'),
           percentage: t('validation.percentage'),
           percentageAmount: t('transactions.errors.percentageAmount'),
+          repeatPercentage: t('transactions.errors.repeatPercentage'),
         },
         { seriesNextDay },
       ),
@@ -488,6 +489,8 @@ export function TransactionDialog({
         title={t(rule ? 'transactions.nextDate' : 'transactions.date')}
         value={{ day, repeat }}
         canRepeat={canRepeat}
+        // A series has a fixed amount, so one worked out as a percentage stays a one-off.
+        repeatBlocked={percentage.trim() ? t('transactions.errors.repeatPercentage') : undefined}
         currentRepeat={rule ? repeatOf(rule) : null}
         // A series moves on from today: its next date can't be in the past.
         minDay={rule ? todayInput() : undefined}
@@ -507,6 +510,8 @@ export function TransactionDialog({
         sides={{ type, accountId, toAccountId }}
         accounts={accountList}
         editing={transaction}
+        // A series has a fixed amount: nothing would work each of its transactions out afresh.
+        percentageAllowed={!repeat}
         values={{ amount, destAmount, percentage, percentageBase }}
         onDone={(values) => {
           for (const name of ['amount', 'destAmount', 'percentage', 'percentageBase'] as const) {
@@ -542,7 +547,7 @@ export function TransactionDialog({
   );
 }
 
-/** The transaction's amount, tappable to change it in the Amount sheet. */
+/** How much, tappable to change it in the Amount sheet: laid out like the date's card below it. */
 function AmountCard({
   caption,
   amount,
@@ -567,17 +572,23 @@ function AmountCard({
       // assistive technology reads.
       data-invalid={invalid || undefined}
       className={cn(
-        'flex w-full min-w-0 flex-col items-start gap-0.5 rounded-xl border p-3 text-left transition-colors hover:bg-muted/60 focus-visible:ring-3 focus-visible:ring-ring/50 focus-visible:outline-none',
+        'flex w-full min-w-0 items-center gap-3 rounded-xl border p-3 text-left transition-colors hover:bg-muted/60 focus-visible:ring-3 focus-visible:ring-ring/50 focus-visible:outline-none',
         invalid && 'border-destructive',
       )}
     >
-      <span className="text-xs text-muted-foreground">{caption}</span>
-      <span className={cn('text-lg font-semibold tabular-nums', tone)}>{amount}</span>
-      {lines.map((line) => (
-        <span key={line} className="text-xs text-muted-foreground">
-          {line}
-        </span>
-      ))}
+      <span className="flex size-8 shrink-0 items-center justify-center rounded-full bg-muted">
+        <BanknoteIcon className="size-4" />
+      </span>
+      <span className="flex min-w-0 flex-1 flex-col gap-0.5">
+        <span className="text-xs text-muted-foreground">{caption}</span>
+        <span className={cn('truncate text-base font-semibold tabular-nums', tone)}>{amount}</span>
+        {lines.map((line) => (
+          <span key={line} className="truncate text-sm text-muted-foreground">
+            {line}
+          </span>
+        ))}
+      </span>
+      <ChevronRightIcon className="size-4 shrink-0 text-muted-foreground" />
     </button>
   );
 }

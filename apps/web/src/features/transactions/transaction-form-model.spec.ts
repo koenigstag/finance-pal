@@ -31,6 +31,7 @@ const messages = {
   pastNextDate: 'past',
   percentage: 'percentage',
   percentageAmount: 'percentageAmount',
+  repeatPercentage: 'repeatPercentage',
 };
 
 const values = (overrides: Partial<TransactionFormValues>): TransactionFormValues => ({
@@ -91,6 +92,11 @@ describe('transactionFormSchema', () => {
     expect(issues(values({ percentage: '3', amount: '0.00' }))).toEqual({ amount: 'percentageAmount' });
     // Until the percentage itself is right, that's the one thing to fix.
     expect(issues(values({ percentage: 'x', amount: '0' }))).toEqual({ percentage: 'percentage' });
+  });
+
+  it("doesn't let an amount worked out as a percentage repeat", () => {
+    expect(issues(values({ percentage: '5', repeat: 'month:1' }))).toEqual({ repeat: 'repeatPercentage' });
+    expect(issues(values({ percentage: '5' }))).toEqual({});
   });
 
   it('takes a base amount above zero beside a percentage, and ignores one without', () => {

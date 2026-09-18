@@ -32,6 +32,8 @@ interface AmountSheetProps {
   accounts: Account[];
   // The saved transaction being edited, if any: its own share stays out of that balance.
   editing?: Transaction;
+  // False for a repeating transaction, whose amount is fixed: the percentage isn't offered.
+  percentageAllowed?: boolean;
   // The figures the sheet starts from. Read once, when it mounts: the form gives it a new key
   // for each opening.
   values: AmountValues;
@@ -44,7 +46,16 @@ interface AmountSheetProps {
  * between currencies has two — and, under Advanced, a percentage to work it out from, of an
  * optional base amount or else of the account's balance.
  */
-export function AmountSheet({ open, onOpenChange, sides, accounts, editing, values, onDone }: AmountSheetProps) {
+export function AmountSheet({
+  open,
+  onOpenChange,
+  sides,
+  accounts,
+  editing,
+  percentageAllowed = true,
+  values,
+  onDone,
+}: AmountSheetProps) {
   const { t, i18n } = useTranslation();
   const currencyCodes = useCurrencyCodes();
   // Open when it holds what the amount comes from.
@@ -145,77 +156,81 @@ export function AmountSheet({ open, onOpenChange, sides, accounts, editing, valu
               amountInput('amount', withCurrency(t('transactions.amount'), sides.accountId))
             )}
 
-            <Accordion
-              type="single"
-              collapsible
-              value={advancedOpen ? 'advanced' : ''}
-              onValueChange={(value) => setAdvancedOpen(value === 'advanced')}
-            >
-              <AccordionItem value="advanced">
-                <AccordionTrigger className="py-1">
-                  {/* Taking the free space, it keeps what follows next to the chevron. */}
-                  <span className="flex-1">{t('transactions.advanced')}</span>
-                  {/* Folded away, the section still says where the amount comes from. */}
-                  {!advancedOpen && validPercentage && (
-                    <span className="mr-2 font-normal text-muted-foreground">
-                      {formatPercentage(validPercentage, i18n.language)}
-                    </span>
-                  )}
-                </AccordionTrigger>
-                {/* Unlike the stock one, its height follows what's in it, so an error showing up
-                    under a field isn't clipped, and it spaces fields the way the form does rather
-                    than paragraphs of prose. */}
-                <AccordionContent className="h-auto pt-2 pb-0 [&_p:not(:last-child)]:mb-0">
-                  <FieldGroup className="gap-4">
-                    <Field data-invalid={!!errors.percentage}>
-                      <FieldLabel htmlFor="amount-sheet-percentage">{t('transactions.percentage')}</FieldLabel>
-                      <div className="relative">
+            {percentageAllowed ? (
+              <Accordion
+                type="single"
+                collapsible
+                value={advancedOpen ? 'advanced' : ''}
+                onValueChange={(value) => setAdvancedOpen(value === 'advanced')}
+              >
+                <AccordionItem value="advanced">
+                  <AccordionTrigger className="py-1">
+                    {/* Taking the free space, it keeps what follows next to the chevron. */}
+                    <span className="flex-1">{t('transactions.advanced')}</span>
+                    {/* Folded away, the section still says where the amount comes from. */}
+                    {!advancedOpen && validPercentage && (
+                      <span className="mr-2 font-normal text-muted-foreground">
+                        {formatPercentage(validPercentage, i18n.language)}
+                      </span>
+                    )}
+                  </AccordionTrigger>
+                  {/* Unlike the stock one, its height follows what's in it, so an error showing up
+                      under a field isn't clipped, and it spaces fields the way the form does rather
+                      than paragraphs of prose. */}
+                  <AccordionContent className="h-auto pt-2 pb-0 [&_p:not(:last-child)]:mb-0">
+                    <FieldGroup className="gap-4">
+                      <Field data-invalid={!!errors.percentage}>
+                        <FieldLabel htmlFor="amount-sheet-percentage">{t('transactions.percentage')}</FieldLabel>
+                        <div className="relative">
+                          <Input
+                            id="amount-sheet-percentage"
+                            inputMode="decimal"
+                            autoComplete="off"
+                            className="pr-7"
+                            aria-invalid={!!errors.percentage}
+                            {...form.register('percentage', { onChange: recalculate })}
+                          />
+                          <span
+                            className="pointer-events-none absolute inset-y-0 right-2.5 flex items-center text-muted-foreground"
+                            aria-hidden
+                          >
+                            %
+                          </span>
+                        </div>
+                        <FieldError errors={[errors.percentage]} />
+                      </Field>
+                      {/* Optional: what the percentage is of, in the account's currency, when it isn't
+                          the account's balance — the income a tax is a share of, say. */}
+                      <Field data-invalid={!!errors.percentageBase}>
+                        <FieldLabel htmlFor="amount-sheet-percentageBase">
+                          {withCurrency(t('transactions.percentageBase'), sides.accountId)}
+                        </FieldLabel>
                         <Input
-                          id="amount-sheet-percentage"
+                          id="amount-sheet-percentageBase"
                           inputMode="decimal"
                           autoComplete="off"
-                          className="pr-7"
-                          aria-invalid={!!errors.percentage}
-                          {...form.register('percentage', { onChange: recalculate })}
+                          aria-invalid={!!errors.percentageBase}
+                          {...form.register('percentageBase', { onChange: recalculate })}
                         />
-                        <span
-                          className="pointer-events-none absolute inset-y-0 right-2.5 flex items-center text-muted-foreground"
-                          aria-hidden
-                        >
-                          %
-                        </span>
-                      </div>
-                      <FieldError errors={[errors.percentage]} />
-                    </Field>
-                    {/* Optional: what the percentage is of, in the account's currency, when it isn't
-                        the account's balance — the income a tax is a share of, say. */}
-                    <Field data-invalid={!!errors.percentageBase}>
-                      <FieldLabel htmlFor="amount-sheet-percentageBase">
-                        {withCurrency(t('transactions.percentageBase'), sides.accountId)}
-                      </FieldLabel>
-                      <Input
-                        id="amount-sheet-percentageBase"
-                        inputMode="decimal"
-                        autoComplete="off"
-                        aria-invalid={!!errors.percentageBase}
-                        {...form.register('percentageBase', { onChange: recalculate })}
-                      />
-                      {account && (
-                        <FieldDescription>
-                          {t(
-                            balanceBase(account, editing) === account.balance
-                              ? 'transactions.percentageBaseHint'
-                              : 'transactions.percentageBaseHintWithout',
-                            { account: account.name },
-                          )}
-                        </FieldDescription>
-                      )}
-                      <FieldError errors={[errors.percentageBase]} />
-                    </Field>
-                  </FieldGroup>
-                </AccordionContent>
-              </AccordionItem>
-            </Accordion>
+                        {account && (
+                          <FieldDescription>
+                            {t(
+                              balanceBase(account, editing) === account.balance
+                                ? 'transactions.percentageBaseHint'
+                                : 'transactions.percentageBaseHintWithout',
+                              { account: account.name },
+                            )}
+                          </FieldDescription>
+                        )}
+                        <FieldError errors={[errors.percentageBase]} />
+                      </Field>
+                    </FieldGroup>
+                  </AccordionContent>
+                </AccordionItem>
+              </Accordion>
+            ) : (
+              <FieldDescription>{t('transactions.fixedSeriesAmount')}</FieldDescription>
+            )}
           </FieldGroup>
           <DialogFooter className="mt-6">
             <Button type="button" variant="outline" onClick={() => onOpenChange(false)}>

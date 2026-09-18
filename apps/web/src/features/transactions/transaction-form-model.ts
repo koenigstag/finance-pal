@@ -64,6 +64,7 @@ export interface TransactionFormMessages {
   percentage: string;
   // The amount a valid percentage came to is nothing: what it's of is zero or too small for it.
   percentageAmount: string;
+  repeatPercentage: string;
 }
 
 export interface TransactionFormContext {
@@ -139,6 +140,10 @@ export function transactionFormSchema(
         if (values.repeat && needsDestAmount(values, accounts)) {
           ctx.addIssue({ code: z.ZodIssueCode.custom, path: ['repeat'], message: messages.repeatCurrency });
         }
+      }
+      // A series has a fixed amount: nothing would work each of its transactions out afresh.
+      if (values.repeat && values.percentage.trim()) {
+        ctx.addIssue({ code: z.ZodIssueCode.custom, path: ['repeat'], message: messages.repeatPercentage });
       }
       const { seriesNextDay, today = todayInput() } = context;
       // Dates as yyyy-MM-dd compare as text.

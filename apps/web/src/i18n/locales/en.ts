@@ -217,6 +217,8 @@ export const en = {
     receivedAmount: 'Received {{amount}}',
     percentageOfBalance: '{{percentage}} of the balance of {{account}}',
     percentageOfBase: '{{percentage}} of {{base}}',
+    // In the Amount sheet of a repeating transaction, in place of the percentage.
+    fixedSeriesAmount: 'A repeating transaction has a fixed amount.',
     note: 'Note',
     recurring: 'Recurring',
     repeat: {
@@ -268,6 +270,7 @@ export const en = {
       repeatCurrency: 'Only a transfer within one currency can repeat',
       pastNextDate: "The next date can't be in the past",
       percentageAmount: 'This percentage comes to zero',
+      repeatPercentage: "An amount worked out as a percentage can't repeat yet. Clear the percentage first.",
     },
     actions: {
       duplicate: 'Duplicate',
