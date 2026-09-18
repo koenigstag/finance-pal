@@ -63,7 +63,11 @@ export function KindPicker({
 
   return (
     <Dialog open={open} onOpenChange={onOpenChange}>
-      <DialogContent className="flex max-h-[85svh] flex-col" aria-describedby={undefined}>
+      <DialogContent
+        // With tabs, one size for all of them: the sheet mustn't jump as the lists change length.
+        className={cn('flex max-h-[85svh] flex-col', !lockedType && 'h-[min(85svh,40rem)]')}
+        aria-describedby={undefined}
+      >
         <DialogHeader>
           <DialogTitle>{title}</DialogTitle>
         </DialogHeader>
@@ -88,7 +92,7 @@ export function KindPicker({
           </ToggleGroup>
         )}
 
-        <ul className="-mx-2 flex min-h-0 flex-1 flex-col overflow-y-auto">
+        <ul className="-mx-2 flex min-h-0 flex-1 flex-col overflow-y-auto [scrollbar-gutter:stable]">
           {tab === 'transfer' ? (
             accounts
               .filter((account) => account.id !== fromAccountId)
@@ -165,7 +169,7 @@ export function AccountPicker({
             <AccountBalance account={current} />
           </div>
         )}
-        <ul className="-mx-2 flex min-h-0 flex-1 flex-col overflow-y-auto">
+        <ul className="-mx-2 flex min-h-0 flex-1 flex-col overflow-y-auto [scrollbar-gutter:stable]">
           {accounts
             .filter((account) => account.id !== excludeId)
             .map((account) => (
