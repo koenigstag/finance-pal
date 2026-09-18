@@ -173,6 +173,7 @@ export const ru: Catalog<typeof en> = {
     fromAccount: 'Со счёта',
     toAccount: 'На счёт',
     chooseAccount: 'Выберите счёт',
+    amountWithdrawn: 'Сумма списания',
     destAmount: 'Сумма зачисления',
     category: 'Категория',
     noCategory: 'Без категории',

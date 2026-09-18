@@ -171,6 +171,7 @@ export const en = {
     fromAccount: 'From account',
     toAccount: 'To account',
     chooseAccount: 'Choose an account',
+    amountWithdrawn: 'Amount withdrawn',
     destAmount: 'Amount received',
     category: 'Category',
     noCategory: 'No category',

@@ -207,7 +207,9 @@ export function TransactionDialog({
             />
             <Field data-invalid={!!errors.amount}>
               <FieldLabel htmlFor="transaction-amount">
-                {t('transactions.amount')} {currencyOf(accountId) && `(${currencyOf(accountId)})`}
+                {/* A transfer has two sides, so its first amount says which one it is. */}
+                {t(type === 'transfer' ? 'transactions.amountWithdrawn' : 'transactions.amount')}{' '}
+                {currencyOf(accountId) && `(${currencyOf(accountId)})`}
               </FieldLabel>
               <Input
                 id="transaction-amount"
