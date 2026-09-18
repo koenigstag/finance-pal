@@ -31,7 +31,6 @@ const messages = {
   pastNextDate: 'past',
   percentage: 'percentage',
   percentageAmount: 'percentageAmount',
-  repeatPercentage: 'repeatPercentage',
 };
 
 const values = (overrides: Partial<TransactionFormValues>): TransactionFormValues => ({
@@ -92,11 +91,6 @@ describe('transactionFormSchema', () => {
     expect(issues(values({ percentage: '3', amount: '0.00' }))).toEqual({ amount: 'percentageAmount' });
     // Until the percentage itself is right, that's the one thing to fix.
     expect(issues(values({ percentage: 'x', amount: '0' }))).toEqual({ percentage: 'percentage' });
-  });
-
-  it("doesn't let an amount worked out as a percentage repeat", () => {
-    expect(issues(values({ percentage: '5', repeat: 'month:1' }))).toEqual({ repeat: 'repeatPercentage' });
-    expect(issues(values({ percentage: '5' }))).toEqual({});
   });
 
   it('takes a base amount above zero beside a percentage, and ignores one without', () => {
@@ -209,6 +203,8 @@ const rule = (overrides: Partial<RecurringRule>): RecurringRule => ({
   subcategoryId: null,
   toAccountId: null,
   note: null,
+  percentage: null,
+  percentageBase: null,
   intervalUnit: 'month',
   intervalValue: 1,
   startsAt: new Date(2026, 0, 5, 12).toISOString(),
@@ -234,12 +230,22 @@ describe('toRecurringRuleBody', () => {
       subcategoryId: null,
       toAccountId: null,
       note: null,
+      percentage: null,
+      percentageBase: null,
       intervalUnit: 'week',
       intervalValue: 2,
       // Local noon, as for a transaction dated on a day other than today.
       startsAt: new Date(2026, 9, 5, 12).toISOString(),
       timezone: 'Europe/Kyiv',
     });
+  });
+
+  it('carries a percentage, with the amount it comes to now', () => {
+    const body = (overrides: Partial<TransactionFormValues>) =>
+      toRecurringRuleBody(values({ repeat: 'month:1', amount: '350.00', ...overrides }), accounts, now, 'UTC');
+    expect(body({ percentage: '3,5' })).toMatchObject({ amount: '350.00', percentage: '3.5', percentageBase: null });
+    expect(body({ percentage: '5', percentageBase: '12 000,5' })).toMatchObject({ percentage: '5', percentageBase: '12000.5' });
+    expect(body({ percentageBase: '12000' })).toMatchObject({ percentage: null, percentageBase: null });
   });
 
   it('starts one dated today right now, so its first transaction counts at once', () => {
@@ -274,6 +280,8 @@ describe('plannedToRecurringRuleBody', () => {
       subcategoryId: null,
       toAccountId: null,
       note: 'SIM',
+      percentage: '3.5',
+      percentageBase: null,
     } as Transaction;
     expect(plannedToRecurringRuleBody(planned, { day: '2026-10-01', repeat: 'month:1' }, now, 'UTC')).toEqual({
       type: 'expense',
@@ -284,6 +292,8 @@ describe('plannedToRecurringRuleBody', () => {
       subcategoryId: null,
       toAccountId: null,
       note: 'SIM',
+      percentage: '3.5',
+      percentageBase: null,
       intervalUnit: 'month',
       intervalValue: 1,
       startsAt: planned.date,
@@ -298,6 +308,14 @@ describe('toRecurringRulePatch', () => {
     expect(ruleToFormValues(rule({}))).toMatchObject({ day: '2026-10-05', repeat: 'month:1', amount: '9000.00', note: '' });
   });
 
+  it('shows the percentage a series is worked out from', () => {
+    expect(ruleToFormValues(rule({ percentage: '5', percentageBase: '12000.50' }))).toMatchObject({
+      percentage: '5',
+      percentageBase: '12000.50',
+    });
+    expect(ruleToFormValues(rule({ percentage: null, percentageBase: null }))).toMatchObject({ percentage: '', percentageBase: '' });
+  });
+
   it('leaves the schedule alone when neither the next date nor the repeat changed', () => {
     const patch = toRecurringRulePatch({ ...ruleToFormValues(rule({})), amount: '9500' }, accounts, rule({}), now, 'UTC');
     expect(patch).toEqual({
@@ -308,6 +326,8 @@ describe('toRecurringRulePatch', () => {
       subcategoryId: null,
       toAccountId: null,
       note: null,
+      percentage: null,
+      percentageBase: null,
       intervalUnit: 'month',
       intervalValue: 1,
     });

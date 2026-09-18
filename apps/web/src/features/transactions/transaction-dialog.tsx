@@ -131,7 +131,6 @@ export function TransactionDialog({
           pastNextDate: t('transactions.errors.pastNextDate'),
           percentage: t('validation.percentage'),
           percentageAmount: t('transactions.errors.percentageAmount'),
-          repeatPercentage: t('transactions.errors.repeatPercentage'),
         },
         { seriesNextDay },
       ),
@@ -176,9 +175,9 @@ export function TransactionDialog({
           ? { ...transactionToFormValues(template), day: todayInput() }
           : defaultTransactionFormValues({ accountId: fallbackAccountId, toAccountId: defaultToAccountId, type: defaultType });
     form.reset(values);
-    // A duplicate is a new transaction: without a base amount, its percentage is of the balance as
-    // it stands today.
-    if (!rule && !transaction && template) {
+    // A duplicate is a new transaction, and a series works its amount out again on each date: without
+    // a base amount, their percentage is of the balance as it stands today.
+    if (rule || (!transaction && template)) {
       recalculate();
     }
     // A new transaction starts with what it is, unless both its sides were handed over already.
@@ -328,6 +327,10 @@ export function TransactionDialog({
         ? t('transactions.percentageOfBase', { percentage: shown, base: moneyIn(percentageBase, accountId) })
         : t('transactions.percentageOfBalance', { percentage: shown, account: accountOf(accountId)?.name ?? '' }),
     );
+    // A balance still to come: the figure above is today's, and the day itself decides.
+    if (!percentageBase.trim() && (repeat || day > todayInput())) {
+      amountLines.push(t(repeat ? 'transactions.percentageSeriesOnTheDay' : 'transactions.percentageOnTheDay'));
+    }
   }
   // Only those there are: FieldError lists several as bullets, and counts an empty slot as one.
   const amountErrors = [errors.amount, errors.destAmount, errors.percentage, errors.percentageBase].filter(
@@ -489,8 +492,6 @@ export function TransactionDialog({
         title={t(rule ? 'transactions.nextDate' : 'transactions.date')}
         value={{ day, repeat }}
         canRepeat={canRepeat}
-        // A series has a fixed amount, so one worked out as a percentage stays a one-off.
-        repeatBlocked={percentage.trim() ? t('transactions.errors.repeatPercentage') : undefined}
         currentRepeat={rule ? repeatOf(rule) : null}
         // A series moves on from today: its next date can't be in the past.
         minDay={rule ? todayInput() : undefined}
@@ -510,8 +511,6 @@ export function TransactionDialog({
         sides={{ type, accountId, toAccountId }}
         accounts={accountList}
         editing={transaction}
-        // A series has a fixed amount: nothing would work each of its transactions out afresh.
-        percentageAllowed={!repeat}
         values={{ amount, destAmount, percentage, percentageBase }}
         onDone={(values) => {
           for (const name of ['amount', 'destAmount', 'percentage', 'percentageBase'] as const) {
@@ -559,7 +558,7 @@ function AmountCard({
   caption: string;
   amount: string;
   tone: string;
-  // Further lines under the amount, each on its own.
+  // Further lines under the amount, each on its own: sentences, so they wrap rather than cut off.
   lines: string[];
   invalid?: boolean;
   onClick: () => void;
@@ -583,7 +582,7 @@ function AmountCard({
         <span className="text-xs text-muted-foreground">{caption}</span>
         <span className={cn('truncate text-base font-semibold tabular-nums', tone)}>{amount}</span>
         {lines.map((line) => (
-          <span key={line} className="truncate text-sm text-muted-foreground">
+          <span key={line} className="text-sm text-muted-foreground">
             {line}
           </span>
         ))}

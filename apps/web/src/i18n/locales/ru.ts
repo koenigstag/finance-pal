@@ -216,7 +216,8 @@ export const ru: Catalog<typeof en> = {
     receivedAmount: 'Зачислено {{amount}}',
     percentageOfBalance: '{{percentage}} от баланса счёта «{{account}}»',
     percentageOfBase: '{{percentage}} от {{base}}',
-    fixedSeriesAmount: 'У повторяющейся операции сумма фиксированная.',
+    percentageOnTheDay: 'Пересчитается в день операции',
+    percentageSeriesOnTheDay: 'Пересчитывается в день каждой операции',
     note: 'Заметка',
     recurring: 'Повторяющаяся',
     repeat: {
@@ -266,7 +267,6 @@ export const ru: Catalog<typeof en> = {
       repeatCurrency: 'Повторять можно только перевод в одной валюте',
       pastNextDate: 'Следующая дата не может быть в прошлом',
       percentageAmount: 'Этот процент равен нулю',
-      repeatPercentage: 'Сумму в процентах пока нельзя повторять. Сначала уберите процент.',
     },
     actions: {
       duplicate: 'Дублировать',

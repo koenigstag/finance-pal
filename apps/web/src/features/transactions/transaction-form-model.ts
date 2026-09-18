@@ -64,7 +64,6 @@ export interface TransactionFormMessages {
   percentage: string;
   // The amount a valid percentage came to is nothing: what it's of is zero or too small for it.
   percentageAmount: string;
-  repeatPercentage: string;
 }
 
 export interface TransactionFormContext {
@@ -140,10 +139,6 @@ export function transactionFormSchema(
         if (values.repeat && needsDestAmount(values, accounts)) {
           ctx.addIssue({ code: z.ZodIssueCode.custom, path: ['repeat'], message: messages.repeatCurrency });
         }
-      }
-      // A series has a fixed amount: nothing would work each of its transactions out afresh.
-      if (values.repeat && values.percentage.trim()) {
-        ctx.addIssue({ code: z.ZodIssueCode.custom, path: ['repeat'], message: messages.repeatPercentage });
       }
       const { seriesNextDay, today = todayInput() } = context;
       // Dates as yyyy-MM-dd compare as text.
@@ -233,9 +228,8 @@ export function ruleToFormValues(rule: RecurringRule): TransactionFormValues {
     categoryId: rule.categoryId ?? '',
     subcategoryId: rule.subcategoryId ?? '',
     day: toDayInput(nextDateOf(rule)),
-    // A series' amount is fixed: nothing works it out from a percentage.
-    percentage: '',
-    percentageBase: '',
+    percentage: rule.percentage ?? '',
+    percentageBase: rule.percentageBase ?? '',
     note: rule.note ?? '',
     repeat: toRepeatKey(repeatOf(rule)),
   };
@@ -364,6 +358,8 @@ export function plannedToRecurringRuleBody(
     subcategoryId: transaction.subcategoryId,
     toAccountId: transaction.toAccountId,
     note: transaction.note,
+    percentage: transaction.percentage,
+    percentageBase: transaction.percentageBase,
     intervalUnit: repeat.unit,
     intervalValue: repeat.value,
     startsAt: fromDayInput(choice.day, transaction.date, now),
@@ -373,14 +369,18 @@ export function plannedToRecurringRuleBody(
 }
 
 // What each of a series' transactions will be. As in toTransactionBody, fields that don't apply to
-// the type go as null, and a series has no received amount (see transactionFormSchema).
+// the type go as null, and a series has no received amount (see transactionFormSchema). With a
+// percentage, the amount is what it comes to now; each occurrence works it out afresh.
 function seriesTemplate(values: TransactionFormValues, accounts: AccountLike[]) {
   const account = accounts.find((candidate) => candidate.id === values.accountId);
   if (!account) {
     throw new Error(`Unknown account ${values.accountId}`);
   }
   const isTransfer = values.type === 'transfer';
+  const percentage = parsePercentageInput(values.percentage);
   return {
+    percentage,
+    percentageBase: percentage && values.percentageBase.trim() ? requireMoney(values.percentageBase) : null,
     amount: requireMoney(values.amount),
     currencyId: account.currencyId,
     accountId: account.id,
