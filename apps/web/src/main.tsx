@@ -7,6 +7,7 @@ import './lib/zod-messages';
 import './styles.css';
 import { queryClient } from './lib/query-client';
 import { router } from './app/router';
+import { AppUpdater } from './features/pwa/app-updater';
 import { startStoreEffects } from './stores/effects';
 import { rootStore } from './stores/root-store';
 import { StoresProvider } from './stores/stores-context';
@@ -18,6 +19,7 @@ createRoot(document.getElementById('root') as HTMLElement).render(
     <StoresProvider stores={rootStore}>
       <QueryClientProvider client={queryClient}>
         <RouterProvider router={router} />
+        <AppUpdater />
       </QueryClientProvider>
     </StoresProvider>
   </StrictMode>,

@@ -247,6 +247,10 @@ export const en = {
   pwa: {
     install: 'Install app',
     offline: 'Offline — showing the last data. Changes wait for the network.',
+    update: {
+      stale: 'The app was updated. Reload to carry on.',
+      reload: 'Reload',
+    },
   },
   data: {
     title: 'Data',

@@ -74,7 +74,8 @@
     "vitest": "~4.1.0",
     "webpack": "^5.101.3",
     "webpack-cli": "^7.0.0",
-    "webpack-dev-server": "^5.2.1"
+    "webpack-dev-server": "^5.2.1",
+    "workbox-window": "^7.4.1"
   },
   "dependencies": {
     "@nestjs/common": "^11.0.0",

@@ -1,4 +1,5 @@
 /// <reference types="vite/client" />
+/// <reference types="vite-plugin-pwa/react" />
 
 interface ImportMetaEnv {
   // Origin of the API for builds served somewhere else (e.g. GitHub Pages), like

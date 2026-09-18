@@ -47,7 +47,9 @@ export default defineConfig(() => ({
     tailwindcss(),
     iconSetsPlugin(fileURLToPath(new URL('./public/icons', import.meta.url))),
     VitePWA({
-      registerType: 'autoUpdate',
+      // The worker waits instead of taking over; the app applies it while starting, and only
+      // then — see features/pwa/app-updater.tsx.
+      registerType: 'prompt',
       // Deep links work offline: anything not in the cache falls back to the app shell.
       manifest: {
         name: 'FinancePal',
