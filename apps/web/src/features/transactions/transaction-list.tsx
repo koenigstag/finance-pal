@@ -131,8 +131,11 @@ function TransactionRow({ transaction, planned, accountsById, categoriesById, on
             <RepeatIcon className="size-3.5 shrink-0 text-muted-foreground" aria-label={t('transactions.recurring')} />
           )}
         </p>
-        <p className="truncate text-sm text-muted-foreground">{account?.name ?? '—'}</p>
-        {transaction.note && <p className="truncate text-sm text-muted-foreground">{transaction.note}</p>}
+        {/* A transfer's source is half of what it is, so it reads brighter than a mere account line. */}
+        <p className={cn('truncate text-sm', isTransfer ? 'text-foreground/80' : 'text-muted-foreground')}>
+          {account?.name ?? '—'}
+        </p>
+        {transaction.note && <p className="truncate text-sm text-muted-foreground/70 italic">{transaction.note}</p>}
         {transaction.isCustomized && (
           <div className="mt-1 flex gap-1">
             <Badge variant="secondary">{t('transactions.customized')}</Badge>
