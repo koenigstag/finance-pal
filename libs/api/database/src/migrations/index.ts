@@ -10,6 +10,7 @@ import { addRecurringRuleStartsAt } from './20260917130000-add-recurring-rule-st
 import { allowOwnerGroupDelete } from './20260918120000-allow-owner-group-delete.js';
 import { addProfileExchangeRates } from './20260918140000-add-profile-exchange-rates.js';
 import { addTransactionSubcategory } from './20260918160000-add-transaction-subcategory.js';
+import { createApiKeys } from './20260918180000-create-api-keys.js';
 
 export const migrations: readonly Migration[] = [
   createAuthTables,
@@ -23,6 +24,7 @@ export const migrations: readonly Migration[] = [
   allowOwnerGroupDelete,
   addProfileExchangeRates,
   addTransactionSubcategory,
+  createApiKeys,
 ];
 
 export * from './migration.interface.js';
