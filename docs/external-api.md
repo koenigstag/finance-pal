@@ -131,6 +131,7 @@ All paths start with `/api/external/v1`.
 | `subcategoryId` / `subcategoryName`    | expenses and income   | optional; a subcategory of that category                                 |
 | `toAccountId` / `toAccountName`        | transfers             | required                                                                 |
 | `destAmount`                           | transfers             | what arrived; required exactly when the two accounts' currencies differ  |
+| `idempotencyKey`                       | all                   | optional; see [Sending a request more than once](#sending-a-request-more-than-once) |
 
 A subcategory may also be named as the category (`"categoryName": "Taxi"`), and a subcategory
 named alone brings its category along, as long as no other category has one called the same.
@@ -148,6 +149,30 @@ curl -X POST https://<api host>/api/external/v1/transactions \
 ```
 
 The response is the transaction, with `201 Created`.
+
+### Sending a request more than once
+
+A bank may post the same notification twice, and a client may send a request again when it never
+got the answer. Give such a request an idempotency key and a repeat records nothing: it gets the
+transaction the first request recorded, with `201` and a header `Idempotent-Replayed: true`.
+
+```http
+Idempotency-Key: 5d1c4f3e-8a9b-4d2e-9f61-0c7e2b3a4d5f
+```
+
+- The key is any text up to 1000 characters that stays the same for a repeat and changes for a
+  new transaction: a UUID the client keeps with the request, or a notification's own text, which
+  usually carries the balance after the payment. Only a digest of it is stored.
+- It goes in the `Idempotency-Key` header or in the body as `idempotencyKey`, and a request with
+  both must use one key. Use the body for text a header can't carry: HTTP clients on Android
+  refuse a header with Cyrillic in it, and no header holds a line break.
+- Keys belong to the group and don't expire. A transaction deleted in the app keeps its key, so a
+  repeat can't bring it back; it's answered like the first request.
+- A repeat may differ in its date, note and category, and still gets the first transaction. The
+  same key with a different amount, account or type is refused with `422`: the key isn't telling
+  transactions apart, and quietly dropping the second one would lose money from the records.
+- A request that failed keeps nothing: correct it and send it again with the same key.
+- Copies arriving at the same moment still record one transaction.
 
 `PATCH /transactions/:transactionId` takes the same fields except `type`, which never changes.
 What a request leaves out stays as it was. A new category drops a subcategory the request
@@ -186,28 +211,25 @@ request.
    "Payment"), so balance reminders and codes don't turn into expenses.
 3. Take the amount out of the notification's text, `[notification]`, into a local variable
    `amount`, with a Text Manipulation action and a regular expression. For text like
-   "Покупка 1 250,50 UAH" the expression `(\d[\d   ]*[.,]\d{2})` finds `1 250,50`,
+   "Покупка 1 250,50 UAH" the expression `(\d[\d \u00A0\u202F]*[.,]\d{2})` finds `1 250,50`,
    which the API accepts as it is. The two escapes are the no-break spaces many apps group digits
    with. Not every regular expression engine counts them as `\s`, and a pattern that stops at
    one reads `1 250,50` as `250,50`. Try the expression on a few real notifications. Take the
    shop's name out the same way if you want it as the note.
-4. Add an **HTTP Request** action:
+4. Put the notification's text into a variable `key` too, with its line breaks and double quotes
+   replaced by spaces (Text Manipulation again): either one would make the body below invalid
+   JSON. The text is the idempotency key, so a notification posted twice records one expense.
+5. Add an **HTTP Request** action:
    - method `POST`, address `https://<api host>/api/external/v1/transactions`
    - a header `Authorization` with the value `Bearer fpk_…`
    - a body of type `application/json`:
 
      ```json
-     {"type":"expense","amount":"{lv=amount}","accountName":"Monobank","note":"{lv=shop}"}
+     {"type":"expense","amount":"{lv=amount}","accountName":"Monobank","note":"{lv=shop}","idempotencyKey":"{lv=key}"}
      ```
 
-   Keep the amount in quotes: `1 250,50` isn't a JSON number.
-5. Optionally, save the response code into a variable and show a notification when it isn't
-   `201`, so a refused request doesn't go unnoticed.
-
-Two things to watch for:
-
-- Notifications often contain line breaks and quotes, and either one makes the body invalid
-  JSON. Send the pieces you took out, not the whole text, or replace line breaks and quotes in
-  it first.
-- The API records every request it gets. If your bank posts the same notification twice, keep the
-  last text in a global variable and skip the request when it hasn't changed.
+   Keep the amount in quotes: `1 250,50` isn't a JSON number. The key goes in the body rather
+   than a header because the text is in Cyrillic, which Android won't send in a header.
+6. Optionally, save the response code into a variable and show a notification when it isn't
+   `201`, so a refused request doesn't go unnoticed. A `422` means two notifications with the same
+   text asked for different amounts, which the key can't tell apart.
