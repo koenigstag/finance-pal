@@ -183,6 +183,16 @@ export const ru: Catalog<typeof en> = {
     fromAccount: 'Со счёта',
     toAccount: 'На счёт',
     chooseAccount: 'Выберите счёт',
+    addOf: {
+      income: 'Добавить доход',
+      expense: 'Добавить расход',
+      transfer: 'Добавить перевод',
+    },
+    editOf: {
+      income: 'Изменить доход',
+      expense: 'Изменить расход',
+      transfer: 'Изменить перевод',
+    },
     amountWithdrawn: 'Сумма списания',
     destAmount: 'Сумма зачисления',
     category: 'Категория',

@@ -181,6 +181,16 @@ export const en = {
     fromAccount: 'From account',
     toAccount: 'To account',
     chooseAccount: 'Choose an account',
+    addOf: {
+      income: 'Add income',
+      expense: 'Add expense',
+      transfer: 'Add transfer',
+    },
+    editOf: {
+      income: 'Edit income',
+      expense: 'Edit expense',
+      transfer: 'Edit transfer',
+    },
     amountWithdrawn: 'Amount withdrawn',
     destAmount: 'Amount received',
     category: 'Category',
