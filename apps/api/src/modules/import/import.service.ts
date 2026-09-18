@@ -130,6 +130,7 @@ export class ImportService {
         currencyId: currencyOf.get(parsed.sourceId),
         accountId: accountIds.get(parsed.sourceId),
         categoryId: null,
+        subcategoryId: null,
         toAccountId: null,
         destAmount: null,
         note: OPENING_BALANCE_NOTE,
@@ -148,6 +149,7 @@ export class ImportService {
       if (parsed.date.getTime() > now) {
         planned += 1;
       }
+      const categoryId = parsed.categorySourceId === null ? null : (categoryIds.get(parsed.categorySourceId) ?? null);
       rows.push({
         groupId: group.id,
         type: parsed.type as TransactionType,
@@ -155,7 +157,12 @@ export class ImportService {
         amount: parsed.amount,
         currencyId: currencyOf.get(parsed.accountSourceId),
         accountId,
-        categoryId: parsed.categorySourceId === null ? null : (categoryIds.get(parsed.categorySourceId) ?? null),
+        categoryId,
+        // Never without its category, which the table's own check would refuse.
+        subcategoryId:
+          categoryId === null || parsed.subcategorySourceId === null
+            ? null
+            : (categoryIds.get(parsed.subcategorySourceId) ?? null),
         toAccountId,
         destAmount: parsed.destAmount,
         note: parsed.note,

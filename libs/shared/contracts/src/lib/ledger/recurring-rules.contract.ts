@@ -18,7 +18,9 @@ export const recurringRuleSchema = z.object({
   amount: moneySchema,
   currencyId: z.number().int(),
   accountId: z.string().uuid(),
+  // The pair as on a transaction: a top-level category and, optionally, one of its subcategories.
   categoryId: z.string().uuid().nullable(),
+  subcategoryId: z.string().uuid().nullable(),
   toAccountId: z.string().uuid().nullable(),
   note: z.string().nullable(),
   intervalUnit: recurrenceUnitSchema,
@@ -40,7 +42,9 @@ const createRecurringRuleBodySchema = z.object({
   amount: moneySchema,
   currencyId: z.number().int(),
   accountId: z.string().uuid(),
+  // Read the same way as on a transaction's body.
   categoryId: z.string().uuid().nullable().optional(),
+  subcategoryId: z.string().uuid().nullable().optional(),
   toAccountId: z.string().uuid().nullable().optional(),
   note: z.string().nullable().optional(),
   intervalUnit: recurrenceUnitSchema,

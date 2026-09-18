@@ -147,24 +147,28 @@ describe('parseOneMoneyBackup', () => {
     ]);
   });
 
-  it('keeps a transaction filed under a subcategory there', () => {
+  it('files a transaction in a subcategory under its parent, with the subcategory beside it', () => {
     const { transactions } = parseOneMoneyBackup(backupWithSubcategories());
 
-    // The subcategory itself, not moved up to Продукты.
-    expect(transactions).toEqual([expect.objectContaining({ type: 'expense', amount: '85.00', categorySourceId: 121 })]);
+    // 1Money points it at АТБ alone; the parent comes from the category tree.
+    expect(transactions).toEqual([
+      expect.objectContaining({ type: 'expense', amount: '85.00', categorySourceId: 110, subcategorySourceId: 121 }),
+    ]);
   });
 
   it('puts a subcategory the app could not nest at the top level instead', () => {
     const path = backupFile((db) => {
       db.prepare('INSERT INTO ba VALUES (?, ?, ?, ?)').run(1, 'Export', 1000, 2);
+      entity(db, [100, 1, 0, UAH, 1, null, 'Наличные', null, 0, null, 1, 0]);
       entity(db, [110, 1, 1, UAH, null, null, 'Продукты', null, 0, null, null, null]);
       entity(db, [120, 1, 1, UAH, null, null, 'Сильпо', null, 0, null, null, null], 110);
       // Income under an expense category, a third level, and a parent the file doesn't have.
       entity(db, [121, 1, 0, UAH, null, null, 'Кешбэк', null, 0, null, null, null], 110);
       entity(db, [122, 1, 1, UAH, null, null, 'Акции', null, 0, null, null, null], 120);
       entity(db, [123, 1, 1, UAH, null, null, 'Рынок', null, 0, null, null, null], 999);
+      transaction(db, [200, 1, 0, 1_700_000_000_000, 0, 100, 123, '40', '40', null]);
     });
-    const { categories } = parseOneMoneyBackup(path);
+    const { categories, transactions } = parseOneMoneyBackup(path);
 
     expect(Object.fromEntries(categories.map((category) => [category.name, category.parentSourceId]))).toEqual({
       Продукты: null,
@@ -173,6 +177,8 @@ describe('parseOneMoneyBackup', () => {
       Акции: null,
       Рынок: null,
     });
+    // Its transactions go with it: filed under it as a category of its own.
+    expect(transactions[0]).toMatchObject({ categorySourceId: 123, subcategorySourceId: null });
   });
 
   it('reads a file without the parent column as having no subcategories', () => {

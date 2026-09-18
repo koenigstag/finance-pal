@@ -46,8 +46,8 @@ const updateCategoryBodySchema = createCategoryBodySchema.omit({ type: true }).p
 export const categoryUsageSchema = z.object({
   // Subcategories, deleted along with it.
   subcategoryCount: z.number().int(),
-  // Transactions filed under it or its subcategories that already happened; they're kept and
-  // become uncategorized.
+  // Transactions filed under it or its subcategories that already happened. They're kept: a
+  // category's become uncategorized, a subcategory's stay in its parent without a subcategory.
   transactionCount: z.number().int(),
   // Future-dated ones, mostly occurrences recurring rules scheduled ahead.
   plannedTransactionCount: z.number().int(),
@@ -120,7 +120,7 @@ export const categoriesContract = c.router(
       pathParams: categoryPathParams,
       responses: { 200: categorySchema, 403: errorSchema, 404: errorSchema },
       summary:
-        'Delete a category with its subcategories; transactions and recurring rules that used them become uncategorized',
+        'Delete a category with its subcategories; what used a category becomes uncategorized, what used a subcategory keeps its parent',
     },
   },
   { pathPrefix: '/api' },

@@ -7,7 +7,7 @@ import { TRANSACTION_TYPES, type Action, type AppAbility, type Subject } from '@
 import { AbilityFactory } from '../../_core/authz/ability.factory';
 import { RealtimeEmitterService } from '../../realtime/realtime-emitter.service';
 import { decodeCursor, encodeCursor } from './cursor.util';
-import { TransactionValidator } from './transaction-validator';
+import { TransactionValidator, keptSubcategory } from './transaction-validator';
 
 // The shared string union, not api-database's TypeORM enum — see the identical comment on
 // GroupWithRole.role in GroupsService for why (assignable one way, not the other).
@@ -18,6 +18,7 @@ export interface CreateTransactionInput {
   currencyId: number;
   accountId: string;
   categoryId?: string | null;
+  subcategoryId?: string | null;
   toAccountId?: string | null;
   destAmount?: string | null;
   note?: string;
@@ -74,7 +75,8 @@ export class TransactionsService {
       qb.andWhere('t.account_id = :accountId', { accountId: filter.accountId });
     }
     if (filter.categoryId) {
-      qb.andWhere('t.category_id = :categoryId', { categoryId: filter.categoryId });
+      // Either column: a category holds its subcategories' transactions too, in category_id.
+      qb.andWhere('(t.category_id = :categoryId OR t.subcategory_id = :categoryId)', { categoryId: filter.categoryId });
     }
     if (filter.type) {
       qb.andWhere('t.type = :type', { type: filter.type });
@@ -122,11 +124,12 @@ export class TransactionsService {
       type: input.type as TransactionType,
       accountId: input.accountId,
       categoryId: input.categoryId ?? null,
+      subcategoryId: input.subcategoryId ?? null,
       toAccountId: input.toAccountId ?? null,
       amount: input.amount,
       destAmount: input.destAmount ?? null,
     };
-    await this.validator.assertValid(groupId, merged);
+    const filed = await this.validator.validate(groupId, merged);
     const tagIds = await this.assertTagsValid(groupId, input.tagIds);
 
     const transaction = await this.transactions.save(
@@ -137,7 +140,8 @@ export class TransactionsService {
         amount: input.amount,
         currencyId: input.currencyId,
         accountId: input.accountId,
-        categoryId: merged.categoryId,
+        categoryId: filed.categoryId,
+        subcategoryId: filed.subcategoryId,
         toAccountId: merged.toAccountId,
         destAmount: merged.destAmount,
         note: input.note ?? null,
@@ -177,15 +181,17 @@ export class TransactionsService {
       throw new BadRequestException('A transaction type cannot be changed');
     }
 
+    const categoryId = patch.categoryId !== undefined ? patch.categoryId : existing.categoryId;
     const merged = {
       type: (patch.type as TransactionType | undefined) ?? existing.type,
       accountId: patch.accountId ?? existing.accountId,
-      categoryId: patch.categoryId !== undefined ? patch.categoryId : existing.categoryId,
+      categoryId,
+      subcategoryId: keptSubcategory(patch, existing, categoryId),
       toAccountId: patch.toAccountId !== undefined ? patch.toAccountId : existing.toAccountId,
       amount: patch.amount ?? existing.amount,
       destAmount: patch.destAmount !== undefined ? patch.destAmount : existing.destAmount,
     };
-    await this.validator.assertValid(groupId, merged);
+    const filed = await this.validator.validate(groupId, merged);
 
     const patchedTagIds = patch.tagIds !== undefined ? await this.assertTagsValid(groupId, patch.tagIds) : undefined;
 
@@ -200,7 +206,8 @@ export class TransactionsService {
         amount: merged.amount,
         currencyId: patch.currencyId ?? existing.currencyId,
         accountId: merged.accountId,
-        categoryId: merged.categoryId,
+        categoryId: filed.categoryId,
+        subcategoryId: filed.subcategoryId,
         toAccountId: merged.toAccountId,
         destAmount: merged.destAmount,
         note: patch.note !== undefined ? patch.note : existing.note,

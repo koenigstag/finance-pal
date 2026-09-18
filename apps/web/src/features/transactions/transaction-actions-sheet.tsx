@@ -8,6 +8,7 @@ import { useCurrencyCodes } from '@/features/currencies/queries';
 import { formatMoney } from '@/lib/money';
 import { transactionTypeColor } from '@/lib/money-colors';
 import { cn } from '@/lib/utils';
+import { filedUnder } from './filed-under';
 import type { Transaction } from './queries';
 
 export type TransactionAction = 'edit' | 'duplicate' | 'delete';
@@ -72,7 +73,7 @@ export function TransactionActionsSheet({
 
   const account = transaction && accounts.find((candidate) => candidate.id === transaction.accountId);
   const toAccount = transaction?.toAccountId ? accounts.find((candidate) => candidate.id === transaction.toAccountId) : undefined;
-  const category = transaction?.categoryId ? categories.find((candidate) => candidate.id === transaction.categoryId) : undefined;
+  const filed = transaction && filedUnder(transaction, (id) => categories.find((candidate) => candidate.id === id));
   const isTransfer = transaction?.type === 'transfer';
 
   return (
@@ -83,15 +84,15 @@ export function TransactionActionsSheet({
             <DialogHeader>
               <div className="flex min-w-0 items-center gap-3 pr-8">
                 <AppearanceIcon
-                  icon={category?.icon}
-                  color={category?.color}
-                  placeholder={isTransfer ? 'transfer' : category ? undefined : 'none'}
+                  icon={filed?.icon}
+                  color={filed?.color}
+                  placeholder={isTransfer ? 'transfer' : filed ? undefined : 'none'}
                   size="lg"
                 />
                 <div className="min-w-0 flex-1 text-left">
                   <DialogTitle className="flex min-w-0 items-center gap-1.5">
                     <span className="truncate">
-                      {isTransfer ? t('transactions.types.transfer') : (category?.name ?? t('transactions.noCategory'))}
+                      {isTransfer ? t('transactions.types.transfer') : (filed?.name ?? t('transactions.noCategory'))}
                     </span>
                     {transaction.recurringRuleId && (
                       <RepeatIcon className="size-4 shrink-0 text-muted-foreground" aria-label={t('transactions.recurring')} />

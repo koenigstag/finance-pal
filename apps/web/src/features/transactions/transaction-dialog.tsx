@@ -1,7 +1,7 @@
 import { zodResolver } from '@hookform/resolvers/zod';
 import { RepeatIcon } from 'lucide-react';
 import { useEffect, useMemo, useRef, useState, type FocusEvent, type ReactNode } from 'react';
-import { useForm, useWatch } from 'react-hook-form';
+import { Controller, useForm, useWatch } from 'react-hook-form';
 import { useTranslation } from 'react-i18next';
 import { AppearanceIcon } from '@/components/appearance/appearance-icon';
 import { Alert, AlertDescription } from '@/components/ui/alert';
@@ -10,8 +10,9 @@ import { Dialog, DialogContent, DialogFooter, DialogHeader, DialogTitle } from '
 import { Field, FieldError, FieldGroup, FieldLabel } from '@/components/ui/field';
 import { Input } from '@/components/ui/input';
 import { Textarea } from '@/components/ui/textarea';
+import { ToggleGroup, ToggleGroupItem } from '@/components/ui/toggle-group';
 import { useAccounts } from '@/features/accounts/queries';
-import { useCategories } from '@/features/categories/queries';
+import { categoriesUnder, useCategories } from '@/features/categories/queries';
 import { useCurrencyCodes } from '@/features/currencies/queries';
 import { todayInput } from '@/lib/dates';
 import { cn } from '@/lib/utils';
@@ -54,7 +55,8 @@ interface TransactionDialogProps {
  * First what it is: a sheet of tabs, income, expense and transfer, listing categories — or, for a
  * transfer, the accounts to send to. Then the form: the two sides as cards, the way the money
  * flows (a category into an account, an account into a category, one account into another), and
- * under them the amount, the date and a note. Either card reopens its own picker.
+ * under them the amount, the date and a note. Either card reopens its own picker, and a category
+ * with subcategories offers them as chips under the cards.
  *
  * A transaction whose sides are already known — an edit, a duplicate, a debt's Lend or Pay back —
  * skips the first step.
@@ -100,9 +102,9 @@ export function TransactionDialog({
     defaultValues: defaultTransactionFormValues({}),
   });
   const errors = form.formState.errors;
-  const [type, accountId, toAccountId, categoryId] = useWatch({
+  const [type, accountId, toAccountId, categoryId, subcategoryId] = useWatch({
     control: form.control,
-    name: ['type', 'accountId', 'toAccountId', 'categoryId'],
+    name: ['type', 'accountId', 'toAccountId', 'categoryId', 'subcategoryId'],
   });
 
   const fallbackAccountId = pickDefaultAccountId(accountList, defaultAccountId);
@@ -137,6 +139,11 @@ export function TransactionDialog({
   const accountOf = (id: string) => accountList.find((account) => account.id === id);
   const currencyOf = (id: string) => currencyCodes.get(accountOf(id)?.currencyId ?? -1);
   const category = categoryList.find((candidate) => candidate.id === categoryId);
+  // The chosen category's own subcategories, offered as chips under the cards.
+  const subcategories = useMemo(
+    () => (type === 'transfer' || !categoryId ? [] : categoriesUnder(categoryList, type, categoryId)),
+    [categoryList, type, categoryId],
+  );
 
   const applyPick = (pick: KindPick) => {
     form.setValue('type', pick.type);
@@ -148,8 +155,15 @@ export function TransactionDialog({
       }
       form.setValue('toAccountId', pick.toAccountId, { shouldValidate: form.formState.isSubmitted });
       form.setValue('categoryId', '');
+      form.setValue('subcategoryId', '');
     } else {
-      form.setValue('categoryId', pick.categoryId);
+      // A subcategory picked from the list is filed under its parent, with itself as the
+      // subcategory: the card shows the parent and the chips under it which one. One whose parent
+      // isn't listed (archived) was offered at the top level, and is taken as it was offered.
+      const picked = categoryList.find((candidate) => candidate.id === pick.categoryId);
+      const parent = picked?.parentId ? categoryList.find((candidate) => candidate.id === picked.parentId) : undefined;
+      form.setValue('categoryId', parent ? parent.id : pick.categoryId);
+      form.setValue('subcategoryId', parent ? pick.categoryId : '');
       form.setValue('toAccountId', '');
     }
     setStage('form');
@@ -195,6 +209,8 @@ export function TransactionDialog({
       name={category?.name ?? t('transactions.noCategory')}
     />
   );
+  // What the category sheet marks as chosen: the subcategory when there is one.
+  const pickedInSheet = type === 'transfer' ? toAccountId : subcategoryId || categoryId;
 
   // The money flows left to right, which the cards' captions spell out: from a category into an
   // account, from an account into a category, or from one account into another.
@@ -234,7 +250,7 @@ export function TransactionDialog({
         categories={categoryList}
         // Every account can be the target here: the source so far is only a default.
         accounts={accountList}
-        selected={type === 'transfer' ? toAccountId : categoryId}
+        selected={pickedInSheet}
         onPick={applyPick}
       />
 
@@ -264,6 +280,36 @@ export function TransactionDialog({
                 </div>
                 <FieldError errors={[errors.accountId, errors.toAccountId]} />
               </div>
+
+              {/* The category's subcategories, as chips under the cards. Picking one is optional,
+                  and tapping the chosen chip again goes back to the category alone. */}
+              {subcategories.length > 0 && (
+                <Controller
+                  control={form.control}
+                  name="subcategoryId"
+                  render={({ field }) => (
+                    <ToggleGroup
+                      type="single"
+                      variant="outline"
+                      className="w-full flex-wrap justify-start"
+                      aria-label={t('transactions.subcategory')}
+                      value={field.value}
+                      onValueChange={field.onChange}
+                    >
+                      {subcategories.map((subcategory) => (
+                        <ToggleGroupItem
+                          key={subcategory.id}
+                          value={subcategory.id}
+                          className="rounded-full pl-1 data-[state=on]:border-foreground/60"
+                        >
+                          <AppearanceIcon icon={subcategory.icon} color={subcategory.color} size="sm" />
+                          {subcategory.name}
+                        </ToggleGroupItem>
+                      ))}
+                    </ToggleGroup>
+                  )}
+                />
+              )}
 
               {type === 'transfer' ? (
                 // Each amount under its own side, in that side's currency.
@@ -316,7 +362,7 @@ export function TransactionDialog({
         categories={categoryList}
         accounts={accountList}
         fromAccountId={accountId}
-        selected={type === 'transfer' ? toAccountId : categoryId}
+        selected={pickedInSheet}
         onPick={applyPick}
       />
 

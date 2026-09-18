@@ -16,6 +16,8 @@ import { useCategoryUsage, useDeleteCategory, type Category } from './queries';
 interface DeleteCategoryDialogProps {
   groupId: string;
   category: Category;
+  // The category it's a subcategory of, if it is one.
+  parent?: Category;
   subcategories: Category[];
   open: boolean;
   onOpenChange: (open: boolean) => void;
@@ -24,12 +26,13 @@ interface DeleteCategoryDialogProps {
 
 /**
  * Confirms deleting a category: its subcategories go with it, while the transactions and recurring
- * rules filed under any of them stay and lose their category — counted by the API right before
- * asking.
+ * rules filed under any of them stay — without a category, or, for a subcategory, in its parent
+ * without a subcategory. The API counts them right before asking.
  */
 export function DeleteCategoryDialog({
   groupId,
   category,
+  parent,
   subcategories,
   open,
   onOpenChange,
@@ -39,17 +42,17 @@ export function DeleteCategoryDialog({
   const usage = useCategoryUsage(groupId, category.id, open);
   const deleteCategory = useDeleteCategory(groupId);
 
-  const uncategorized: string[] = [];
+  const affected: string[] = [];
   if (usage.data) {
     const { transactionCount, plannedTransactionCount, recurringRuleCount } = usage.data;
     if (transactionCount > 0) {
-      uncategorized.push(t('categories.delete.transactions', { count: transactionCount }));
+      affected.push(t('categories.delete.transactions', { count: transactionCount }));
     }
     if (plannedTransactionCount > 0) {
-      uncategorized.push(t('categories.delete.plannedTransactions', { count: plannedTransactionCount }));
+      affected.push(t('categories.delete.plannedTransactions', { count: plannedTransactionCount }));
     }
     if (recurringRuleCount > 0) {
-      uncategorized.push(t('categories.delete.recurringRules', { count: recurringRuleCount }));
+      affected.push(t('categories.delete.recurringRules', { count: recurringRuleCount }));
     }
   }
 
@@ -80,13 +83,17 @@ export function DeleteCategoryDialog({
                 <Spinner className="size-5" />
               ) : usage.isError ? (
                 <span>{t('errors.generic')}</span>
-              ) : uncategorized.length === 0 ? (
+              ) : affected.length === 0 ? (
                 <span>{t('categories.delete.unused')}</span>
               ) : (
                 <>
-                  <span>{t('categories.delete.willBeUncategorized')}</span>
+                  <span>
+                    {parent
+                      ? t('categories.delete.willStayInParent', { name: parent.name })
+                      : t('categories.delete.willBeUncategorized')}
+                  </span>
                   <ul className="list-disc pl-5">
-                    {uncategorized.map((line) => (
+                    {affected.map((line) => (
                       <li key={line}>{line}</li>
                     ))}
                   </ul>

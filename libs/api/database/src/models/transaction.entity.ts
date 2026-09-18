@@ -26,10 +26,12 @@ import { TransactionType } from './enums.js';
 })
 @Index('idx_transactions_account', ['accountId'], { where: 'deleted_at IS NULL' })
 @Index('idx_transactions_category', ['categoryId'], { where: 'deleted_at IS NULL' })
+@Index('idx_transactions_subcategory', ['subcategoryId'], { where: 'deleted_at IS NULL' })
 @Check(
   'chk_transaction_sides',
   `(type = 'transfer' AND to_account_id IS NOT NULL AND category_id IS NULL) OR (type IN ('expense', 'income') AND to_account_id IS NULL)`,
 )
+@Check('chk_transaction_subcategory', `subcategory_id IS NULL OR category_id IS NOT NULL`)
 @Check('chk_transaction_amount_positive', `amount > 0 AND (dest_amount IS NULL OR dest_amount > 0)`)
 export class Transaction {
   @PrimaryColumn({ type: 'uuid', default: () => 'gen_random_uuid()' })
@@ -66,13 +68,21 @@ export class Transaction {
   @JoinColumn({ name: 'account_id' })
   account!: Account;
 
-  // expense/income only
+  // expense/income only; always a top-level category, a subcategory goes in subcategory_id
   @Column({ type: 'uuid', name: 'category_id', nullable: true })
   categoryId!: string | null;
 
   @ManyToOne(() => Category, { nullable: true })
   @JoinColumn({ name: 'category_id' })
   category!: Category | null;
+
+  // optional, and only ever one of category_id's own subcategories
+  @Column({ type: 'uuid', name: 'subcategory_id', nullable: true })
+  subcategoryId!: string | null;
+
+  @ManyToOne(() => Category, { nullable: true })
+  @JoinColumn({ name: 'subcategory_id' })
+  subcategory!: Category | null;
 
   // transfer only
   @Column({ type: 'uuid', name: 'to_account_id', nullable: true })

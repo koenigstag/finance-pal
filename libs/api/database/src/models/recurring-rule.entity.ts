@@ -24,6 +24,7 @@ import { RecurrenceUnit, TransactionType } from './enums.js';
   `(type = 'transfer' AND to_account_id IS NOT NULL AND category_id IS NULL) OR (type IN ('expense', 'income') AND to_account_id IS NULL)`,
 )
 @Check('chk_recurring_amount_positive', `amount > 0`)
+@Check('chk_recurring_subcategory', `subcategory_id IS NULL OR category_id IS NOT NULL`)
 export class RecurringRule {
   @PrimaryColumn({ type: 'uuid', default: () => 'gen_random_uuid()' })
   id!: string;
@@ -62,6 +63,14 @@ export class RecurringRule {
   @ManyToOne(() => Category, { nullable: true })
   @JoinColumn({ name: 'category_id' })
   category!: Category | null;
+
+  // as on a transaction: optional, and only ever one of category_id's own subcategories
+  @Column({ type: 'uuid', name: 'subcategory_id', nullable: true })
+  subcategoryId!: string | null;
+
+  @ManyToOne(() => Category, { nullable: true })
+  @JoinColumn({ name: 'subcategory_id' })
+  subcategory!: Category | null;
 
   @Column({ type: 'uuid', name: 'to_account_id', nullable: true })
   toAccountId!: string | null;

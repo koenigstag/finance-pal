@@ -150,7 +150,10 @@ export interface ParsedTransaction {
   destAmount: string | null;
   accountSourceId: number;
   toAccountSourceId: number | null;
+  // Always a top-level category: one filed under a subcategory names it here as its parent, and
+  // the subcategory itself below.
   categorySourceId: number | null;
+  subcategorySourceId: number | null;
   note: string | null;
   // 1Money's scheduled entries: future-dated, so they arrive as planned transactions.
   scheduled: boolean;
@@ -273,7 +276,6 @@ export function parseOneMoneyBackup(filePath: string, currencyOverrides: Record<
     }
 
     const accountIds = new Set(accounts.map((account) => account.sourceId));
-    const categoryIds = new Set(categories.map((category) => category.sourceId));
     const rows = db
       .prepare('SELECT * FROM tr WHERE _b_i = ? ORDER BY _da')
       .all(snapshotId) as unknown as TransactionRow[];
@@ -287,8 +289,8 @@ export function parseOneMoneyBackup(filePath: string, currencyOverrides: Record<
         continue;
       }
       const toAccount = row._d_i !== null && accountIds.has(row._d_i) ? row._d_i : null;
-      const category = row._d_i !== null && categoryIds.has(row._d_i) ? row._d_i : null;
       const type: TransactionType = toAccount !== null ? 'transfer' : row._ty === 1 ? 'income' : 'expense';
+      const target = type === 'transfer' || row._d_i === null ? undefined : categoryById.get(row._d_i);
       const destAmount = toAccount !== null ? toAmount(row._d_m) : null;
       transactions.push({
         type,
@@ -299,7 +301,8 @@ export function parseOneMoneyBackup(filePath: string, currencyOverrides: Record<
         destAmount: destAmount && destAmount !== amount ? destAmount : null,
         accountSourceId: row._a_i,
         toAccountSourceId: toAccount,
-        categorySourceId: type === 'transfer' ? null : category,
+        categorySourceId: target ? (target.parentSourceId ?? target.sourceId) : null,
+        subcategorySourceId: target && target.parentSourceId !== null ? target.sourceId : null,
         note: row._co?.trim() || null,
         scheduled: row._sch === 1,
       });

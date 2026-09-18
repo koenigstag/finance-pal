@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest';
-import { categoryOptions, type Category } from './queries';
+import { categoriesUnder, categoryOptions, type Category } from './queries';
 
 const category = (id: string, overrides: Partial<Category>): Category => ({
   id,
@@ -35,5 +35,21 @@ describe('categoryOptions', () => {
   it('lifts a child whose parent is missing to the top level', () => {
     const options = categoryOptions([category('orphan', { parentId: 'gone' })], 'expense');
     expect(options).toEqual([{ category: expect.objectContaining({ id: 'orphan' }), depth: 0 }]);
+  });
+});
+
+describe('categoriesUnder', () => {
+  const categories = [
+    category('food', { sortOrder: 2 }),
+    category('rent', { sortOrder: 1 }),
+    category('lunch', { parentId: 'food', name: 'Lunch' }),
+    category('bread', { parentId: 'food', name: 'Bread' }),
+    category('salary', { type: 'income' }),
+  ];
+
+  it('lists one level of one type, by sortOrder then name', () => {
+    expect(categoriesUnder(categories, 'expense', null).map((c) => c.id)).toEqual(['rent', 'food']);
+    expect(categoriesUnder(categories, 'expense', 'food').map((c) => c.id)).toEqual(['bread', 'lunch']);
+    expect(categoriesUnder(categories, 'income', null).map((c) => c.id)).toEqual(['salary']);
   });
 });

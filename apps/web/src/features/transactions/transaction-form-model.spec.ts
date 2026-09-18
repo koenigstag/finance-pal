@@ -57,20 +57,30 @@ describe('toTransactionBody', () => {
       currencyId: 1,
       accountId: usd.id,
       categoryId: 'cat',
+      subcategoryId: null,
       toAccountId: null,
       destAmount: null,
       note: 'lunch',
     });
   });
 
+  it('sends a subcategory only together with its category', () => {
+    const body = (overrides: Partial<TransactionFormValues>) => toTransactionBody(values(overrides), accounts, undefined, now);
+    expect(body({ categoryId: 'transport', subcategoryId: 'taxi' })).toMatchObject({
+      categoryId: 'transport',
+      subcategoryId: 'taxi',
+    });
+    expect(body({ categoryId: '', subcategoryId: 'taxi' })).toMatchObject({ categoryId: null, subcategoryId: null });
+  });
+
   it('drops the category and keeps destAmount for a cross-currency transfer', () => {
     const body = toTransactionBody(
-      values({ type: 'transfer', categoryId: 'stale', toAccountId: eur.id, destAmount: '9.2' }),
+      values({ type: 'transfer', categoryId: 'stale', subcategoryId: 'stale', toAccountId: eur.id, destAmount: '9.2' }),
       accounts,
       undefined,
       now,
     );
-    expect(body).toMatchObject({ categoryId: null, toAccountId: eur.id, destAmount: '9.2' });
+    expect(body).toMatchObject({ categoryId: null, subcategoryId: null, toAccountId: eur.id, destAmount: '9.2' });
   });
 
   it('ignores a leftover destAmount once currencies match', () => {

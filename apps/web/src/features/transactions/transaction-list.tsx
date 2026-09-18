@@ -10,6 +10,7 @@ import { useCurrencyCodes } from '@/features/currencies/queries';
 import { formatMoney } from '@/lib/money';
 import { transactionTypeColor } from '@/lib/money-colors';
 import { cn } from '@/lib/utils';
+import { filedUnder } from './filed-under';
 import type { Transaction } from './queries';
 
 interface TransactionListProps {
@@ -101,12 +102,13 @@ function TransactionRow({ transaction, planned, accountsById, categoriesById, on
   const toAccount = transaction.toAccountId ? accountsById.get(transaction.toAccountId) : undefined;
   const isTransfer = transaction.type === 'transfer';
 
-  const category = transaction.categoryId ? categoriesById.get(transaction.categoryId) : undefined;
+  const filed = filedUnder(transaction, (id) => categoriesById.get(id));
   // A transfer is named after where the money ended up — that's what the row is about — with the
-  // account it left showing below it. Everything else is named after its category.
+  // account it left showing below it. Everything else is named after its category, and its
+  // subcategory when it has one.
   const title = isTransfer
     ? (toAccount?.name ?? t('transactions.types.transfer'))
-    : (category?.name ?? t('transactions.noCategory'));
+    : (filed?.name ?? t('transactions.noCategory'));
   // Symbols rather than codes (₴, not UAH or грн.), as in the account list.
   const narrow = { currencyDisplay: 'narrowSymbol' } as const;
   const amount = formatMoney(transaction.amount, currencyCodes.get(transaction.currencyId), i18n.language, narrow);
@@ -118,10 +120,10 @@ function TransactionRow({ transaction, planned, accountsById, categoriesById, on
   const content = (
     <>
       <AppearanceIcon
-        icon={isTransfer ? toAccount?.icon : category?.icon}
-        color={isTransfer ? toAccount?.color : category?.color}
+        icon={isTransfer ? toAccount?.icon : filed?.icon}
+        color={isTransfer ? toAccount?.color : filed?.color}
         fallbackIcon={isTransfer ? 'wallet' : undefined}
-        placeholder={isTransfer ? (toAccount ? undefined : 'transfer') : category ? undefined : 'none'}
+        placeholder={isTransfer ? (toAccount ? undefined : 'transfer') : filed ? undefined : 'none'}
         className="mt-0.5"
       />
       <div className="min-w-0 flex-1">

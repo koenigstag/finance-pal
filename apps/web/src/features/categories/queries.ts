@@ -27,7 +27,15 @@ export function useSaveCategory(groupId: string) {
       }
       return unwrap(api.categories.update({ params: { groupId, categoryId: input.categoryId }, body: input.body }), 200);
     },
-    onSuccess: () => queryClient.invalidateQueries({ queryKey: queryKeys.categories(groupId) }),
+    onSuccess: async (_, input) => {
+      await queryClient.invalidateQueries({ queryKey: queryKeys.categories(groupId) });
+      // Moving a category re-files its transactions on the server, since a transaction carries
+      // the top-level category beside the subcategory. Refetching after any edit is simpler than
+      // telling a move from a rename, and costs a page.
+      if (input.categoryId !== undefined) {
+        await queryClient.invalidateQueries({ queryKey: queryKeys.transactions(groupId) });
+      }
+    },
   });
 }
 
@@ -84,6 +92,13 @@ export function categoryOptions(categories: Category[], type: Category['type']):
   };
   visit(null, 0);
   return result;
+}
+
+/** One level of the tree: the categories of a type directly under parentId (null: the top level). */
+export function categoriesUnder(categories: Category[], type: Category['type'], parentId: string | null): Category[] {
+  return categories
+    .filter((category) => category.type === type && category.parentId === parentId)
+    .sort((a, b) => a.sortOrder - b.sortOrder || a.name.localeCompare(b.name));
 }
 
 /** The sortOrder that puts a new (or moved) category after its future siblings. */

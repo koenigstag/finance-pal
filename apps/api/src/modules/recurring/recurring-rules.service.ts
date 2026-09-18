@@ -12,7 +12,7 @@ import {
 } from '@ft/shared-contracts';
 import { AbilityFactory } from '../_core/authz/ability.factory';
 import { RealtimeEmitterService } from '../realtime/realtime-emitter.service';
-import { TransactionValidator, type TransactionShape } from '../ledger/transactions/transaction-validator';
+import { TransactionValidator, keptSubcategory, type TransactionShape } from '../ledger/transactions/transaction-validator';
 import { materializeOccurrences, regenerateOccurrences, removeFutureOccurrences } from './occurrence-materializer';
 
 // The shared string unions, not api-database's TypeORM enums — see the identical comment on
@@ -23,6 +23,7 @@ export interface CreateRecurringRuleInput {
   currencyId: number;
   accountId: string;
   categoryId?: string | null;
+  subcategoryId?: string | null;
   toAccountId?: string | null;
   note?: string | null;
   intervalUnit: (typeof RECURRENCE_UNITS)[number];
@@ -39,6 +40,7 @@ function shapeOf(rule: RecurringRule): TransactionShape {
     type: rule.type,
     accountId: rule.accountId,
     categoryId: rule.categoryId,
+    subcategoryId: rule.subcategoryId,
     toAccountId: rule.toAccountId,
     amount: rule.amount,
     destAmount: null,
@@ -54,6 +56,7 @@ function occurrencesAffected(before: RecurringRule, after: RecurringRule): boole
     before.currencyId !== after.currencyId ||
     before.accountId !== after.accountId ||
     before.categoryId !== after.categoryId ||
+    before.subcategoryId !== after.subcategoryId ||
     before.toAccountId !== after.toAccountId ||
     before.note !== after.note ||
     before.intervalUnit !== after.intervalUnit ||
@@ -114,6 +117,7 @@ export class RecurringRulesService {
       currencyId: input.currencyId,
       accountId: input.accountId,
       categoryId: input.categoryId ?? null,
+      subcategoryId: input.subcategoryId ?? null,
       toAccountId: input.toAccountId ?? null,
       note: input.note ?? null,
       intervalUnit: input.intervalUnit as RecurrenceUnit,
@@ -126,8 +130,9 @@ export class RecurringRulesService {
       createdBy: userId,
     });
     // Before the insert: the table's own check constraints and group trigger would reject bad
-    // input too, but as a bare 500 instead of a 400/404.
-    await this.validator.assertValid(groupId, shapeOf(rule));
+    // input too, but as a bare 500 instead of a 400/404. The category pair is stored the way the
+    // validator settles it (a subcategory sent as the category lands under its parent).
+    Object.assign(rule, await this.validator.validate(groupId, shapeOf(rule)));
 
     const saved = await this.rules.save(rule);
     await materializeOccurrences(this.rules.manager, saved, new Date());
@@ -141,13 +146,15 @@ export class RecurringRulesService {
     await this.authorize(userId, groupId, 'update', 'RecurringRule');
     const before = await this.findOrFail(groupId, ruleId);
 
+    const categoryId = patch.categoryId !== undefined ? patch.categoryId : before.categoryId;
     const after = this.rules.create({
       ...before,
       type: (patch.type as TransactionType | undefined) ?? before.type,
       amount: patch.amount ?? before.amount,
       currencyId: patch.currencyId ?? before.currencyId,
       accountId: patch.accountId ?? before.accountId,
-      categoryId: patch.categoryId !== undefined ? patch.categoryId : before.categoryId,
+      categoryId,
+      subcategoryId: keptSubcategory(patch, before, categoryId),
       toAccountId: patch.toAccountId !== undefined ? patch.toAccountId : before.toAccountId,
       note: patch.note !== undefined ? patch.note : before.note,
       intervalUnit: (patch.intervalUnit as RecurrenceUnit | undefined) ?? before.intervalUnit,
@@ -157,7 +164,7 @@ export class RecurringRulesService {
       timezone: patch.timezone ?? before.timezone,
       active: patch.active ?? before.active,
     });
-    await this.validator.assertValid(groupId, shapeOf(after));
+    Object.assign(after, await this.validator.validate(groupId, shapeOf(after)));
     await this.rules.save(after);
 
     const manager = this.rules.manager;
