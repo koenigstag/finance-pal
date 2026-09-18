@@ -142,6 +142,7 @@ export const ru: Catalog<typeof en> = {
     subcategoryCount_few: '{{count}} подкатегории',
     subcategoryCount_many: '{{count}} подкатегорий',
     subcategoryCount_other: '{{count}} подкатегории',
+    subcategoriesOf: 'Подкатегории «{{name}}»',
     types: {
       income: 'Доходы',
       expense: 'Расходы',

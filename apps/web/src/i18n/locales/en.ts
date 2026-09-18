@@ -140,6 +140,7 @@ export const en = {
     subcategoryCount_few: '{{count}} subcategories',
     subcategoryCount_many: '{{count}} subcategories',
     subcategoryCount_other: '{{count}} subcategories',
+    subcategoriesOf: 'Subcategories of “{{name}}”',
     types: {
       income: 'Income',
       expense: 'Expense',

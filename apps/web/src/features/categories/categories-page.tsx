@@ -1,4 +1,4 @@
-import { ArrowDownIcon, ArrowUpIcon, PlusIcon, ShapesIcon, type LucideIcon } from 'lucide-react';
+import { ArrowDownIcon, ArrowUpIcon, ChevronDownIcon, PlusIcon, ShapesIcon, type LucideIcon } from 'lucide-react';
 import { useMemo, useState } from 'react';
 import { useTranslation } from 'react-i18next';
 import { useNavigate, useSearchParams } from 'react-router';
@@ -36,6 +36,16 @@ export function CategoriesPage() {
   const navigate = useNavigate();
   const [dialog, setDialog] = useState<DialogState>({ open: false });
   const [sheet, setSheet] = useState<{ open: boolean; category?: Category }>({ open: false });
+  // Parents whose subcategories are showing; each list starts folded away under its parent.
+  const [expanded, setExpanded] = useState<ReadonlySet<string>>(new Set());
+  const toggle = (categoryId: string) =>
+    setExpanded((current) => {
+      const next = new Set(current);
+      if (!next.delete(categoryId)) {
+        next.add(categoryId);
+      }
+      return next;
+    });
 
   // In the URL, so a reload or the back button returns to the same list. Expense by default:
   // it's the list people edit most.
@@ -101,28 +111,48 @@ export function CategoriesPage() {
         </Empty>
       ) : (
         <ul className="divide-y rounded-xl border">
-          {tree.map(({ category, children }) => (
-            <li key={category.id}>
-              <CategoryRow
-                category={category}
-                detail={children.length > 0 ? t('categories.subcategoryCount', { count: children.length }) : undefined}
-                onSelect={() => setSheet({ open: true, category })}
-              />
-              {children.length > 0 && (
-                <ul className="divide-y border-t">
-                  {children.map((child) => (
-                    <li key={child.id}>
-                      <CategoryRow
-                        category={child}
-                        nested
-                        onSelect={() => setSheet({ open: true, category: child })}
-                      />
-                    </li>
-                  ))}
-                </ul>
-              )}
-            </li>
-          ))}
+          {tree.map(({ category, children }) => {
+            const isExpanded = children.length > 0 && expanded.has(category.id);
+            const listId = `subcategories-${category.id}`;
+            return (
+              <li key={category.id}>
+                <div className="flex">
+                  <CategoryRow
+                    category={category}
+                    detail={children.length > 0 ? t('categories.subcategoryCount', { count: children.length }) : undefined}
+                    onSelect={() => setSheet({ open: true, category })}
+                    className="flex-1"
+                  />
+                  {/* Its own button: the row itself opens the category's actions, as every row does. */}
+                  {children.length > 0 && (
+                    <button
+                      type="button"
+                      aria-expanded={isExpanded}
+                      aria-controls={listId}
+                      aria-label={t('categories.subcategoriesOf', { name: category.name })}
+                      className="flex w-12 shrink-0 items-center justify-center text-muted-foreground hover:bg-muted/50"
+                      onClick={() => toggle(category.id)}
+                    >
+                      <ChevronDownIcon className={cn('size-4 transition-transform', isExpanded && 'rotate-180')} />
+                    </button>
+                  )}
+                </div>
+                {isExpanded && (
+                  <ul id={listId} className="divide-y border-t">
+                    {children.map((child) => (
+                      <li key={child.id}>
+                        <CategoryRow
+                          category={child}
+                          nested
+                          onSelect={() => setSheet({ open: true, category: child })}
+                        />
+                      </li>
+                    ))}
+                  </ul>
+                )}
+              </li>
+            );
+          })}
         </ul>
       )}
 
@@ -153,14 +183,19 @@ interface CategoryRowProps {
   nested?: boolean;
   detail?: string;
   onSelect: () => void;
+  className?: string;
 }
 
-function CategoryRow({ category, nested = false, detail, onSelect }: CategoryRowProps) {
+function CategoryRow({ category, nested = false, detail, onSelect, className }: CategoryRowProps) {
   return (
     <button
       type="button"
       // Subcategories line their smaller icon up under the parent's name.
-      className={cn('flex min-h-12 w-full items-center gap-3 px-4 py-2 text-left hover:bg-muted/50', nested && 'pl-[3.75rem]')}
+      className={cn(
+        'flex min-h-12 w-full min-w-0 items-center gap-3 px-4 py-2 text-left hover:bg-muted/50',
+        nested && 'pl-[3.75rem]',
+        className,
+      )}
       onClick={onSelect}
     >
       <AppearanceIcon icon={category.icon} color={category.color} size={nested ? 'sm' : 'md'} />
