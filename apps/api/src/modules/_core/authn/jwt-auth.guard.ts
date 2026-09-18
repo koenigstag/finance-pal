@@ -2,6 +2,7 @@ import { CanActivate, ExecutionContext, Injectable, UnauthorizedException } from
 import { Reflector } from '@nestjs/core';
 import { JwtService } from '@nestjs/jwt';
 import type { Request } from 'express';
+import { apiKeyRouteOf } from './api-key-auth.decorator';
 import { IS_PUBLIC_KEY } from './public.decorator';
 import type { AuthenticatedRequest } from './request-user';
 
@@ -25,6 +26,11 @@ export class JwtAuthGuard implements CanActivate {
       context.getClass(),
     ]);
     if (isPublic) {
+      return true;
+    }
+    // The external API authenticates with API keys instead, in ApiKeyAuthGuard. Skipping here is
+    // what keeps an access token from working there, just as that guard ignores every other route.
+    if (apiKeyRouteOf(this.reflector, context)) {
       return true;
     }
 

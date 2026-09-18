@@ -27,6 +27,14 @@ export interface CreateTransactionInput {
 
 export type UpdateTransactionInput = Partial<CreateTransactionInput>;
 
+// Stored with a transaction the external API records for a request carrying an idempotency key,
+// both as sha256 digests: the key, unique per group, and what the request asked for. See
+// ExternalTransactionsService for how a repeat finds them.
+export interface TransactionIdempotency {
+  key: string;
+  fingerprint: string;
+}
+
 export interface ListTransactionsFilter {
   cursor?: string;
   limit?: number;
@@ -117,7 +125,12 @@ export class TransactionsService {
   }
 
   @Transactional()
-  async create(userId: string, groupId: string, input: CreateTransactionInput): Promise<{ transaction: Transaction; tagIds: string[] }> {
+  async create(
+    userId: string,
+    groupId: string,
+    input: CreateTransactionInput,
+    idempotency?: TransactionIdempotency,
+  ): Promise<{ transaction: Transaction; tagIds: string[] }> {
     await this.authorize(userId, groupId, 'create', 'Transaction');
 
     const merged = {
@@ -150,6 +163,8 @@ export class TransactionsService {
         recurringRuleId: null,
         recurrenceDate: null,
         isCustomized: false,
+        idempotencyKey: idempotency?.key ?? null,
+        idempotencyFingerprint: idempotency?.fingerprint ?? null,
         createdBy: userId,
       }),
     );

@@ -22,3 +22,22 @@ export const signedMoneySchema = z
 export function isPositiveMoney(value: string): boolean {
   return Number(value) > 0;
 }
+
+/**
+ * Turns an amount as a person types it, or as a bank notification prints it, into the money
+ * string ("1 234,5" → "1234.5"), or null if it isn't one. Spaces may group digits and a comma may
+ * be the decimal separator; anything that would take a guess — "1.234" (a thousand, or three
+ * decimals?), or both separators at once — is refused rather than read one way. Money stays a
+ * string end to end; this only normalizes separators.
+ */
+export function parseMoneyInput(input: string): string | null {
+  const normalized = input
+    // \s includes the no-break and narrow no-break spaces locales use for digit grouping.
+    .replace(/\s/g, '')
+    .replace(',', '.')
+    // "12." is a half-typed "12.50"; accept it as 12.
+    .replace(/\.$/, '')
+    // "012" from typing after a leftover zero; keep a single zero before the point ("0.5").
+    .replace(/^0+(?=\d)/, '');
+  return moneySchema.safeParse(normalized).success ? normalized : null;
+}

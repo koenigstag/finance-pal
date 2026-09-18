@@ -13,3 +13,4 @@ export * from './account-target.entity.js';
 export * from './transaction.entity.js';
 export * from './transaction-tag.entity.js';
 export * from './recurring-rule.entity.js';
+export * from './api-key.entity.js';

@@ -11,6 +11,6 @@ import { TransactionsService } from './transactions.service';
   imports: [TypeOrmModule.forFeature([Transaction, TransactionTag, Account, Category, Tag]), AuthzModule, RealtimeModule],
   controllers: [TransactionsController],
   providers: [TransactionsService, TransactionValidator],
-  exports: [TransactionValidator],
+  exports: [TransactionValidator, TransactionsService],
 })
 export class TransactionsModule {}

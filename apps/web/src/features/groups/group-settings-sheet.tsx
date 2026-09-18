@@ -1,16 +1,17 @@
-import { ArrowLeftIcon, ChevronRightIcon, PencilIcon, Trash2Icon, UsersIcon, type LucideIcon } from 'lucide-react';
+import { ArrowLeftIcon, ChevronRightIcon, KeyRoundIcon, PencilIcon, Trash2Icon, UsersIcon, type LucideIcon } from 'lucide-react';
 import { useEffect, useState } from 'react';
 import { useTranslation } from 'react-i18next';
 import { defineAbilityFor } from '@ft/shared-contracts';
 import { Button } from '@/components/ui/button';
 import { Dialog, DialogContent, DialogDescription, DialogHeader, DialogTitle } from '@/components/ui/dialog';
+import { GroupApiKeys } from '@/features/api-keys/group-api-keys';
 import { cn } from '@/lib/utils';
 import { DeleteGroupDialog } from './delete-group-dialog';
 import { GroupDetailsForm } from './group-details-form';
 import { GroupMembers } from './group-members';
 import type { Group } from './queries';
 
-type View = 'menu' | 'details' | 'members';
+type View = 'menu' | 'details' | 'members' | 'api-keys';
 
 interface GroupSettingsSheetProps {
   group?: Group;
@@ -20,8 +21,9 @@ interface GroupSettingsSheetProps {
 
 /**
  * Everything about one group in a single place, opened from the groups sheet: its details, its
- * members, and deleting it. Full screen on phones, a dialog from sm up; the sections open inside
- * it rather than as separate pages, so closing always returns to where the app was.
+ * members, your API keys for it, and deleting it. Full screen on phones, a dialog from sm up; the
+ * sections open inside it rather than as separate pages, so closing always returns to where the
+ * app was.
  */
 export function GroupSettingsSheet({ group, open, onOpenChange }: GroupSettingsSheetProps) {
   const { t } = useTranslation();
@@ -44,6 +46,8 @@ export function GroupSettingsSheet({ group, open, onOpenChange }: GroupSettingsS
     actions.push({ view: 'details', label: t('groups.settings.details'), icon: PencilIcon });
   }
   actions.push({ view: 'members', label: t('groups.settings.members'), icon: UsersIcon });
+  // Every member may have keys; a viewer's only read.
+  actions.push({ view: 'api-keys', label: t('groups.settings.apiKeys'), icon: KeyRoundIcon });
 
   return (
     <>
@@ -60,7 +64,7 @@ export function GroupSettingsSheet({ group, open, onOpenChange }: GroupSettingsS
                   )}
                   <div className="min-w-0 flex-1 text-left">
                     <DialogTitle className="truncate">
-                      {view === 'menu' ? group.name : t(view === 'details' ? 'groups.settings.details' : 'groups.settings.members')}
+                      {view === 'menu' ? group.name : actions.find((action) => action.view === view)?.label}
                     </DialogTitle>
                     <DialogDescription className="truncate">
                       {view === 'menu' ? t(`groups.roles.${group.role}`) : group.name}
@@ -97,8 +101,10 @@ export function GroupSettingsSheet({ group, open, onOpenChange }: GroupSettingsS
                 </div>
               ) : view === 'details' ? (
                 <GroupDetailsForm group={group} onDone={() => setView('menu')} />
-              ) : (
+              ) : view === 'members' ? (
                 <GroupMembers group={group} open={open} />
+              ) : (
+                <GroupApiKeys group={group} open={open} />
               )}
             </>
           )}

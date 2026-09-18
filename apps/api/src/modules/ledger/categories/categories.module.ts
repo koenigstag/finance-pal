@@ -10,5 +10,6 @@ import { CategoriesService } from './categories.service';
   imports: [TypeOrmModule.forFeature([Category, Transaction, RecurringRule]), AuthzModule, RealtimeModule],
   controllers: [CategoriesController],
   providers: [CategoriesService],
+  exports: [CategoriesService],
 })
 export class CategoriesModule {}

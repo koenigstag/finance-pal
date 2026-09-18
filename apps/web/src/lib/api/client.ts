@@ -1,6 +1,7 @@
 import { initClient, tsRestFetchApi, type ApiFetcher, type AppRouter, type InitClientArgs } from '@ts-rest/core';
 import {
   accountsContract,
+  apiKeysContract,
   authContract,
   categoriesContract,
   currenciesContract,
@@ -53,6 +54,7 @@ export const api = {
   categories: clientFor(categoriesContract),
   transactions: clientFor(transactionsContract),
   recurringRules: clientFor(recurringRulesContract),
+  apiKeys: clientFor(apiKeysContract),
 };
 
 type Response = { status: number; body: unknown };
