@@ -1,4 +1,5 @@
 import { ACCOUNT_TYPES } from '@ft/shared-contracts';
+import { StarIcon } from 'lucide-react';
 import { useTranslation } from 'react-i18next';
 import { AppearanceIcon } from '@/components/appearance/appearance-icon';
 import { useCurrencyCodes } from '@/features/currencies/queries';
@@ -87,7 +88,7 @@ export function AccountRows({ accounts, onSelect }: { accounts: Account[]; onSel
 }
 
 function AccountRow({ account, onSelect }: { account: Account; onSelect: (account: Account) => void }) {
-  const { i18n } = useTranslation();
+  const { t, i18n } = useTranslation();
   const currencyCodes = useCurrencyCodes();
   // Symbols rather than codes (₴, not UAH): shorter, and the list is about the amounts.
   const balance = formatMoney(account.balance, currencyCodes.get(account.currencyId), i18n.language, {
@@ -101,7 +102,13 @@ function AccountRow({ account, onSelect }: { account: Account; onSelect: (accoun
       onClick={() => onSelect(account)}
     >
       <AppearanceIcon icon={account.icon} color={account.color} fallbackIcon="wallet" />
-      <p className="min-w-0 flex-1 truncate font-medium">{account.name}</p>
+      <p className="flex min-w-0 flex-1 items-center gap-1.5 font-medium">
+        <span className="truncate">{account.name}</span>
+        {/* Just a marker: favourites are set in the account's sheet. */}
+        {account.isFavourite && (
+          <StarIcon className="size-3.5 shrink-0 fill-amber-400 text-amber-400" aria-label={t('accounts.favourite')} />
+        )}
+      </p>
       <p className={cn('text-right font-medium tabular-nums', signColor(moneySign(account.balance)))}>{balance}</p>
     </button>
   );
