@@ -1,4 +1,3 @@
-import { CheckIcon } from 'lucide-react';
 import { useEffect, useState, type ReactNode } from 'react';
 import { useTranslation } from 'react-i18next';
 import { AppearanceIcon } from '@/components/appearance/appearance-icon';
@@ -226,7 +225,6 @@ function PickerRow({
         {icon}
         <span className="min-w-0 flex-1 truncate font-medium">{label}</span>
         {aside}
-        {selected && <CheckIcon className="size-4 shrink-0 text-primary" />}
       </button>
     </li>
   );
