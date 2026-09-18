@@ -141,6 +141,11 @@ export function TransactionDialog({
   const applyPick = (pick: KindPick) => {
     form.setValue('type', pick.type);
     if (pick.type === 'transfer') {
+      // The source was only a default; if that's where the money goes, it comes from elsewhere.
+      if (pick.toAccountId === form.getValues('accountId')) {
+        const others = accountList.filter((account) => account.id !== pick.toAccountId);
+        form.setValue('accountId', pickDefaultAccountId(others) ?? '');
+      }
       form.setValue('toAccountId', pick.toAccountId, { shouldValidate: form.formState.isSubmitted });
       form.setValue('categoryId', '');
     } else {
@@ -227,8 +232,8 @@ export function TransactionDialog({
         title={t('transactions.new')}
         type={type}
         categories={categoryList}
+        // Every account can be the target here: the source so far is only a default.
         accounts={accountList}
-        fromAccountId={accountId}
         selected={type === 'transfer' ? toAccountId : categoryId}
         onPick={applyPick}
       />
