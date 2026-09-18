@@ -50,10 +50,10 @@ const PSEUDO_ACCOUNT_TYPE = 4;
  *
  * The number is the index of a drawable in the app itself (`icon_14` and so on), which says nothing
  * on its own. Each entry below was read from that drawable, and the comment says what the picture
- * is. Where this app has nothing like it, the nearest in meaning stands in — a burger becomes a
- * pizza, a washing machine becomes water — and a number not listed arrives without an icon rather
- * than a wrong one, which is easily set by hand afterwards. The app has some 400 of them; these are
- * the ones seen in real backups so far.
+ * is. Where this app has nothing like it, the nearest in meaning stands in — a takeaway cup becomes
+ * a mug, a coin purse a wallet — and a number not listed arrives without an icon rather than a
+ * wrong one, which is easily set by hand afterwards. The app has some 400 of them; these are the
+ * ones seen in real backups so far.
  */
 const ICONS: Record<number, string> = {
   1: 'dots-horizontal', // three dots
@@ -77,20 +77,28 @@ const ICONS: Record<number, string> = {
   39: 'card', // two interlocking circles, as on a card
   40: 'card', // a card with a logo
   41: 'chart-candlestick', // stacked blocks of shares
+  51: 'tabler:dental', // Pac-Man, as a mouth: a tooth for the dentist (Tabler's; lucide has none)
   62: 'sofa', // a sofa
   68: 'building', // office buildings
+  75: 'tram-front', // a tram from the front, under its wire
   81: 'wrench', // a wrench
   82: 'globe', // a globe
   85: 'dumbbell', // a dumbbell
+  103: 'coffee', // a takeaway coffee cup
   106: 'phone', // a telephone handset
+  108: 'monitor-play', // a monitor with a play button
   110: 'washing-machine', // a washing machine
   119: 'shopping-cart', // a shopping trolley
   121: 'sandwich', // a burger
   125: 'bag', // a paper bag
   132: 'banknote', // a banknote with a coin
   137: 'percent', // a percentage badge
+  139: 'wand-sparkles', // a star-tipped magic wand and sparkles
+  157: 'bag', // two shopping bags
+  189: 'list-checks', // a checklist
   253: 'hand-heart', // someone having a massage
   266: 'package', // a parcel
+  272: 'warehouse', // a warehouse with a roller door
   285: 'hand-coins', // an open hand
   286: 'handshake', // two hands shaking
   290: 'hand-coins', // a hand holding out a card
@@ -99,11 +107,14 @@ const ICONS: Record<number, string> = {
   298: 'trending-up', // a rising bar chart
   302: 'tags', // price tags
   308: 'inbox', // a page in a tray
+  313: 'send-horizontal', // a send arrow
   324: 'receipt', // a till receipt
   325: 'recycle', // arrows in a circle
   334: 'scissors', // comb and scissors
+  356: 'life-buoy', // a lifebuoy
   370: 'battery-charging', // a battery charging
   373: 'octagon-alert', // a stop sign
+  380: 'car-taxi-front', // a taxi from the front
   385: 'home', // a house
 };
 
