@@ -15,6 +15,7 @@ import { Dialog, DialogContent, DialogDescription, DialogHeader, DialogTitle } f
 import { useCurrencyCodes } from '@/features/currencies/queries';
 import { pickDefaultAccountId } from '@/features/transactions/transaction-form-model';
 import { formatMoney, moneySign } from '@/lib/money';
+import { signColor } from '@/lib/money-colors';
 import { cn } from '@/lib/utils';
 import { FavouriteToggle } from './favourite-toggle';
 import type { Account } from './queries';
@@ -41,6 +42,12 @@ interface ActionItem {
   label: string;
   icon: LucideIcon;
   tone?: string;
+}
+
+// Where a debt stands, by its balance: yours to repay, owed to you, or settled.
+function debtStanding(balance: string): 'owe' | 'owed' | 'settled' {
+  const sign = moneySign(balance);
+  return sign < 0 ? 'owe' : sign > 0 ? 'owed' : 'settled';
 }
 
 /**
@@ -113,9 +120,21 @@ export function AccountActionsSheet({
                 <AppearanceIcon icon={account.icon} color={account.color} fallbackIcon="wallet" size="lg" />
                 <div className="min-w-0 flex-1 text-left">
                   <DialogTitle className="truncate">{account.name}</DialogTitle>
-                  <DialogDescription className="tabular-nums">
-                    {t(`accounts.types.${account.type}`)} ·{' '}
-                    {formatMoney(account.balance, currencyCodes.get(account.currencyId), i18n.language, { currencyDisplay: 'narrowSymbol' })}
+                  {/* What kind of account on one line — for a debt, which way it runs — and what it
+                      holds on the next, colored like the list. */}
+                  <DialogDescription asChild>
+                    <div>
+                      <p>
+                        {account.type === 'debt'
+                          ? t(`accounts.groups.${debtStanding(account.balance)}`)
+                          : t(`accounts.types.${account.type}`)}
+                      </p>
+                      <p className={cn('font-medium tabular-nums', signColor(moneySign(account.balance)))}>
+                        {formatMoney(account.balance, currencyCodes.get(account.currencyId), i18n.language, {
+                          currencyDisplay: 'narrowSymbol',
+                        })}
+                      </p>
+                    </div>
                   </DialogDescription>
                 </div>
                 {canEdit ? (
