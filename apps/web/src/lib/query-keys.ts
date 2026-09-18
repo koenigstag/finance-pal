@@ -22,7 +22,7 @@ export const queryKeys = {
   apiKeys: (groupId: string) => ['group', groupId, 'api-keys'] as const,
 };
 
-function startsWith(key: QueryKey, prefix: QueryKey): boolean {
+export function startsWith(key: QueryKey, prefix: QueryKey): boolean {
   return prefix.every((part, index) => key[index] === part);
 }
 
