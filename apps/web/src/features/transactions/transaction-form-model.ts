@@ -38,6 +38,8 @@ export interface TransactionFormValues {
   toAccountId: string;
   destAmount: string;
   categoryId: string;
+  // One of categoryId's subcategories; cleared whenever the category changes.
+  subcategoryId: string;
   day: string;
   note: string;
 }
@@ -69,6 +71,7 @@ export function transactionFormSchema(accounts: AccountLike[], messages: Transac
       toAccountId: z.string(),
       destAmount: z.string(),
       categoryId: z.string(),
+      subcategoryId: z.string(),
       day: z.string().min(1, messages.required),
       note: z.string().max(1000),
     })
@@ -106,6 +109,7 @@ export function defaultTransactionFormValues(defaults: {
     toAccountId: defaults.toAccountId ?? '',
     destAmount: EMPTY_AMOUNT,
     categoryId: '',
+    subcategoryId: '',
     day: todayInput(defaults.now),
     note: '',
   };
@@ -119,6 +123,7 @@ export function transactionToFormValues(transaction: Transaction): TransactionFo
     toAccountId: transaction.toAccountId ?? '',
     destAmount: transaction.destAmount ?? EMPTY_AMOUNT,
     categoryId: transaction.categoryId ?? '',
+    subcategoryId: transaction.subcategoryId ?? '',
     day: toDayInput(transaction.date),
     note: transaction.note ?? '',
   };
@@ -150,6 +155,8 @@ export function toTransactionBody(
     currencyId: account.currencyId,
     accountId: account.id,
     categoryId: isTransfer ? null : values.categoryId || null,
+    // Only ever with its category: on its own it would say nothing the API could file.
+    subcategoryId: isTransfer || !values.categoryId ? null : values.subcategoryId || null,
     toAccountId: isTransfer ? values.toAccountId : null,
     destAmount: needsDestAmount(values, accounts) ? requireMoney(values.destAmount) : null,
     // The API can't set a note to null; an empty string is how an edit clears it.

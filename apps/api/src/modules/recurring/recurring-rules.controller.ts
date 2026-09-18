@@ -16,6 +16,7 @@ function toRecurringRuleDto(rule: RecurringRule) {
     currencyId: rule.currencyId,
     accountId: rule.accountId,
     categoryId: rule.categoryId,
+    subcategoryId: rule.subcategoryId,
     toAccountId: rule.toAccountId,
     note: rule.note,
     intervalUnit: rule.intervalUnit,

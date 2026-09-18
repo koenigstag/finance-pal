@@ -199,6 +199,7 @@ export function CategoryDialog({
         <DeleteCategoryDialog
           groupId={groupId}
           category={category}
+          parent={categories.find((candidate) => candidate.id === category.parentId)}
           subcategories={subcategories}
           open={confirmingDelete}
           onOpenChange={setConfirmingDelete}

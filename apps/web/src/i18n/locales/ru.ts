@@ -142,6 +142,7 @@ export const ru: Catalog<typeof en> = {
     subcategoryCount_few: '{{count}} подкатегории',
     subcategoryCount_many: '{{count}} подкатегорий',
     subcategoryCount_other: '{{count}} подкатегории',
+    subcategoriesOf: 'Подкатегории «{{name}}»',
     types: {
       income: 'Доходы',
       expense: 'Расходы',
@@ -157,6 +158,7 @@ export const ru: Catalog<typeof en> = {
       subcategories_many: 'Её {{count}} подкатегорий тоже будут удалены: {{names}}.',
       subcategories_other: 'Её {{count}} подкатегории тоже будут удалены: {{names}}.',
       willBeUncategorized: 'Останутся без категории:',
+      willStayInParent: 'Останутся в «{{name}}», без подкатегории:',
       transactions_one: '{{count}} операция',
       transactions_few: '{{count}} операции',
       transactions_many: '{{count}} операций',
@@ -197,6 +199,7 @@ export const ru: Catalog<typeof en> = {
     destAmount: 'Сумма зачисления',
     category: 'Категория',
     noCategory: 'Без категории',
+    subcategory: 'Подкатегория',
     date: 'Дата',
     note: 'Заметка',
     recurring: 'Повторяющаяся',

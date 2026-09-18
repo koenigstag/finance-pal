@@ -81,16 +81,20 @@ export class ImportService {
     }
 
     // 1Money allows two categories of the same name and type (its own default plus one the user
-    // added); here they become one, and both source ids point at it.
+    // added); here they become one, and both source ids point at it. Only among siblings, though:
+    // a subcategory never merges with a top-level category, or with one under another parent.
+    // Parents arrive first, so by the time a subcategory comes up its parent already has an id.
     const categoryIds = new Map<number, string>();
-    const byNameAndType = new Map<string, string>();
+    const bySiblingName = new Map<string, string>();
     for (const parsed of backup.categories) {
-      const key = `${parsed.type}:${parsed.name.toLocaleLowerCase()}`;
-      let id = byNameAndType.get(key);
+      const parentId = parsed.parentSourceId === null ? null : (categoryIds.get(parsed.parentSourceId) ?? null);
+      const key = `${parsed.type}:${parentId ?? ''}:${parsed.name.toLocaleLowerCase()}`;
+      let id = bySiblingName.get(key);
       if (!id) {
         const category = await this.categories.save(
           this.categories.create({
             groupId: group.id,
+            parentId,
             name: parsed.name,
             type: parsed.type as CategoryType,
             icon: parsed.icon,
@@ -102,7 +106,7 @@ export class ImportService {
           }),
         );
         id = category.id;
-        byNameAndType.set(key, id);
+        bySiblingName.set(key, id);
       }
       categoryIds.set(parsed.sourceId, id);
     }
@@ -126,6 +130,7 @@ export class ImportService {
         currencyId: currencyOf.get(parsed.sourceId),
         accountId: accountIds.get(parsed.sourceId),
         categoryId: null,
+        subcategoryId: null,
         toAccountId: null,
         destAmount: null,
         note: OPENING_BALANCE_NOTE,
@@ -144,6 +149,7 @@ export class ImportService {
       if (parsed.date.getTime() > now) {
         planned += 1;
       }
+      const categoryId = parsed.categorySourceId === null ? null : (categoryIds.get(parsed.categorySourceId) ?? null);
       rows.push({
         groupId: group.id,
         type: parsed.type as TransactionType,
@@ -151,7 +157,12 @@ export class ImportService {
         amount: parsed.amount,
         currencyId: currencyOf.get(parsed.accountSourceId),
         accountId,
-        categoryId: parsed.categorySourceId === null ? null : (categoryIds.get(parsed.categorySourceId) ?? null),
+        categoryId,
+        // Never without its category, which the table's own check would refuse.
+        subcategoryId:
+          categoryId === null || parsed.subcategorySourceId === null
+            ? null
+            : (categoryIds.get(parsed.subcategorySourceId) ?? null),
         toAccountId,
         destAmount: parsed.destAmount,
         note: parsed.note,
@@ -167,7 +178,7 @@ export class ImportService {
       groupId: group.id,
       groupName: group.name,
       accounts: accountIds.size,
-      categories: byNameAndType.size,
+      categories: bySiblingName.size,
       transactions: rows.length - openingBalances,
       plannedTransactions: planned,
       openingBalances,

@@ -12,10 +12,10 @@ const MAX_OCCURRENCES_PER_RUN = 400;
 // exists: materialized earlier, edited by the user, or deleted by them to skip it.
 const INSERT_OCCURRENCE_SQL = `
   INSERT INTO transactions (
-    group_id, type, date, amount, currency_id, account_id, category_id, to_account_id, note,
-    recurring_rule_id, recurrence_date, is_customized, created_by
+    group_id, type, date, amount, currency_id, account_id, category_id, subcategory_id, to_account_id,
+    note, recurring_rule_id, recurrence_date, is_customized, created_by
   )
-  VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $3, false, $11)
+  VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $3, false, $12)
   ON CONFLICT (recurring_rule_id, recurrence_date) WHERE recurring_rule_id IS NOT NULL DO NOTHING
   RETURNING id
 `;
@@ -67,6 +67,7 @@ export async function materializeOccurrences(manager: EntityManager, rule: Recur
       rule.currencyId,
       rule.accountId,
       rule.categoryId,
+      rule.subcategoryId,
       rule.toAccountId,
       rule.note,
       rule.id,

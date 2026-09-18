@@ -12,6 +12,7 @@ export function toTransactionDto(transaction: Transaction, tagIds: string[]) {
     currencyId: transaction.currencyId,
     accountId: transaction.accountId,
     categoryId: transaction.categoryId,
+    subcategoryId: transaction.subcategoryId,
     toAccountId: transaction.toAccountId,
     destAmount: transaction.destAmount,
     note: transaction.note,

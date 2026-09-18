@@ -86,6 +86,9 @@ export class CategoriesService {
     }
 
     await this.categories.update({ id: categoryId, groupId }, patch);
+    if (patch.parentId !== undefined && patch.parentId !== category.parentId) {
+      await this.refile(groupId, categoryId, category.parentId, patch.parentId);
+    }
     const updated = await this.findOrFail(groupId, categoryId);
     this.realtime.emitToGroup(groupId, { resourceType: 'Category', resourceId: categoryId, action: 'updated', groupId });
     return updated;
@@ -115,21 +118,26 @@ export class CategoriesService {
     await this.authorize(userId, groupId, 'read', 'Category');
     await this.findOrFail(groupId, categoryId);
     const subcategoryIds = await this.subcategoryIds(groupId, categoryId);
-    const ids = [categoryId, ...subcategoryIds];
 
     // One after another: the request's RLS transaction holds a single connection.
     const now = new Date();
-    const transactionCount = await this.transactionsIn(groupId, ids).andWhere('date <= :now', { now }).getCount();
-    const plannedTransactionCount = await this.transactionsIn(groupId, ids).andWhere('date > :now', { now }).getCount();
-    const recurringRuleCount = await this.recurringRules.count({ where: { groupId, categoryId: In(ids) } });
+    const transactionCount = await this.transactionsIn(groupId, categoryId).andWhere('date <= :now', { now }).getCount();
+    const plannedTransactionCount = await this.transactionsIn(groupId, categoryId).andWhere('date > :now', { now }).getCount();
+    const recurringRuleCount = await this.recurringRules.count({
+      where: [
+        { groupId, categoryId },
+        { groupId, subcategoryId: categoryId },
+      ],
+    });
     return { subcategoryCount: subcategoryIds.length, transactionCount, plannedTransactionCount, recurringRuleCount };
   }
 
   /**
    * Deletes the category and its subcategories. What was filed under them keeps its money and
-   * history: transactions and recurring rules only lose the category. Leaving them pointing at a
-   * deleted row would break them instead — the transaction validator rejects a deleted category,
-   * so they couldn't even be edited any more.
+   * history: transactions and recurring rules only lose the category — or, when a subcategory is
+   * deleted, only the subcategory, staying in its parent. Leaving them pointing at a deleted row
+   * would break them instead — the transaction validator rejects a deleted category, so they
+   * couldn't even be edited any more.
    */
   @Transactional()
   async remove(userId: string, groupId: string, categoryId: string): Promise<Category> {
@@ -139,8 +147,15 @@ export class CategoriesService {
 
     // Plain column updates: a category isn't part of an account balance, and an occurrence whose
     // rule loses the same category stays in step with it, so nothing here counts as customizing.
-    await this.transactions.update({ groupId, categoryId: In(ids), deletedAt: IsNull() }, { categoryId: null });
-    await this.recurringRules.update({ groupId, categoryId: In(ids) }, { categoryId: null });
+    if (category.parentId === null) {
+      // Its subcategories' transactions are filed under its id too, so this reaches them all.
+      const uncategorized = { categoryId: null, subcategoryId: null };
+      await this.transactions.update({ groupId, categoryId, deletedAt: IsNull() }, uncategorized);
+      await this.recurringRules.update({ groupId, categoryId }, uncategorized);
+    } else {
+      await this.transactions.update({ groupId, subcategoryId: categoryId, deletedAt: IsNull() }, { subcategoryId: null });
+      await this.recurringRules.update({ groupId, subcategoryId: categoryId }, { subcategoryId: null });
+    }
     await this.categories.softDelete({ groupId, id: In(ids) });
     this.realtime.emitToGroup(groupId, { resourceType: 'Category', resourceId: categoryId, action: 'deleted', groupId });
     return category;
@@ -164,11 +179,27 @@ export class CategoriesService {
     return children.map((child) => child.id);
   }
 
-  private transactionsIn(groupId: string, categoryIds: string[]) {
+  /**
+   * Keeps what's filed under a category in step with where the category now sits. A row names a
+   * top-level category and, apart from it, a subcategory, so moving a category changes the column
+   * that holds it: at the top level it's the category; under a parent it's the subcategory, with
+   * the parent as the category. That covers moving into a parent, out of one, and between two.
+   */
+  private async refile(groupId: string, categoryId: string, fromParentId: string | null, toParentId: string | null) {
+    const filedUnder = fromParentId === null ? { groupId, categoryId } : { groupId, subcategoryId: categoryId };
+    const filedNow =
+      toParentId === null ? { categoryId, subcategoryId: null } : { categoryId: toParentId, subcategoryId: categoryId };
+    await this.transactions.update(filedUnder, filedNow);
+    await this.recurringRules.update(filedUnder, filedNow);
+  }
+
+  // A category's own column holds its subcategories' transactions as well; a subcategory's are
+  // the ones that name it as the subcategory.
+  private transactionsIn(groupId: string, categoryId: string) {
     return this.transactions
       .createQueryBuilder('transaction')
       .where('transaction.group_id = :groupId', { groupId })
-      .andWhere('transaction.category_id IN (:...categoryIds)', { categoryIds });
+      .andWhere('(transaction.category_id = :categoryId OR transaction.subcategory_id = :categoryId)', { categoryId });
   }
 
   private async findOrFail(groupId: string, categoryId: string): Promise<Category> {

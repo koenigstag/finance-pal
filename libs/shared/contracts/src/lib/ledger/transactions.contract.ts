@@ -16,7 +16,10 @@ export const transactionSchema = z.object({
   amount: moneySchema,
   currencyId: z.number().int(),
   accountId: z.string().uuid(),
+  // Always a top-level category.
   categoryId: z.string().uuid().nullable(),
+  // One of categoryId's subcategories, or null when the transaction is filed under the category itself.
+  subcategoryId: z.string().uuid().nullable(),
   toAccountId: z.string().uuid().nullable(),
   destAmount: moneySchema.nullable(),
   note: z.string().nullable(),
@@ -38,7 +41,12 @@ const createTransactionBodySchema = z.object({
   amount: moneySchema,
   currencyId: z.number().int(),
   accountId: z.string().uuid(),
+  // A top-level category. A subcategory given here instead is filed as that subcategory under its
+  // parent, which is how clients from before subcategoryId picked one.
   categoryId: z.string().uuid().nullable().optional(),
+  // Must be one of categoryId's subcategories. Left out of an update, it stays while the category
+  // does and is cleared when the category changes.
+  subcategoryId: z.string().uuid().nullable().optional(),
   toAccountId: z.string().uuid().nullable().optional(),
   destAmount: moneySchema.nullable().optional(),
   note: z.string().optional(),
@@ -51,6 +59,7 @@ const transactionListQuerySchema = z.object({
   cursor: z.string().optional(),
   limit: z.coerce.number().int().min(1).max(200).optional(),
   accountId: z.string().uuid().optional(),
+  // A category or a subcategory; a category matches its subcategories' transactions as well.
   categoryId: z.string().uuid().optional(),
   tagId: z.string().uuid().optional(),
   type: transactionTypeSchema.optional(),

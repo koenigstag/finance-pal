@@ -21,14 +21,18 @@ type TransactionType = (typeof TRANSACTION_TYPES)[number];
  *       or category type (0 income, 1 expense). `_a_m_b` is the account's opening balance,
  *       `_a_i_i_b` whether it counts toward the total, `_ar` archived, `_co` an ARGB colour and
  *       `_c_i` the currency. `_ty` 4 is the pseudo-account "all accounts", which isn't one.
+ *       `_pi` makes a category a subcategory: it holds the `_id` of the category it sits under,
+ *       which is top-level and of the same type — 1Money nests one level deep, as this app does.
  *   bu  one row per entity holding `_or`, the position the user dragged it to. Accounts carry
  *       their own order in `de._a_o`; for categories this is the only place it exists, numbered
- *       from zero within each type.
+ *       from zero within each type. Subcategories carry on from where their type's top-level
+ *       categories stop, so a subcategory's number only places it among its siblings.
  *   tr  transactions. `_ty` is 0 expense, 1 income, 2 transfer, but it can't be trusted on its
  *       own: 1Money writes lending to a debt account as an expense whose target is that account.
  *       What the target *is* decides. `_da` is epoch milliseconds, `_a_m`/`_d_m` the amounts on
  *       each side, `_co` the note, `_sch` marks a scheduled (future) entry and `_ta` tags, which
- *       this importer ignores because the export never fills them in.
+ *       this importer ignores because the export never fills them in. A transaction filed under
+ *       a subcategory targets the subcategory itself; `_p_id` and `_c_id` stay empty.
  */
 
 // 1Money's internal currency ids. Only the ones seen in the wild are known; anything else has to
@@ -46,10 +50,10 @@ const PSEUDO_ACCOUNT_TYPE = 4;
  *
  * The number is the index of a drawable in the app itself (`icon_14` and so on), which says nothing
  * on its own. Each entry below was read from that drawable, and the comment says what the picture
- * is. Where this app has nothing like it, the nearest in meaning stands in — a burger becomes a
- * pizza, a washing machine becomes water — and a number not listed arrives without an icon rather
- * than a wrong one, which is easily set by hand afterwards. The app has some 400 of them; these are
- * the ones seen in real backups so far.
+ * is. Where this app has nothing like it, the nearest in meaning stands in — a takeaway cup becomes
+ * a mug, a coin purse a wallet — and a number not listed arrives without an icon rather than a
+ * wrong one, which is easily set by hand afterwards. The app has some 400 of them; these are the
+ * ones seen in real backups so far.
  */
 const ICONS: Record<number, string> = {
   1: 'dots-horizontal', // three dots
@@ -73,20 +77,28 @@ const ICONS: Record<number, string> = {
   39: 'card', // two interlocking circles, as on a card
   40: 'card', // a card with a logo
   41: 'chart-candlestick', // stacked blocks of shares
+  51: 'tabler:dental', // Pac-Man, as a mouth: a tooth for the dentist (Tabler's; lucide has none)
   62: 'sofa', // a sofa
   68: 'building', // office buildings
+  75: 'tram-front', // a tram from the front, under its wire
   81: 'wrench', // a wrench
   82: 'globe', // a globe
   85: 'dumbbell', // a dumbbell
+  103: 'coffee', // a takeaway coffee cup
   106: 'phone', // a telephone handset
+  108: 'monitor-play', // a monitor with a play button
   110: 'washing-machine', // a washing machine
   119: 'shopping-cart', // a shopping trolley
   121: 'sandwich', // a burger
   125: 'bag', // a paper bag
   132: 'banknote', // a banknote with a coin
   137: 'percent', // a percentage badge
+  139: 'wand-sparkles', // a star-tipped magic wand and sparkles
+  157: 'bag', // two shopping bags
+  189: 'list-checks', // a checklist
   253: 'hand-heart', // someone having a massage
   266: 'package', // a parcel
+  272: 'warehouse', // a warehouse with a roller door
   285: 'hand-coins', // an open hand
   286: 'handshake', // two hands shaking
   290: 'hand-coins', // a hand holding out a card
@@ -95,11 +107,14 @@ const ICONS: Record<number, string> = {
   298: 'trending-up', // a rising bar chart
   302: 'tags', // price tags
   308: 'inbox', // a page in a tray
+  313: 'send-horizontal', // a send arrow
   324: 'receipt', // a till receipt
   325: 'recycle', // arrows in a circle
   334: 'scissors', // comb and scissors
+  356: 'life-buoy', // a lifebuoy
   370: 'battery-charging', // a battery charging
   373: 'octagon-alert', // a stop sign
+  380: 'car-taxi-front', // a taxi from the front
   385: 'home', // a house
 };
 
@@ -130,8 +145,12 @@ export interface ParsedCategory {
   type: CategoryType;
   color: string | null;
   archived: boolean;
-  // Where it sits in its type's list, as arranged in the app.
+  // Where it sits among its siblings, as arranged in the app.
   sortOrder: number;
+  // The category it's a subcategory of: always a top-level category of the same type from the
+  // same backup. A parent the app couldn't hold it under — missing from the file, of the other
+  // type, or a subcategory itself — leaves this null, and the category stands on its own.
+  parentSourceId: number | null;
 }
 
 export interface ParsedTransaction {
@@ -142,7 +161,10 @@ export interface ParsedTransaction {
   destAmount: string | null;
   accountSourceId: number;
   toAccountSourceId: number | null;
+  // Always a top-level category: one filed under a subcategory names it here as its parent, and
+  // the subcategory itself below.
   categorySourceId: number | null;
+  subcategorySourceId: number | null;
   note: string | null;
   // 1Money's scheduled entries: future-dated, so they arrive as planned transactions.
   scheduled: boolean;
@@ -150,6 +172,8 @@ export interface ParsedTransaction {
 
 export interface ParsedBackup {
   accounts: ParsedAccount[];
+  // Top-level categories first, then subcategories, so every parent is written before anything
+  // that points at it.
   categories: ParsedCategory[];
   // Oldest first, so balances build up in the order they happened.
   transactions: ParsedTransaction[];
@@ -171,6 +195,8 @@ interface EntityRow {
   _a_m_b: string | null;
   _a_i_i_b: number | null;
   _a_o: number | null;
+  // Optional: a file without the column reads as having no subcategories.
+  _pi?: number | null;
 }
 
 interface TransactionRow {
@@ -199,6 +225,8 @@ export function parseOneMoneyBackup(filePath: string, currencyOverrides: Record<
     const order = categoryOrder(db, snapshotId);
     const accounts: ParsedAccount[] = [];
     const categories: ParsedCategory[] = [];
+    // Each subcategory's parent as the file records it, to be checked once every category is known.
+    const recordedParents = new Map<number, number>();
     const unknown = new Map<number, string[]>();
 
     for (const row of entities) {
@@ -216,7 +244,13 @@ export function parseOneMoneyBackup(filePath: string, currencyOverrides: Record<
           archived: row._ar === 1,
           // Anything the app never gave a place goes last rather than first.
           sortOrder: order.get(row._id) ?? UNORDERED,
+          // Settled below.
+          parentSourceId: null,
         });
+        const parentId = row._pi ?? null;
+        if (parentId !== null) {
+          recordedParents.set(row._id, parentId);
+        }
         continue;
       }
       const currencyCode = row._c_i === null ? undefined : currencies[row._c_i];
@@ -240,8 +274,19 @@ export function parseOneMoneyBackup(filePath: string, currencyOverrides: Record<
       });
     }
 
+    // Checked against what the file records rather than what's been settled so far, so the
+    // outcome doesn't depend on the order the rows come in. A parent that doesn't qualify is
+    // dropped: the category keeps its transactions and just sits at the top level.
+    const categoryById = new Map(categories.map((category) => [category.sourceId, category]));
+    for (const category of categories) {
+      const parentId = recordedParents.get(category.sourceId);
+      const parent = parentId === undefined ? undefined : categoryById.get(parentId);
+      if (parent && parent.type === category.type && !recordedParents.has(parent.sourceId)) {
+        category.parentSourceId = parent.sourceId;
+      }
+    }
+
     const accountIds = new Set(accounts.map((account) => account.sourceId));
-    const categoryIds = new Set(categories.map((category) => category.sourceId));
     const rows = db
       .prepare('SELECT * FROM tr WHERE _b_i = ? ORDER BY _da')
       .all(snapshotId) as unknown as TransactionRow[];
@@ -255,8 +300,8 @@ export function parseOneMoneyBackup(filePath: string, currencyOverrides: Record<
         continue;
       }
       const toAccount = row._d_i !== null && accountIds.has(row._d_i) ? row._d_i : null;
-      const category = row._d_i !== null && categoryIds.has(row._d_i) ? row._d_i : null;
       const type: TransactionType = toAccount !== null ? 'transfer' : row._ty === 1 ? 'income' : 'expense';
+      const target = type === 'transfer' || row._d_i === null ? undefined : categoryById.get(row._d_i);
       const destAmount = toAccount !== null ? toAmount(row._d_m) : null;
       transactions.push({
         type,
@@ -267,7 +312,8 @@ export function parseOneMoneyBackup(filePath: string, currencyOverrides: Record<
         destAmount: destAmount && destAmount !== amount ? destAmount : null,
         accountSourceId: row._a_i,
         toAccountSourceId: toAccount,
-        categorySourceId: type === 'transfer' ? null : category,
+        categorySourceId: target ? (target.parentSourceId ?? target.sourceId) : null,
+        subcategorySourceId: target && target.parentSourceId !== null ? target.sourceId : null,
         note: row._co?.trim() || null,
         scheduled: row._sch === 1,
       });
@@ -275,7 +321,9 @@ export function parseOneMoneyBackup(filePath: string, currencyOverrides: Record<
 
     return {
       accounts: accounts.sort((a, b) => a.sortOrder - b.sortOrder),
-      categories: categories.sort((a, b) => a.sortOrder - b.sortOrder),
+      categories: categories.sort(
+        (a, b) => Number(a.parentSourceId !== null) - Number(b.parentSourceId !== null) || a.sortOrder - b.sortOrder,
+      ),
       transactions,
       unknownCurrencies: [...unknown].map(([currencyId, names]) => ({ currencyId, accounts: names })),
     };

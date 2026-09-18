@@ -140,6 +140,7 @@ export const en = {
     subcategoryCount_few: '{{count}} subcategories',
     subcategoryCount_many: '{{count}} subcategories',
     subcategoryCount_other: '{{count}} subcategories',
+    subcategoriesOf: 'Subcategories of “{{name}}”',
     types: {
       income: 'Income',
       expense: 'Expense',
@@ -155,6 +156,7 @@ export const en = {
       subcategories_many: 'Its {{count}} subcategories are deleted too: {{names}}.',
       subcategories_other: 'Its {{count}} subcategories are deleted too: {{names}}.',
       willBeUncategorized: 'These will have no category:',
+      willStayInParent: 'These stay in “{{name}}”, with no subcategory:',
       transactions_one: '{{count}} transaction',
       transactions_few: '{{count}} transactions',
       transactions_many: '{{count}} transactions',
@@ -195,6 +197,7 @@ export const en = {
     destAmount: 'Amount received',
     category: 'Category',
     noCategory: 'No category',
+    subcategory: 'Subcategory',
     date: 'Date',
     note: 'Note',
     recurring: 'Recurring',
