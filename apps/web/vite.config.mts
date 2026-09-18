@@ -50,8 +50,8 @@ export default defineConfig(() => ({
       registerType: 'autoUpdate',
       // Deep links work offline: anything not in the cache falls back to the app shell.
       manifest: {
-        name: 'Finance Tracker',
-        short_name: 'Finance',
+        name: 'FinancePal',
+        short_name: 'FinancePal',
         description: 'Personal and shared budgets: accounts, categories and transactions.',
         start_url: '.',
         scope: '.',

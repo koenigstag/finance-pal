@@ -5,7 +5,7 @@ type Catalog<T> = { [K in keyof T]: T[K] extends string ? string : Catalog<T[K]>
 
 export const ru: Catalog<typeof en> = {
   app: {
-    name: 'Финансовый трекер',
+    name: 'FinancePal',
     tagline: 'Личные и общие бюджеты',
   },
   auth: {
