@@ -1,4 +1,4 @@
-import { ChevronDownIcon, PlusIcon, WalletIcon } from 'lucide-react';
+import { BanknoteIcon, ChevronDownIcon, HandshakeIcon, PlusIcon, SigmaIcon, WalletIcon, type LucideIcon } from 'lucide-react';
 import { useMemo, useState } from 'react';
 import { useTranslation } from 'react-i18next';
 import { useNavigate, useSearchParams } from 'react-router';
@@ -28,6 +28,10 @@ const TAB_TYPES = {
 type AccountsTab = keyof typeof TAB_TYPES;
 
 const TAB_ORDER = ['balance', 'debts', 'total'] as const satisfies readonly AccountsTab[];
+
+// Cash for the money on hand, a handshake for what people owe each other — not the two arrows,
+// which already mean a transfer — and a sum for everything added up.
+const TAB_ICONS: Record<AccountsTab, LucideIcon> = { balance: BanknoteIcon, debts: HandshakeIcon, total: SigmaIcon };
 
 export function AccountsPage() {
   const { t } = useTranslation();
@@ -101,11 +105,15 @@ export function AccountsPage() {
             }
           }}
         >
-          {TAB_ORDER.map((option) => (
-            <ToggleGroupItem key={option} value={option} className="flex-1">
-              {t(`accounts.tabs.${option}`)}
-            </ToggleGroupItem>
-          ))}
+          {TAB_ORDER.map((option) => {
+            const Icon = TAB_ICONS[option];
+            return (
+              <ToggleGroupItem key={option} value={option} className="flex-1">
+                <Icon />
+                {t(`accounts.tabs.${option}`)}
+              </ToggleGroupItem>
+            );
+          })}
         </ToggleGroup>
       </PageHeader>
 
