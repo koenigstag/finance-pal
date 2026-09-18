@@ -108,6 +108,12 @@ export function KindPicker({
               ))
           ) : (
             <>
+              <PickerRow
+                selected={selected === ''}
+                onClick={() => onPick({ type: tab, categoryId: '' })}
+                icon={<AppearanceIcon placeholder="none" />}
+                label={t('transactions.noCategory')}
+              />
               {categoryOptions(categories, tab).map(({ category, depth }) => (
                 <PickerRow
                   key={category.id}
@@ -118,12 +124,6 @@ export function KindPicker({
                   label={category.name}
                 />
               ))}
-              <PickerRow
-                selected={selected === ''}
-                onClick={() => onPick({ type: tab, categoryId: '' })}
-                icon={<AppearanceIcon placeholder="none" />}
-                label={t('transactions.noCategory')}
-              />
             </>
           )}
         </ul>
