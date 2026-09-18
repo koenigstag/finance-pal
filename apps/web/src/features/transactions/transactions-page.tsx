@@ -16,10 +16,12 @@ import { useGroupScope } from '@/features/groups/group-context';
 import { monthRange, parseMonthParam, shiftMonth, toMonthParam } from '@/lib/dates';
 import { capitalizeFirst } from '@/lib/text';
 import { cn } from '@/lib/utils';
-import { useTransactionPages, type Transaction, type TransactionFilters } from './queries';
+import { useRecurringRules, useTransactionPages, type RecurringRule, type Transaction, type TransactionFilters } from './queries';
 import { DeleteTransactionDialog } from './delete-transaction-dialog';
 import { TransactionActionsSheet, type TransactionAction } from './transaction-actions-sheet';
+import { TransactionDateSheet } from './transaction-date-sheet';
 import { TransactionDialog } from './transaction-dialog';
+import { isPlannedDay } from './transaction-form-model';
 import { TransactionList } from './transaction-list';
 import { TransactionFiltersSheet, type TransactionFilterValues } from './transaction-filters-sheet';
 import { useTodayAnchor } from './use-today-anchor';
@@ -40,9 +42,17 @@ export function TransactionsPage() {
   const [params, setParams] = useSearchParams();
   const accounts = useAccounts(group.id);
   const categories = useCategories(group.id);
-  const [dialog, setDialog] = useState<{ open: boolean; transaction?: Transaction; template?: Transaction }>({ open: false });
+  const rules = useRecurringRules(group.id);
+  const rulesById = useMemo(() => new Map((rules.data ?? []).map((rule) => [rule.id, rule])), [rules.data]);
+  const [dialog, setDialog] = useState<{
+    open: boolean;
+    transaction?: Transaction;
+    template?: Transaction;
+    rule?: RecurringRule;
+  }>({ open: false });
   const [sheet, setSheet] = useState<{ open: boolean; transaction?: Transaction }>({ open: false });
   const [deleting, setDeleting] = useState<{ open: boolean; transaction?: Transaction }>({ open: false });
+  const [dating, setDating] = useState<{ open: boolean; transaction?: Transaction }>({ open: false });
   const [filtersOpen, setFiltersOpen] = useState(false);
 
   // Filters live in the URL, so a reload, the back button or a shared link keep them.
@@ -99,11 +109,19 @@ export function TransactionsPage() {
   const canCreate = ability.can('create', 'Transaction');
   const canUpdate = ability.can('update', 'Transaction');
   const canDelete = ability.can('delete', 'Transaction');
+  // The running series a transaction is an occurrence of, if any.
+  const ruleOf = (transaction?: Transaction) =>
+    transaction?.recurringRuleId ? rulesById.get(transaction.recurringRuleId) : undefined;
 
   const onAction = (action: TransactionAction, transaction: Transaction) => {
     setSheet((current) => ({ ...current, open: false }));
     if (action === 'edit') {
-      setDialog({ open: true, transaction });
+      // A planned occurrence stands for its series: editing it edits the series from there on.
+      // Anything recorded today or before is edited as itself, which no series edit ever touches.
+      const rule = isPlannedDay(transaction.date) ? ruleOf(transaction) : undefined;
+      setDialog(rule ? { open: true, rule } : { open: true, transaction });
+    } else if (action === 'date') {
+      setDating({ open: true, transaction });
     } else if (action === 'duplicate') {
       setDialog({ open: true, template: transaction });
     } else {
@@ -185,6 +203,7 @@ export function TransactionsPage() {
               transactions={transactions}
               accounts={accounts.data ?? []}
               categories={categories.data ?? []}
+              rules={rules.data ?? []}
               onSelect={canUpdate || canCreate || canDelete ? (transaction) => setSheet({ open: true, transaction }) : undefined}
             />
             {pages.hasNextPage && (
@@ -207,6 +226,7 @@ export function TransactionsPage() {
 
       <TransactionActionsSheet
         transaction={sheet.transaction}
+        rule={ruleOf(sheet.transaction)}
         accounts={accounts.data ?? []}
         categories={categories.data ?? []}
         open={sheet.open}
@@ -224,9 +244,19 @@ export function TransactionsPage() {
         onOpenChange={(open) => setDeleting((current) => ({ ...current, open }))}
       />
 
+      <TransactionDateSheet
+        groupId={group.id}
+        transaction={dating.transaction}
+        rule={ruleOf(dating.transaction)}
+        accounts={accounts.data ?? []}
+        open={dating.open}
+        onOpenChange={(open) => setDating((current) => ({ ...current, open }))}
+      />
+
       <TransactionDialog
         groupId={group.id}
         transaction={dialog.transaction}
+        rule={dialog.rule}
         template={dialog.template}
         defaultAccountId={accountId}
         open={dialog.open}

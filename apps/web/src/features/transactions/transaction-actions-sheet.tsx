@@ -1,4 +1,13 @@
-import { ArrowRightIcon, ChevronRightIcon, CopyIcon, PencilIcon, RepeatIcon, Trash2Icon, type LucideIcon } from 'lucide-react';
+import {
+  ArrowRightIcon,
+  CalendarDaysIcon,
+  ChevronRightIcon,
+  CopyIcon,
+  PencilIcon,
+  RepeatIcon,
+  Trash2Icon,
+  type LucideIcon,
+} from 'lucide-react';
 import { useTranslation } from 'react-i18next';
 import { AppearanceIcon } from '@/components/appearance/appearance-icon';
 import { Dialog, DialogContent, DialogDescription, DialogHeader, DialogTitle } from '@/components/ui/dialog';
@@ -9,12 +18,15 @@ import { formatMoney } from '@/lib/money';
 import { transactionTypeColor } from '@/lib/money-colors';
 import { cn } from '@/lib/utils';
 import { filedUnder } from './filed-under';
-import type { Transaction } from './queries';
+import type { RecurringRule, Transaction } from './queries';
+import { repeatOf, useRepeatLabel } from './repeat';
 
-export type TransactionAction = 'edit' | 'duplicate' | 'delete';
+export type TransactionAction = 'edit' | 'date' | 'duplicate' | 'delete';
 
 interface TransactionActionsSheetProps {
   transaction?: Transaction;
+  // The series the transaction is an occurrence of, while that one runs.
+  rule?: RecurringRule;
   accounts: Account[];
   categories: Category[];
   open: boolean;
@@ -35,10 +47,12 @@ interface ActionItem {
 
 /**
  * What can be done with a transaction, opened by tapping its row: a bottom sheet on phones (the
- * dialog's small-screen layout), a dialog from sm up.
+ * dialog's small-screen layout), a dialog from sm up. The same actions serve every transaction:
+ * what editing or moving one reaches follows from its date (see TransactionDialog).
  */
 export function TransactionActionsSheet({
   transaction,
+  rule,
   accounts,
   categories,
   open,
@@ -50,10 +64,12 @@ export function TransactionActionsSheet({
 }: TransactionActionsSheetProps) {
   const { t, i18n } = useTranslation();
   const currencyCodes = useCurrencyCodes();
+  const repeatLabel = useRepeatLabel();
 
   const actions: ActionItem[] = [];
   if (canUpdate) {
     actions.push({ action: 'edit', label: t('common.edit'), icon: PencilIcon });
+    actions.push({ action: 'date', label: t('transactions.actions.date'), icon: CalendarDaysIcon });
   }
   if (canCreate) {
     actions.push({
@@ -94,7 +110,7 @@ export function TransactionActionsSheet({
                     <span className="truncate">
                       {isTransfer ? t('transactions.types.transfer') : (filed?.name ?? t('transactions.noCategory'))}
                     </span>
-                    {transaction.recurringRuleId && (
+                    {transaction.recurringRuleId && !rule && (
                       <RepeatIcon className="size-4 shrink-0 text-muted-foreground" aria-label={t('transactions.recurring')} />
                     )}
                   </DialogTitle>
@@ -109,6 +125,12 @@ export function TransactionActionsSheet({
                           year: 'numeric',
                         }).format(new Date(transaction.date))}
                       </p>
+                      {rule && (
+                        <p className="flex min-w-0 items-center gap-1">
+                          <RepeatIcon aria-hidden className="size-3.5 shrink-0" />
+                          <span className="truncate">{repeatLabel(repeatOf(rule))}</span>
+                        </p>
+                      )}
                       <p className="truncate">{account?.name ?? '—'}</p>
                       {/* The other side of a transfer gets its own line too, rather than two
                           half-readable names sharing one. */}

@@ -11,12 +11,15 @@ import { formatMoney } from '@/lib/money';
 import { transactionTypeColor } from '@/lib/money-colors';
 import { cn } from '@/lib/utils';
 import { filedUnder } from './filed-under';
-import type { Transaction } from './queries';
+import type { RecurringRule, Transaction } from './queries';
+import { repeatOf, useRepeatLabel } from './repeat';
 
 interface TransactionListProps {
   transactions: Transaction[];
   accounts: Account[];
   categories: Category[];
+  // The group's running series, for what a planned occurrence says about how often it comes.
+  rules: RecurringRule[];
   // Absent for callers who can't edit: rows then render as plain, non-interactive items.
   onSelect?: (transaction: Transaction) => void;
 }
@@ -24,9 +27,10 @@ interface TransactionListProps {
 /**
  * Transactions grouped under a heading per local calendar day, newest first as the API sorts them.
  * Planned (future-dated) ones come first, dimmed, then a separator counting them, then everything
- * that already happened. A day with both appears on each side of the separator.
+ * that already happened. A day with both appears on each side of the separator. A series shows up
+ * as its next occurrence, planned like any other, with a line saying how often it repeats.
  */
-export function TransactionList({ transactions, accounts, categories, onSelect }: TransactionListProps) {
+export function TransactionList({ transactions, accounts, categories, rules, onSelect }: TransactionListProps) {
   const { t, i18n } = useTranslation();
   const dayFormat = useMemo(
     () => new Intl.DateTimeFormat(i18n.language, { weekday: 'short', day: 'numeric', month: 'long', year: 'numeric' }),
@@ -34,6 +38,7 @@ export function TransactionList({ transactions, accounts, categories, onSelect }
   );
   const accountsById = useMemo(() => new Map(accounts.map((account) => [account.id, account])), [accounts]);
   const categoriesById = useMemo(() => new Map(categories.map((category) => [category.id, category])), [categories]);
+  const rulesById = useMemo(() => new Map(rules.map((rule) => [rule.id, rule])), [rules]);
   // Rendered once per list, not per row: every row compares against the same instant.
   const now = Date.now();
   const planned = transactions.filter((transaction) => new Date(transaction.date).getTime() > now);
@@ -53,6 +58,7 @@ export function TransactionList({ transactions, accounts, categories, onSelect }
                 planned={isPlanned}
                 accountsById={accountsById}
                 categoriesById={categoriesById}
+                rule={transaction.recurringRuleId ? rulesById.get(transaction.recurringRuleId) : undefined}
                 onSelect={onSelect}
               />
             </li>
@@ -92,12 +98,18 @@ interface TransactionRowProps {
   planned: boolean;
   accountsById: Map<string, Account>;
   categoriesById: Map<string, Category>;
+  // The series it's an occurrence of, while that one runs.
+  rule?: RecurringRule;
   onSelect?: (transaction: Transaction) => void;
 }
 
-function TransactionRow({ transaction, planned, accountsById, categoriesById, onSelect }: TransactionRowProps) {
+function TransactionRow({ transaction, planned, accountsById, categoriesById, rule, onSelect }: TransactionRowProps) {
   const { t, i18n } = useTranslation();
   const currencyCodes = useCurrencyCodes();
+  const repeatLabel = useRepeatLabel();
+  // A planned occurrence stands for its series, so it says how often that repeats, on a line of
+  // its own; anything else from a series only carries the mark by its name.
+  const repeats = planned && rule ? repeatLabel(repeatOf(rule)) : null;
   const account = accountsById.get(transaction.accountId);
   const toAccount = transaction.toAccountId ? accountsById.get(transaction.toAccountId) : undefined;
   const isTransfer = transaction.type === 'transfer';
@@ -129,7 +141,7 @@ function TransactionRow({ transaction, planned, accountsById, categoriesById, on
       <div className="min-w-0 flex-1">
         <p className="flex items-center gap-1.5 truncate font-medium">
           {title}
-          {transaction.recurringRuleId && (
+          {transaction.recurringRuleId && !repeats && (
             <RepeatIcon className="size-3.5 shrink-0 text-muted-foreground" aria-label={t('transactions.recurring')} />
           )}
         </p>
@@ -138,6 +150,12 @@ function TransactionRow({ transaction, planned, accountsById, categoriesById, on
           {account?.name ?? '—'}
         </p>
         {transaction.note && <p className="truncate text-sm text-muted-foreground/70 italic">{transaction.note}</p>}
+        {repeats && (
+          <p className="flex min-w-0 items-center gap-1 text-sm text-muted-foreground">
+            <RepeatIcon aria-hidden className="size-3.5 shrink-0" />
+            <span className="truncate">{repeats}</span>
+          </p>
+        )}
         {transaction.isCustomized && (
           <div className="mt-1 flex gap-1">
             <Badge variant="secondary">{t('transactions.customized')}</Badge>
