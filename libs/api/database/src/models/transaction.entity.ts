@@ -33,6 +33,12 @@ import { TransactionType } from './enums.js';
 )
 @Check('chk_transaction_subcategory', `subcategory_id IS NULL OR category_id IS NOT NULL`)
 @Check('chk_transaction_amount_positive', `amount > 0 AND (dest_amount IS NULL OR dest_amount > 0)`)
+// Soft-deleted rows included: a deleted transaction keeps its key, so a repeat can't bring it back.
+@Index('uq_transactions_idempotency_key', ['groupId', 'idempotencyKey'], {
+  unique: true,
+  where: 'idempotency_key IS NOT NULL',
+})
+@Check('chk_transaction_idempotency', `(idempotency_key IS NULL) = (idempotency_fingerprint IS NULL)`)
 export class Transaction {
   @PrimaryColumn({ type: 'uuid', default: () => 'gen_random_uuid()' })
   id!: string;
@@ -114,6 +120,15 @@ export class Transaction {
   // the user edited this occurrence directly, so regenerating the series must leave it alone
   @Column({ type: 'boolean', name: 'is_customized', default: false })
   isCustomized!: boolean;
+
+  // Set on transactions the external API recorded for a request with an idempotency key: the
+  // key's sha256, and one of what the request asked for. A repeat of the request finds this row
+  // instead of recording the money again.
+  @Column({ type: 'text', name: 'idempotency_key', nullable: true })
+  idempotencyKey!: string | null;
+
+  @Column({ type: 'text', name: 'idempotency_fingerprint', nullable: true })
+  idempotencyFingerprint!: string | null;
 
   @Column({ type: 'uuid', name: 'created_by' })
   createdBy!: string;
