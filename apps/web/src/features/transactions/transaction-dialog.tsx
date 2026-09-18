@@ -127,6 +127,23 @@ export function TransactionDialog({
     }
   });
 
+  const amountField = (label: string) => (
+    <Field data-invalid={!!errors.amount}>
+      <FieldLabel htmlFor="transaction-amount">
+        {label} {currencyOf(accountId) && `(${currencyOf(accountId)})`}
+      </FieldLabel>
+      <Input
+        id="transaction-amount"
+        inputMode="decimal"
+        autoComplete="off"
+        aria-invalid={!!errors.amount}
+        onFocus={selectOnFocus}
+        {...form.register('amount')}
+      />
+      <FieldError errors={[errors.amount]} />
+    </Field>
+  );
+
   const accountSelect = (name: 'accountId' | 'toAccountId', id: string) => (
     <Controller
       control={form.control}
@@ -140,8 +157,7 @@ export function TransactionDialog({
             {accountList.map((account) => (
               <SelectItem key={account.id} value={account.id}>
                 <AppearanceIcon icon={account.icon} color={account.color} fallbackIcon="wallet" size="sm" />
-                {account.name}{' '}
-                <span className="text-muted-foreground">{currencyCodes.get(account.currencyId)}</span>
+                {account.name} <span className="text-muted-foreground">{currencyCodes.get(account.currencyId)}</span>
               </SelectItem>
             ))}
           </SelectContent>
@@ -205,36 +221,21 @@ export function TransactionDialog({
                 </ToggleGroup>
               )}
             />
-            <Field data-invalid={!!errors.amount}>
-              <FieldLabel htmlFor="transaction-amount">
-                {/* A transfer has two sides, so its first amount says which one it is. */}
-                {t(type === 'transfer' ? 'transactions.amountWithdrawn' : 'transactions.amount')}{' '}
-                {currencyOf(accountId) && `(${currencyOf(accountId)})`}
-              </FieldLabel>
-              <Input
-                id="transaction-amount"
-                inputMode="decimal"
-                autoComplete="off"
-                aria-invalid={!!errors.amount}
-                onFocus={selectOnFocus}
-                {...form.register('amount')}
-              />
-              <FieldError errors={[errors.amount]} />
-            </Field>
-            <Field data-invalid={!!errors.accountId}>
-              <FieldLabel htmlFor="transaction-account">
-                {t(type === 'transfer' ? 'transactions.fromAccount' : 'transactions.account')}
-              </FieldLabel>
-              {accountSelect('accountId', 'transaction-account')}
-              <FieldError errors={[errors.accountId]} />
-            </Field>
             {type === 'transfer' ? (
-              <>
+              // Two columns, one per side: where it leaves and how much, where it lands and how much.
+              <div className="grid grid-cols-2 gap-x-3 gap-y-4">
+                <Field data-invalid={!!errors.accountId}>
+                  <FieldLabel htmlFor="transaction-account">{t('transactions.fromAccount')}</FieldLabel>
+                  {accountSelect('accountId', 'transaction-account')}
+                  <FieldError errors={[errors.accountId]} />
+                </Field>
                 <Field data-invalid={!!errors.toAccountId}>
                   <FieldLabel htmlFor="transaction-to-account">{t('transactions.toAccount')}</FieldLabel>
                   {accountSelect('toAccountId', 'transaction-to-account')}
                   <FieldError errors={[errors.toAccountId]} />
                 </Field>
+                {amountField(t('transactions.amountWithdrawn'))}
+                {/* The same currency on both sides means the same amount arrives: nothing to ask. */}
                 {showDestAmount && (
                   <Field data-invalid={!!errors.destAmount}>
                     <FieldLabel htmlFor="transaction-dest-amount">
@@ -251,39 +252,47 @@ export function TransactionDialog({
                     <FieldError errors={[errors.destAmount]} />
                   </Field>
                 )}
-              </>
+              </div>
             ) : (
-              <Field>
-                <FieldLabel htmlFor="transaction-category">{t('transactions.category')}</FieldLabel>
-                <Controller
-                  control={form.control}
-                  name="categoryId"
-                  render={({ field }) => (
-                    <Select
-                      value={field.value || NO_CATEGORY}
-                      onValueChange={(value) => field.onChange(value === NO_CATEGORY ? '' : value)}
-                    >
-                      <SelectTrigger id="transaction-category" className="w-full">
-                        <SelectValue />
-                      </SelectTrigger>
-                      <SelectContent>
-                        <SelectItem value={NO_CATEGORY}>
-                          <AppearanceIcon placeholder="none" size="sm" />
-                          {t('transactions.noCategory')}
-                        </SelectItem>
-                        {options.map(({ category, depth }) => (
-                          <SelectItem key={category.id} value={category.id}>
-                            <span className="flex items-center gap-2" style={{ paddingInlineStart: `${depth}rem` }}>
-                              <AppearanceIcon icon={category.icon} color={category.color} size="sm" />
-                              {category.name}
-                            </span>
+              <>
+                {amountField(t('transactions.amount'))}
+                <Field data-invalid={!!errors.accountId}>
+                  <FieldLabel htmlFor="transaction-account">{t('transactions.account')}</FieldLabel>
+                  {accountSelect('accountId', 'transaction-account')}
+                  <FieldError errors={[errors.accountId]} />
+                </Field>
+                <Field>
+                  <FieldLabel htmlFor="transaction-category">{t('transactions.category')}</FieldLabel>
+                  <Controller
+                    control={form.control}
+                    name="categoryId"
+                    render={({ field }) => (
+                      <Select
+                        value={field.value || NO_CATEGORY}
+                        onValueChange={(value) => field.onChange(value === NO_CATEGORY ? '' : value)}
+                      >
+                        <SelectTrigger id="transaction-category" className="w-full">
+                          <SelectValue />
+                        </SelectTrigger>
+                        <SelectContent>
+                          <SelectItem value={NO_CATEGORY}>
+                            <AppearanceIcon placeholder="none" size="sm" />
+                            {t('transactions.noCategory')}
                           </SelectItem>
-                        ))}
-                      </SelectContent>
-                    </Select>
-                  )}
-                />
-              </Field>
+                          {options.map(({ category, depth }) => (
+                            <SelectItem key={category.id} value={category.id}>
+                              <span className="flex items-center gap-2" style={{ paddingInlineStart: `${depth}rem` }}>
+                                <AppearanceIcon icon={category.icon} color={category.color} size="sm" />
+                                {category.name}
+                              </span>
+                            </SelectItem>
+                          ))}
+                        </SelectContent>
+                      </Select>
+                    )}
+                  />
+                </Field>
+              </>
             )}
             <Field data-invalid={!!errors.day}>
               <FieldLabel htmlFor="transaction-day">{t('transactions.date')}</FieldLabel>
