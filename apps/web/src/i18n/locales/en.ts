@@ -90,8 +90,12 @@ export const en = {
       savings: 'Savings',
     },
     debtActions: {
-      get: 'Get money',
-      give: 'Give money',
+      lend: 'Lend',
+      lendMore: 'Lend more',
+      payBack: 'Pay back',
+      gotPaidBack: 'Got paid back',
+      borrow: 'Borrow',
+      borrowMore: 'Borrow more',
     },
     tabs: {
       balance: 'Balance',

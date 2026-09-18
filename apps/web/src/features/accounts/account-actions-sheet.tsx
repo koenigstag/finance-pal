@@ -1,5 +1,7 @@
 import {
+  ArrowDownLeftIcon,
   ArrowLeftRightIcon,
+  ArrowUpRightIcon,
   ChevronRightIcon,
   MinusIcon,
   PencilIcon,
@@ -18,7 +20,8 @@ import { FavouriteToggle } from './favourite-toggle';
 import type { Account } from './queries';
 import { useFavouriteToggle } from './use-favourite-toggle';
 
-export type AccountAction = 'edit' | 'transactions' | 'income' | 'expense' | 'transfer';
+// give and receive are a debt account's: money from you to the person, and from them to you.
+export type AccountAction = 'edit' | 'transactions' | 'income' | 'expense' | 'transfer' | 'give' | 'receive';
 
 interface AccountActionsSheetProps {
   groupId: string;
@@ -71,27 +74,27 @@ export function AccountActionsSheet({
     actions.push({ action: 'edit', label: t('common.edit'), icon: PencilIcon });
   }
   actions.push({ action: 'transactions', label: t('nav.transactions'), icon: ReceiptTextIcon });
-  if (canAddTransactions) {
-    // On a debt account these are money changing hands with a person, not income and spending,
-    // and which way each goes depends on who owes whom: with a negative balance, the debt is
-    // yours, so the two read the other way round.
-    const isDebt = account?.type === 'debt';
-    const owing = isDebt && moneySign(account.balance) < 0;
-    const debtLabel = (kind: 'income' | 'expense') =>
-      t(`accounts.debtActions.${(kind === 'income') !== owing ? 'get' : 'give'}`);
+  if (canAddTransactions && account?.type === 'debt') {
+    // Money changing hands with a person, as a transfer between them and one of your accounts, so
+    // your side moves too. Each action always goes the same way, out from you or in to you, and
+    // only its name follows the balance: out is lending while they owe you, paying back while you
+    // owe them.
+    const sign = moneySign(account.balance);
+    const outLabel = sign > 0 ? 'lendMore' : sign < 0 ? 'payBack' : 'lend';
+    const inLabel = sign > 0 ? 'gotPaidBack' : sign < 0 ? 'borrowMore' : 'borrow';
     actions.push(
+      { action: 'give', label: t(`accounts.debtActions.${outLabel}`), icon: ArrowUpRightIcon, tone: 'text-destructive' },
       {
-        action: 'income',
-        label: isDebt ? debtLabel('income') : t('transactions.types.income'),
-        icon: PlusIcon,
+        action: 'receive',
+        label: t(`accounts.debtActions.${inLabel}`),
+        icon: ArrowDownLeftIcon,
         tone: 'text-emerald-600 dark:text-emerald-400',
       },
-      {
-        action: 'expense',
-        label: isDebt ? debtLabel('expense') : t('transactions.types.expense'),
-        icon: MinusIcon,
-        tone: 'text-destructive',
-      },
+    );
+  } else if (canAddTransactions) {
+    actions.push(
+      { action: 'income', label: t('transactions.types.income'), icon: PlusIcon, tone: 'text-emerald-600 dark:text-emerald-400' },
+      { action: 'expense', label: t('transactions.types.expense'), icon: MinusIcon, tone: 'text-destructive' },
     );
     // Debt and savings accounts are tracked by what's recorded on them directly; transfers belong
     // to regular accounts.

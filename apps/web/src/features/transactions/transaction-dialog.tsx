@@ -45,6 +45,8 @@ interface TransactionDialogProps {
   defaultAccountId?: string;
   // Preselected type for a new transaction, e.g. from an account's Income action. Expense otherwise.
   defaultType?: TransactionFormValues['type'];
+  // For a new transfer: where the money goes, e.g. the person an account's Lend action is for.
+  defaultToAccountId?: string;
   open: boolean;
   onOpenChange: (open: boolean) => void;
 }
@@ -55,6 +57,7 @@ export function TransactionDialog({
   template,
   defaultAccountId,
   defaultType,
+  defaultToAccountId,
   open,
   onOpenChange,
 }: TransactionDialogProps) {
@@ -93,7 +96,7 @@ export function TransactionDialog({
           ? transactionToFormValues(transaction)
           : template
             ? { ...transactionToFormValues(template), day: todayInput() }
-            : defaultTransactionFormValues({ accountId: fallbackAccountId, type: defaultType }),
+            : defaultTransactionFormValues({ accountId: fallbackAccountId, toAccountId: defaultToAccountId, type: defaultType }),
       );
     }
     // Only on opening: re-running when accounts refetch would wipe what's being typed.

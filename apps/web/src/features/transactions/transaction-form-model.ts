@@ -95,6 +95,7 @@ const EMPTY_AMOUNT = '0';
 
 export function defaultTransactionFormValues(defaults: {
   accountId?: string;
+  toAccountId?: string;
   type?: TransactionFormValues['type'];
   now?: Date;
 }): TransactionFormValues {
@@ -102,7 +103,7 @@ export function defaultTransactionFormValues(defaults: {
     type: defaults.type ?? 'expense',
     amount: EMPTY_AMOUNT,
     accountId: defaults.accountId ?? '',
-    toAccountId: '',
+    toAccountId: defaults.toAccountId ?? '',
     destAmount: EMPTY_AMOUNT,
     categoryId: '',
     day: todayInput(defaults.now),

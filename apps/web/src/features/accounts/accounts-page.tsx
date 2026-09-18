@@ -10,6 +10,7 @@ import { ToggleGroup, ToggleGroupItem } from '@/components/ui/toggle-group';
 import { useGroupScope } from '@/features/groups/group-context';
 import type { TransactionFormValues } from '@/features/transactions/transaction-form-model';
 import { TransactionDialog } from '@/features/transactions/transaction-dialog';
+import { pickDefaultAccountId } from '@/features/transactions/transaction-form-model';
 import { AccountActionsSheet, type AccountAction } from './account-actions-sheet';
 import { AccountDialog } from './account-dialog';
 import { AccountList, AccountRows } from './account-list';
@@ -43,6 +44,7 @@ export function AccountsPage() {
   const [newTransaction, setNewTransaction] = useState<{
     open: boolean;
     accountId?: string;
+    toAccountId?: string;
     type?: TransactionFormValues['type'];
   }>({ open: false });
   const canCreate = ability.can('create', 'Account');
@@ -66,6 +68,16 @@ export function AccountsPage() {
       setDialog({ open: true, account });
     } else if (action === 'transactions') {
       void navigate(`/g/${group.id}/transactions?account=${account.id}`);
+    } else if (action === 'give' || action === 'receive') {
+      // Your side of it: the account you would normally pay from, never another person's.
+      const yours = pickDefaultAccountId(
+        (accounts.data ?? []).filter((candidate) => candidate.type !== 'debt' && !candidate.archived),
+      );
+      setNewTransaction(
+        action === 'give'
+          ? { open: true, type: 'transfer', accountId: yours, toAccountId: account.id }
+          : { open: true, type: 'transfer', accountId: account.id, toAccountId: yours },
+      );
     } else {
       setNewTransaction({ open: true, accountId: account.id, type: action });
     }
@@ -151,6 +163,7 @@ export function AccountsPage() {
         groupId={group.id}
         defaultAccountId={newTransaction.accountId}
         defaultType={newTransaction.type}
+        defaultToAccountId={newTransaction.toAccountId}
         open={newTransaction.open}
         onOpenChange={(open) => setNewTransaction((current) => ({ ...current, open }))}
       />

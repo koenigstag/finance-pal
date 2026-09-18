@@ -92,8 +92,12 @@ export const ru: Catalog<typeof en> = {
       savings: 'Накопления',
     },
     debtActions: {
-      get: 'Получить деньги',
-      give: 'Отдать деньги',
+      lend: 'Дать в долг',
+      lendMore: 'Дать ещё в долг',
+      payBack: 'Вернуть долг',
+      gotPaidBack: 'Мне вернули',
+      borrow: 'Взять в долг',
+      borrowMore: 'Взять ещё в долг',
     },
     tabs: {
       balance: 'Баланс',
