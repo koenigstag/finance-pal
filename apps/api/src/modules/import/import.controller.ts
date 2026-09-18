@@ -13,6 +13,7 @@ import {
   UseInterceptors,
 } from '@nestjs/common';
 import { FileInterceptor } from '@nestjs/platform-express';
+import { isValidTimezone } from '@ft/shared-contracts';
 import { CurrentUser, type RequestUser } from '../_core/authn/request-user';
 import { requireUser } from '../_core/authn/require-user';
 import { ImportService, type ImportSummary } from './import.service';
@@ -34,7 +35,7 @@ interface UploadedBackup {
  * Importing from other finance apps. No UI yet: this is meant to be called with the file in hand,
  * e.g.
  *
- *   curl -X POST https://<api>/api/import/1money \
+ *   curl -X POST "https://<api>/api/import/1money?timezone=Europe/Kyiv" \
  *        -H "Authorization: Bearer <access token>" \
  *        -F file=@1Money_BACKUP_17_09_2026
  *
@@ -57,9 +58,14 @@ export class ImportController {
     // Optional "<1Money currency id>:<ISO code>" pairs, for a file using a currency this importer
     // doesn't know yet. The error says which ids are missing.
     @Query('currencies') currencies?: string,
+    // The IANA zone 1Money ran in, which its repeating entries keep to; the app sends the device's.
+    @Query('timezone') timezone?: string,
   ): Promise<ImportSummary> {
     const userId = requireUser(user).id;
     const overrides = parseCurrencyOverrides(currencies);
+    if (timezone !== undefined && !isValidTimezone(timezone)) {
+      throw new BadRequestException(`Unknown time zone "${timezone}"`);
+    }
     const name = groupNameFor(file.originalname);
 
     // node:sqlite opens a path, not a buffer, and the file arrives in memory: park it in a
@@ -69,7 +75,7 @@ export class ImportController {
     try {
       await writeFile(path, file.buffer);
       const backup = parseOneMoneyBackup(path, overrides);
-      return await this.imports.importBackup(userId, name, backup);
+      return await this.imports.importBackup(userId, name, backup, timezone);
     } catch (error) {
       if (error instanceof OneMoneyFormatError) {
         throw new BadRequestException(error.message);

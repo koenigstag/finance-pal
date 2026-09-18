@@ -17,7 +17,7 @@ function backupFile(build: (db: DatabaseSync) => void): string {
     'CREATE TABLE de (_id INTEGER, _b_i INTEGER, _ty INTEGER, _c_i INTEGER, _ic INTEGER, _co INTEGER, _na TEXT, _de TEXT, _ar INTEGER, _a_m_b TEXT, _a_i_i_b INTEGER, _a_o INTEGER, _pi INTEGER)',
   );
   db.exec(
-    'CREATE TABLE tr (_id INTEGER, _b_i INTEGER, _ty INTEGER, _da INTEGER, _sch INTEGER, _a_i INTEGER, _d_i INTEGER, _a_m TEXT, _d_m TEXT, _co TEXT)',
+    'CREATE TABLE tr (_id INTEGER, _b_i INTEGER, _ty INTEGER, _da INTEGER, _sch INTEGER, _a_i INTEGER, _d_i INTEGER, _a_m TEXT, _d_m TEXT, _co TEXT, _rec INTEGER)',
   );
   db.exec('CREATE TABLE bu (_id INTEGER, _b_i INTEGER, _or INTEGER, _mo TEXT)');
   build(db);
@@ -28,8 +28,10 @@ function backupFile(build: (db: DatabaseSync) => void): string {
 // The parent comes last, as in 1Money's own table; only a subcategory has one.
 const entity = (db: DatabaseSync, values: (string | number | null)[], parent: number | null = null) =>
   db.prepare('INSERT INTO de VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)').run(...values, parent);
-const transaction = (db: DatabaseSync, values: (string | number | null)[]) =>
-  db.prepare('INSERT INTO tr VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?)').run(...values);
+// How often it repeats comes last: 0 for a one-off, a code for a scheduled series, 100 plus its
+// number for an occurrence 1Money recorded from one.
+const transaction = (db: DatabaseSync, values: (string | number | null)[], recurrence = 0) =>
+  db.prepare('INSERT INTO tr VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)').run(...values, recurrence);
 
 // One older snapshot and one current, as a real backup carries.
 function sampleBackup(): string {
@@ -81,6 +83,29 @@ function backupWithSubcategories(): string {
       db.prepare('INSERT INTO bu VALUES (?, ?, ?, ?)').run(id, 1, order, null);
     }
     transaction(db, [200, 1, 0, 1_700_000_000_000, 0, 100, 121, '85', '85', null]);
+  });
+}
+
+// A monthly series with two occurrences recorded so far, and scheduled entries repeating in ways
+// that do and don't carry over.
+function backupWithSeries(): string {
+  return backupFile((db) => {
+    db.prepare('INSERT INTO ba VALUES (?, ?, ?, ?)').run(1, 'Export', 1000, 2);
+    entity(db, [100, 1, 0, UAH, 1, null, 'Наличные', null, 0, null, 1, 0]);
+    entity(db, [110, 1, 1, UAH, 14, null, 'Аренда', null, 0, null, null, null]);
+    // type, date, scheduled, from, to, amount, dest amount, note
+    transaction(db, [200, 1, 0, 1_700_000_000_000, 0, 100, 110, '9000', '9000', null], 101);
+    transaction(db, [201, 1, 0, 1_702_600_000_000, 0, 100, 110, '9000', '9000', null], 102);
+    // The series itself, at its next due date: every month.
+    transaction(db, [202, 1, 0, 1_905_000_000_000, 1, 100, 110, '9000', '9000', 'Квартира'], 8);
+    // Every 4 weeks, and every 6 months.
+    transaction(db, [203, 1, 0, 1_905_100_000_000, 1, 100, 110, '100', '100', null], 7);
+    transaction(db, [204, 1, 0, 1_905_200_000_000, 1, 100, 110, '200', '200', null], 11);
+    // Weekdays only, which a series here can't express, and a one-off.
+    transaction(db, [205, 1, 0, 1_905_300_000_000, 1, 100, 110, '300', '300', null], 3);
+    transaction(db, [206, 1, 0, 1_905_400_000_000, 1, 100, 110, '400', '400', null], 0);
+    // A code this importer doesn't know.
+    transaction(db, [207, 1, 0, 1_905_500_000_000, 1, 100, 110, '500', '500', null], 13);
   });
 }
 
@@ -209,6 +234,33 @@ describe('parseOneMoneyBackup', () => {
     expect(transactions[3]).toMatchObject({ toAccountSourceId: 100, destAmount: '420.00' });
     expect(transactions[1]).toMatchObject({ categorySourceId: 110, note: 'хлеб' });
     expect(transactions[4].scheduled).toBe(true);
+  });
+
+  it('reads how a scheduled entry repeats, when a series here can repeat that way', () => {
+    const { transactions } = parseOneMoneyBackup(backupWithSeries());
+
+    expect(transactions.map((item) => [item.amount, item.scheduled, item.recurrence])).toEqual([
+      // Occurrences 1Money already recorded are ordinary transactions.
+      ['9000.00', false, null],
+      ['9000.00', false, null],
+      ['9000.00', true, { unit: 'month', value: 1 }],
+      ['100.00', true, { unit: 'week', value: 4 }],
+      ['200.00', true, { unit: 'month', value: 6 }],
+      ['300.00', true, null],
+      ['400.00', true, null],
+      ['500.00', true, null],
+    ]);
+  });
+
+  it('reads a file without the repeat column as having no series', () => {
+    const path = backupWithSeries();
+    const db = new DatabaseSync(path);
+    db.exec('ALTER TABLE tr DROP COLUMN _rec');
+    db.close();
+
+    const { transactions } = parseOneMoneyBackup(path);
+
+    expect(transactions.every((item) => item.recurrence === null)).toBe(true);
   });
 
   it('reports currencies it has no code for instead of guessing', () => {
