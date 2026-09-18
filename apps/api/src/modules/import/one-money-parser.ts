@@ -1,11 +1,12 @@
 import { DatabaseSync } from 'node:sqlite';
-import type { ACCOUNT_TYPES, CATEGORY_TYPES, TRANSACTION_TYPES } from '@ft/shared-contracts';
+import type { ACCOUNT_TYPES, CATEGORY_TYPES, RECURRENCE_UNITS, TRANSACTION_TYPES } from '@ft/shared-contracts';
 
 // The shared string unions rather than the database's enums: this file reads a file and nothing
 // else, and api-database wants a configured environment the moment it is imported.
 type AccountType = (typeof ACCOUNT_TYPES)[number];
 type CategoryType = (typeof CATEGORY_TYPES)[number];
 type TransactionType = (typeof TRANSACTION_TYPES)[number];
+type RecurrenceUnit = (typeof RECURRENCE_UNITS)[number];
 
 /**
  * Reads a 1Money Android backup (a SQLite file) into plain data, ready to be written as a group.
@@ -33,6 +34,10 @@ type TransactionType = (typeof TRANSACTION_TYPES)[number];
  *       each side, `_co` the note, `_sch` marks a scheduled (future) entry and `_ta` tags, which
  *       this importer ignores because the export never fills them in. A transaction filed under
  *       a subcategory targets the subcategory itself; `_p_id` and `_c_id` stay empty.
+ *       A repeating series is one scheduled row dated at its next due date, with `_rec` saying
+ *       how often it repeats (see RECURRENCES; 0 is a one-off). Each time 1Money records one of its
+ *       occurrences, that becomes an ordinary row with `_rec` at 100 plus its number in the series,
+ *       and the scheduled row moves on to the next date.
  */
 
 // 1Money's internal currency ids. Only the ones seen in the wild are known; anything else has to
@@ -118,6 +123,26 @@ const ICONS: Record<number, string> = {
   385: 'home', // a house
 };
 
+/**
+ * 1Money's repeat options, by the code a scheduled row keeps in `_rec`. Read from the app itself —
+ * the switch that picks each option's label — and borne out by the series in real backups, whose
+ * occurrences sit exactly that far apart. Weekdays (3) and weekends (4) have no equal here, where a
+ * series repeats every so many days, weeks, months or years; a row with one of those, or with a
+ * code not listed, arrives as a single planned transaction rather than one repeating wrongly.
+ */
+const RECURRENCES: Record<number, ParsedRecurrence> = {
+  1: { unit: 'day', value: 1 },
+  2: { unit: 'day', value: 2 },
+  5: { unit: 'week', value: 1 },
+  6: { unit: 'week', value: 2 },
+  7: { unit: 'week', value: 4 },
+  8: { unit: 'month', value: 1 },
+  9: { unit: 'month', value: 2 },
+  10: { unit: 'month', value: 3 },
+  11: { unit: 'month', value: 6 },
+  12: { unit: 'year', value: 1 },
+};
+
 // Where a category with no recorded position ends up: after every category that has one.
 const UNORDERED = 9999;
 
@@ -168,6 +193,14 @@ export interface ParsedTransaction {
   note: string | null;
   // 1Money's scheduled entries: future-dated, so they arrive as planned transactions.
   scheduled: boolean;
+  // How often a scheduled entry repeats, when it does in a way this app can: the date is then the
+  // series' next occurrence. Null for everything else.
+  recurrence: ParsedRecurrence | null;
+}
+
+export interface ParsedRecurrence {
+  unit: RecurrenceUnit;
+  value: number;
 }
 
 export interface ParsedBackup {
@@ -208,6 +241,8 @@ interface TransactionRow {
   _d_m: string | null;
   _co: string | null;
   _sch: number | null;
+  // Optional: a file without the column reads as having no repeating entries.
+  _rec?: number | null;
 }
 
 /**
@@ -316,6 +351,7 @@ export function parseOneMoneyBackup(filePath: string, currencyOverrides: Record<
         subcategorySourceId: target && target.parentSourceId !== null ? target.sourceId : null,
         note: row._co?.trim() || null,
         scheduled: row._sch === 1,
+        recurrence: row._sch === 1 ? (RECURRENCES[row._rec ?? 0] ?? null) : null,
       });
     }
 

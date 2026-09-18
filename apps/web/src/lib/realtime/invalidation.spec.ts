@@ -28,6 +28,7 @@ const cached = {
   categoryUsage: queryKeys.categoryUsage(groupId, itemId),
   otherCategoryUsage: queryKeys.categoryUsage(groupId, otherItemId),
   transactions: [...queryKeys.transactions(groupId), 'list', { type: 'expense' }],
+  recurringRules: queryKeys.recurringRules(groupId),
   apiKeys: queryKeys.apiKeys(groupId),
   otherGroupAccounts: queryKeys.accounts(otherGroupId),
   otherGroupTransactions: [...queryKeys.transactions(otherGroupId), 'list', {}],
@@ -45,14 +46,17 @@ const balances: Cached[] = ['accounts', 'allAccounts', 'accountUsage', 'otherAcc
 const categoryList: Cached[] = ['categories', 'categoryUsage', 'otherCategoryUsage'];
 
 describe('invalidationFor', () => {
-  it.each(['created', 'updated', 'deleted'] as const)('refetches the list and the balances for a transaction %s', (action) => {
-    expect(refetched(event('Transaction', action))).toEqual([...balances, 'transactions']);
-  });
+  it.each(['created', 'updated', 'deleted'] as const)(
+    'refetches the list, the balances and the series for a transaction %s',
+    (action) => {
+      expect(refetched(event('Transaction', action))).toEqual([...balances, 'transactions', 'recurringRules']);
+    },
+  );
 
   it.each(['created', 'updated', 'deleted'] as const)(
-    'refetches what the occurrences touch for a recurring rule %s',
+    'refetches the rules and what their occurrences touch for a recurring rule %s',
     (action) => {
-      expect(refetched(event('RecurringRule', action))).toEqual([...balances, 'transactions']);
+      expect(refetched(event('RecurringRule', action))).toEqual([...balances, 'transactions', 'recurringRules']);
     },
   );
 
@@ -68,6 +72,7 @@ describe('invalidationFor', () => {
       'otherAccountUsage',
       ...categoryList,
       'transactions',
+      'recurringRules',
       'apiKeys',
     ]);
   });
@@ -91,6 +96,7 @@ describe('invalidationFor', () => {
       'categories',
       'otherCategoryUsage',
       'transactions',
+      'recurringRules',
       'apiKeys',
     ]);
   });

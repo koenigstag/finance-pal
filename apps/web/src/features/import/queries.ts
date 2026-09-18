@@ -1,5 +1,6 @@
 import { useMutation, useQueryClient } from '@tanstack/react-query';
 import { API_ORIGIN } from '@/lib/api/api-url';
+import { deviceTimezone } from '@/lib/dates';
 import { ApiError } from '@/lib/api/client';
 import { toApiError } from '@/lib/api/errors';
 import { refreshSession } from '@/lib/api/refresh';
@@ -13,6 +14,8 @@ export interface ImportSummary {
   categories: number;
   transactions: number;
   plannedTransactions: number;
+  // 1Money's repeating entries, carried on as series.
+  recurringRules: number;
   openingBalances: number;
   // Balances as the app shows them (planned transactions left out), for checking against the app
   // the data came from.
@@ -55,7 +58,9 @@ async function postBackup(file: File): Promise<ImportSummary> {
 }
 
 function send(body: FormData, accessToken: string | undefined): Promise<Response> {
-  return fetch(`${API_ORIGIN}/api/import/1money`, {
+  // 1Money's repeating entries fall due at local midnight, so they keep to this device's zone.
+  const query = new URLSearchParams({ timezone: deviceTimezone() });
+  return fetch(`${API_ORIGIN}/api/import/1money?${query}`, {
     method: 'POST',
     headers: accessToken ? { authorization: `Bearer ${accessToken}` } : undefined,
     body,

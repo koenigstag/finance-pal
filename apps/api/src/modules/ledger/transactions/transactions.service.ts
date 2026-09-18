@@ -2,10 +2,11 @@ import { BadRequestException, ForbiddenException, Injectable, NotFoundException 
 import { InjectRepository } from '@nestjs/typeorm';
 import { In, Repository } from 'typeorm';
 import { Transactional } from 'typeorm-transactional';
-import { Tag, Transaction, TransactionTag, TransactionType } from '@ft/api-database';
+import { RecurringRule, Tag, Transaction, TransactionTag, TransactionType } from '@ft/api-database';
 import { TRANSACTION_TYPES, type Action, type AppAbility, type Subject } from '@ft/shared-contracts';
 import { AbilityFactory } from '../../_core/authz/ability.factory';
 import { RealtimeEmitterService } from '../../realtime/realtime-emitter.service';
+import { materializeOccurrences } from '../../recurring/occurrence-materializer';
 import { decodeCursor, encodeCursor } from './cursor.util';
 import { TransactionValidator, keptSubcategory } from './transaction-validator';
 
@@ -61,6 +62,7 @@ export class TransactionsService {
     @InjectRepository(Transaction) private readonly transactions: Repository<Transaction>,
     @InjectRepository(TransactionTag) private readonly transactionTags: Repository<TransactionTag>,
     @InjectRepository(Tag) private readonly tags: Repository<Tag>,
+    @InjectRepository(RecurringRule) private readonly rules: Repository<RecurringRule>,
     private readonly abilities: AbilityFactory,
     private readonly realtime: RealtimeEmitterService,
     private readonly validator: TransactionValidator,
@@ -240,6 +242,7 @@ export class TransactionsService {
         );
       }
     }
+    await this.keepSeriesGoing(existing.recurringRuleId);
 
     const transaction = await this.findOrFail(groupId, transactionId);
     const tagIds = patchedTagIds ?? (await this.loadTagIds([transactionId])).get(transactionId) ?? [];
@@ -258,6 +261,7 @@ export class TransactionsService {
     const transaction = await this.findOrFail(groupId, transactionId);
     const tagIds = (await this.loadTagIds([transactionId])).get(transactionId) ?? [];
     await this.transactions.softDelete({ id: transactionId, groupId });
+    await this.keepSeriesGoing(transaction.recurringRuleId);
     this.realtime.emitToGroup(groupId, {
       resourceType: 'Transaction',
       resourceId: transactionId,
@@ -265,6 +269,21 @@ export class TransactionsService {
       groupId,
     });
     return { transaction, tagIds };
+  }
+
+  /**
+   * A series keeps one planned occurrence. Deleting that one skips it, and moving it to a date
+   * that has passed makes it land early; either way the series has none left, and its next one is
+   * written here, as part of the same change, rather than on the scheduler's next run.
+   */
+  private async keepSeriesGoing(ruleId: string | null): Promise<void> {
+    if (!ruleId) {
+      return;
+    }
+    const rule = await this.rules.findOneBy({ id: ruleId, active: true });
+    if (rule) {
+      await materializeOccurrences(this.rules.manager, rule, new Date());
+    }
   }
 
 

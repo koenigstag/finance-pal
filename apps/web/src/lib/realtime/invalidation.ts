@@ -32,11 +32,12 @@ export function mergeInvalidations(invalidations: Invalidation[]): Invalidation 
 export function invalidationFor({ resourceType, resourceId, action, groupId }: RealtimeEvent): Invalidation {
   switch (resourceType) {
     case 'Transaction':
-      // Money moved: the list, and the balances (and usage counts) under accounts.
-      return refresh(queryKeys.transactions(groupId), queryKeys.accounts(groupId));
+      // Money moved: the list, and the balances (and usage counts) under accounts. A planned
+      // occurrence skipped or moved also changes when its series next produces one.
+      return refresh(queryKeys.transactions(groupId), queryKeys.accounts(groupId), queryKeys.recurringRules(groupId));
     case 'RecurringRule':
-      // One event however many occurrences the rule added or dropped. No list of rules is cached yet.
-      return refresh(queryKeys.transactions(groupId), queryKeys.accounts(groupId));
+      // The rules themselves, and whatever occurrences one added or dropped: one event for them all.
+      return refresh(queryKeys.transactions(groupId), queryKeys.accounts(groupId), queryKeys.recurringRules(groupId));
     case 'Account':
       // A deleted account takes its transactions and recurring rules with it, and its transfers out
       // of other accounts' balances; any other change to one stays among the accounts.

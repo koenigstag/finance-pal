@@ -30,6 +30,11 @@ export function fromDayInput(day: string, previousIso?: string, now = new Date()
   return set(date, { hours: 12, minutes: 0, seconds: 0, milliseconds: 0 }).toISOString();
 }
 
+/** The device's IANA time zone, e.g. "Europe/Kyiv": the one a new series keeps its dates in. */
+export function deviceTimezone(): string {
+  return Intl.DateTimeFormat().resolvedOptions().timeZone;
+}
+
 /** "2026-09" for a month filter in the URL. */
 export function toMonthParam(date: Date): string {
   return format(date, MONTH_FORMAT);

@@ -12,6 +12,7 @@ import { addProfileExchangeRates } from './20260918140000-add-profile-exchange-r
 import { addTransactionSubcategory } from './20260918160000-add-transaction-subcategory.js';
 import { createApiKeys } from './20260918180000-create-api-keys.js';
 import { addTransactionIdempotency } from './20260918190000-add-transaction-idempotency.js';
+import { keepOnePlannedOccurrence } from './20260918200000-keep-one-planned-occurrence.js';
 
 export const migrations: readonly Migration[] = [
   createAuthTables,
@@ -27,6 +28,7 @@ export const migrations: readonly Migration[] = [
   addTransactionSubcategory,
   createApiKeys,
   addTransactionIdempotency,
+  keepOnePlannedOccurrence,
 ];
 
 export * from './migration.interface.js';

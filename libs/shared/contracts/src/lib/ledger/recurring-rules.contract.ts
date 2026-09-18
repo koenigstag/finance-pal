@@ -28,8 +28,13 @@ export const recurringRuleSchema = z.object({
   // Anchor of the series: occurrence k = startsAt + k·interval.
   startsAt: z.string().datetime(),
   // First occurrence not yet materialized as a transaction — an implementation detail of the
-  // scheduler, not "the next payment": that one is the earliest future occurrence in transactions.
+  // scheduler, not "the next payment": that one is nextOccurrence.
   nextRunDate: z.string().datetime(),
+  // A series keeps one occurrence ahead of now as a planned transaction, and writes the next once
+  // that one's date passes. This is when it next produces one: the planned occurrence's scheduled
+  // date (a user may have moved the transaction itself), or the schedule's next date in the
+  // moments before it's written. Null for a paused rule.
+  nextOccurrence: z.string().datetime().nullable(),
   reminderDaysBefore: z.number().int().nullable(),
   timezone: z.string(),
   active: z.boolean(),
@@ -52,9 +57,12 @@ const createRecurringRuleBodySchema = z.object({
   startsAt: z.string().datetime(),
   reminderDaysBefore: z.number().int().min(0).nullable().optional(),
   timezone: timezoneSchema.optional(),
+  // A planned one-off transaction the series takes the place of, usually the one dated startsAt:
+  // it's deleted in the same change, and the series writes its first occurrence instead.
+  replacesTransactionId: z.string().uuid().optional(),
 });
 
-const updateRecurringRuleBodySchema = createRecurringRuleBodySchema.partial().extend({
+const updateRecurringRuleBodySchema = createRecurringRuleBodySchema.omit({ replacesTransactionId: true }).partial().extend({
   // false pauses the series (its not-yet-happened occurrences are removed); true resumes it.
   active: z.boolean().optional(),
 });
@@ -87,7 +95,8 @@ export const recurringRulesContract = c.router(
       pathParams: groupPathParams,
       body: createRecurringRuleBodySchema,
       responses: { 201: recurringRuleSchema, 400: errorSchema, 403: errorSchema, 404: errorSchema },
-      summary: 'Create a recurring rule; its occurrences through the end of next month are created as transactions',
+      summary:
+        'Create a recurring rule; its occurrences up to the first one ahead of now are created as transactions, a start date in the past included',
     },
     get: {
       method: 'GET',
@@ -108,8 +117,11 @@ export const recurringRulesContract = c.router(
       method: 'DELETE',
       path: '/groups/:groupId/recurring-rules/:ruleId',
       pathParams: rulePathParams,
+      // keepPlanned: the series' occurrences still ahead stay, as transactions of their own, rather
+      // than going with it — how a series ends after its planned transaction.
+      query: z.object({ keepPlanned: booleanQuerySchema.optional() }),
       responses: { 200: recurringRuleSchema, 403: errorSchema, 404: errorSchema },
-      summary: 'Soft-delete a rule and remove its future occurrences nobody edited',
+      summary: 'Soft-delete a rule and remove its future occurrences nobody edited, or keep them as one-offs',
     },
   },
   { pathPrefix: '/api' },

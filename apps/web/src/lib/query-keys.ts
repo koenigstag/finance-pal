@@ -20,6 +20,7 @@ export const queryKeys = {
     ['group', groupId, 'categories', categoryId, 'usage'] as const,
   transactions: (groupId: string) => ['group', groupId, 'transactions'] as const,
   apiKeys: (groupId: string) => ['group', groupId, 'api-keys'] as const,
+  recurringRules: (groupId: string) => ['group', groupId, 'recurring-rules'] as const,
 };
 
 export function startsWith(key: QueryKey, prefix: QueryKey): boolean {

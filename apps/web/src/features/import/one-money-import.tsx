@@ -44,6 +44,11 @@ export function OneMoneyImport({ onDone }: { onDone: () => void }) {
                 transactions: summary.transactions,
               })}
             </p>
+            {summary.recurringRules > 0 && (
+              <p className="text-sm text-muted-foreground">
+                {t('data.import.oneMoney.series', { count: summary.recurringRules })}
+              </p>
+            )}
           </div>
           {/* The balances the import came out with, to hold against the app it came from. */}
           <ul className="flex flex-col divide-y rounded-xl border">

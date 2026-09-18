@@ -7,7 +7,6 @@ import {
   differenceInCalendarDays,
   differenceInCalendarMonths,
   differenceInCalendarYears,
-  endOfMonth,
   startOfDay,
 } from 'date-fns';
 import type { RECURRENCE_UNITS } from '@ft/shared-contracts';
@@ -84,15 +83,12 @@ export function firstIndexAtOrAfter(schedule: Schedule, bound: Date): number {
   return k;
 }
 
-/** Last instant occurrences are materialized up to: the end of next calendar month, in the zone. */
-export function horizonEnd(now: Date, timezone: string): Date {
-  return new Date(endOfMonth(addMonths(new TZDate(now, timezone), 1)).getTime());
+/** The first occurrence at or after `bound`. */
+export function firstOccurrenceAtOrAfter(schedule: Schedule, bound: Date): Date {
+  return occurrenceAt(schedule, firstIndexAtOrAfter(schedule, bound));
 }
 
-/**
- * Occurrences before this are skipped, not backfilled. Start of today rather than `now`, so a
- * rule created this afternoon with today's date still gets today's occurrence.
- */
-export function gapCutoff(now: Date, timezone: string): Date {
+/** Midnight at the start of `now`'s calendar day in the zone. */
+export function startOfLocalDay(now: Date, timezone: string): Date {
   return new Date(startOfDay(new TZDate(now, timezone)).getTime());
 }
