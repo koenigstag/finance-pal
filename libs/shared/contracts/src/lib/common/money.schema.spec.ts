@@ -7,8 +7,8 @@ describe('parseMoneyInput', () => {
     ['12,50', '12.50'],
     ['1 234,56', '1234.56'],
     // The no-break and narrow no-break spaces locales group digits with.
-    ['1 234.5', '1234.5'],
-    ['1 234', '1234'],
+    ['1\u00a0234.5', '1234.5'],
+    ['1\u202f234', '1234'],
     ['12.', '12'],
     [' 7 ', '7'],
     ['012', '12'],

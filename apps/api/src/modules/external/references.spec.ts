@@ -32,7 +32,7 @@ describe('named', () => {
     const items = [account('a', 'Café Card')];
     expect(named(items, '  café card ')).toHaveLength(1);
     // "é" written as "e" plus a combining accent.
-    expect(named(items, 'café card')).toHaveLength(1);
+    expect(named(items, 'cafe\u0301 card')).toHaveLength(1);
   });
 
   it('prefers active items over archived ones of the same name', () => {
