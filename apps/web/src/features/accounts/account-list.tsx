@@ -7,11 +7,13 @@ import { signColor } from '@/lib/money-colors';
 import { cn } from '@/lib/utils';
 import type { Account } from './queries';
 
-// Section order: everyday money first, then what's put aside, then what's owed.
-const GROUP_ORDER = ['regular', 'savings', 'debt'] as const satisfies readonly (typeof ACCOUNT_TYPES)[number][];
+// Section order: everyday money first, then what's put aside; debts follow, split by who owes whom.
+const GROUP_ORDER = ['regular', 'savings'] as const satisfies readonly (typeof ACCOUNT_TYPES)[number][];
 
-// A debt at zero is a debt settled: still worth keeping, but it has nothing to do with today.
-const isSettledDebt = (account: Account) => account.type === 'debt' && moneySign(account.balance) === 0;
+// A debt account's balance says who owes whom: below zero the debt is yours, above it someone owes
+// you, and at zero it is settled — still worth keeping, but it has nothing to do with today.
+const debtsWhere = (accounts: Account[], sign: -1 | 0 | 1) =>
+  accounts.filter((account) => account.type === 'debt' && moneySign(account.balance) === sign);
 
 interface AccountListProps {
   accounts: Account[];
@@ -21,11 +23,10 @@ interface AccountListProps {
 
 /**
  * Accounts with their balances, in a section per account type; empty sections are left out.
- * Settled debts come last, in a section of their own, so the ones still owed stand alone.
+ * Debts come as three: what you owe, what you're owed, and what's settled.
  */
 export function AccountList({ accounts, onSelect }: AccountListProps) {
   const { t } = useTranslation();
-  const settled = accounts.filter(isSettledDebt);
 
   return (
     <div className="flex flex-col gap-4">
@@ -34,14 +35,16 @@ export function AccountList({ accounts, onSelect }: AccountListProps) {
           key={type}
           id={`accounts-${type}`}
           heading={t(`accounts.groups.${type}`)}
-          accounts={accounts.filter((account) => account.type === type && !isSettledDebt(account))}
+          accounts={accounts.filter((account) => account.type === type)}
           onSelect={onSelect}
         />
       ))}
+      <AccountSection id="accounts-owe" heading={t('accounts.groups.owe')} accounts={debtsWhere(accounts, -1)} onSelect={onSelect} />
+      <AccountSection id="accounts-owed" heading={t('accounts.groups.owed')} accounts={debtsWhere(accounts, 1)} onSelect={onSelect} />
       <AccountSection
         id="accounts-settled"
         heading={t('accounts.groups.settled')}
-        accounts={settled}
+        accounts={debtsWhere(accounts, 0)}
         onSelect={onSelect}
       />
     </div>

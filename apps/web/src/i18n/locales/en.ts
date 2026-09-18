@@ -112,6 +112,8 @@ export const en = {
       regular: 'Regular',
       savings: 'Savings',
       debt: 'Debts',
+      owe: 'I owe',
+      owed: 'Owes me',
       settled: 'Finished',
       archived: 'Archived',
     },

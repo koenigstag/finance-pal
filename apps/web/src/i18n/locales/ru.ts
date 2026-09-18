@@ -114,6 +114,8 @@ export const ru: Catalog<typeof en> = {
       regular: 'Обычные',
       savings: 'Накопления',
       debt: 'Долги',
+      owe: 'Я должен',
+      owed: 'Мне должны',
       settled: 'Завершённые',
       archived: 'Архив',
     },
