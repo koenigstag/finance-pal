@@ -21,14 +21,18 @@ type TransactionType = (typeof TRANSACTION_TYPES)[number];
  *       or category type (0 income, 1 expense). `_a_m_b` is the account's opening balance,
  *       `_a_i_i_b` whether it counts toward the total, `_ar` archived, `_co` an ARGB colour and
  *       `_c_i` the currency. `_ty` 4 is the pseudo-account "all accounts", which isn't one.
+ *       `_pi` makes a category a subcategory: it holds the `_id` of the category it sits under,
+ *       which is top-level and of the same type — 1Money nests one level deep, as this app does.
  *   bu  one row per entity holding `_or`, the position the user dragged it to. Accounts carry
  *       their own order in `de._a_o`; for categories this is the only place it exists, numbered
- *       from zero within each type.
+ *       from zero within each type. Subcategories carry on from where their type's top-level
+ *       categories stop, so a subcategory's number only places it among its siblings.
  *   tr  transactions. `_ty` is 0 expense, 1 income, 2 transfer, but it can't be trusted on its
  *       own: 1Money writes lending to a debt account as an expense whose target is that account.
  *       What the target *is* decides. `_da` is epoch milliseconds, `_a_m`/`_d_m` the amounts on
  *       each side, `_co` the note, `_sch` marks a scheduled (future) entry and `_ta` tags, which
- *       this importer ignores because the export never fills them in.
+ *       this importer ignores because the export never fills them in. A transaction filed under
+ *       a subcategory targets the subcategory itself; `_p_id` and `_c_id` stay empty.
  */
 
 // 1Money's internal currency ids. Only the ones seen in the wild are known; anything else has to
@@ -130,8 +134,12 @@ export interface ParsedCategory {
   type: CategoryType;
   color: string | null;
   archived: boolean;
-  // Where it sits in its type's list, as arranged in the app.
+  // Where it sits among its siblings, as arranged in the app.
   sortOrder: number;
+  // The category it's a subcategory of: always a top-level category of the same type from the
+  // same backup. A parent the app couldn't hold it under — missing from the file, of the other
+  // type, or a subcategory itself — leaves this null, and the category stands on its own.
+  parentSourceId: number | null;
 }
 
 export interface ParsedTransaction {
@@ -150,6 +158,8 @@ export interface ParsedTransaction {
 
 export interface ParsedBackup {
   accounts: ParsedAccount[];
+  // Top-level categories first, then subcategories, so every parent is written before anything
+  // that points at it.
   categories: ParsedCategory[];
   // Oldest first, so balances build up in the order they happened.
   transactions: ParsedTransaction[];
@@ -171,6 +181,8 @@ interface EntityRow {
   _a_m_b: string | null;
   _a_i_i_b: number | null;
   _a_o: number | null;
+  // Optional: a file without the column reads as having no subcategories.
+  _pi?: number | null;
 }
 
 interface TransactionRow {
@@ -199,6 +211,8 @@ export function parseOneMoneyBackup(filePath: string, currencyOverrides: Record<
     const order = categoryOrder(db, snapshotId);
     const accounts: ParsedAccount[] = [];
     const categories: ParsedCategory[] = [];
+    // Each subcategory's parent as the file records it, to be checked once every category is known.
+    const recordedParents = new Map<number, number>();
     const unknown = new Map<number, string[]>();
 
     for (const row of entities) {
@@ -216,7 +230,13 @@ export function parseOneMoneyBackup(filePath: string, currencyOverrides: Record<
           archived: row._ar === 1,
           // Anything the app never gave a place goes last rather than first.
           sortOrder: order.get(row._id) ?? UNORDERED,
+          // Settled below.
+          parentSourceId: null,
         });
+        const parentId = row._pi ?? null;
+        if (parentId !== null) {
+          recordedParents.set(row._id, parentId);
+        }
         continue;
       }
       const currencyCode = row._c_i === null ? undefined : currencies[row._c_i];
@@ -238,6 +258,18 @@ export function parseOneMoneyBackup(filePath: string, currencyOverrides: Record<
         sortOrder: row._a_o,
         color: toHexColor(row._co),
       });
+    }
+
+    // Checked against what the file records rather than what's been settled so far, so the
+    // outcome doesn't depend on the order the rows come in. A parent that doesn't qualify is
+    // dropped: the category keeps its transactions and just sits at the top level.
+    const categoryById = new Map(categories.map((category) => [category.sourceId, category]));
+    for (const category of categories) {
+      const parentId = recordedParents.get(category.sourceId);
+      const parent = parentId === undefined ? undefined : categoryById.get(parentId);
+      if (parent && parent.type === category.type && !recordedParents.has(parent.sourceId)) {
+        category.parentSourceId = parent.sourceId;
+      }
     }
 
     const accountIds = new Set(accounts.map((account) => account.sourceId));
@@ -275,7 +307,9 @@ export function parseOneMoneyBackup(filePath: string, currencyOverrides: Record<
 
     return {
       accounts: accounts.sort((a, b) => a.sortOrder - b.sortOrder),
-      categories: categories.sort((a, b) => a.sortOrder - b.sortOrder),
+      categories: categories.sort(
+        (a, b) => Number(a.parentSourceId !== null) - Number(b.parentSourceId !== null) || a.sortOrder - b.sortOrder,
+      ),
       transactions,
       unknownCurrencies: [...unknown].map(([currencyId, names]) => ({ currencyId, accounts: names })),
     };
