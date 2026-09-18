@@ -1,6 +1,9 @@
 import { describe, expect, it } from 'vitest';
 import type { RecurringRule, Transaction } from './queries';
 import {
+  amountFormSchema,
+  amountFromPercentage,
+  balanceBase,
   defaultTransactionFormValues,
   isPlannedDay,
   pickDefaultAccountId,
@@ -20,7 +23,15 @@ const usd2 = { id: '00000000-0000-4000-8000-000000000002', currencyId: 1 };
 const eur = { id: '00000000-0000-4000-8000-000000000003', currencyId: 2 };
 const accounts = [usd, usd2, eur];
 const now = new Date(2026, 8, 17, 15, 30);
-const messages = { required: 'required', amount: 'amount', sameAccount: 'same', repeatCurrency: 'currency', pastNextDate: 'past' };
+const messages = {
+  required: 'required',
+  amount: 'amount',
+  sameAccount: 'same',
+  repeatCurrency: 'currency',
+  pastNextDate: 'past',
+  percentage: 'percentage',
+  percentageAmount: 'percentageAmount',
+};
 
 const values = (overrides: Partial<TransactionFormValues>): TransactionFormValues => ({
   ...defaultTransactionFormValues({ accountId: usd.id, now }),
@@ -69,6 +80,51 @@ describe('transactionFormSchema', () => {
     // A new series may start in the past: what's due since is recorded.
     expect(issues(values({ day: '2026-09-12', repeat: 'month:1' }), { today: '2026-09-17' })).toEqual({});
   });
+
+  it('takes a percentage above 0 and up to 100', () => {
+    expect(issues(values({ percentage: '3,5' }))).toEqual({});
+    expect(issues(values({ percentage: '150' }))).toEqual({ percentage: 'percentage' });
+    expect(issues(values({ percentage: '0' }))).toEqual({ percentage: 'percentage' });
+  });
+
+  it('says a percentage came to nothing rather than asking for an amount', () => {
+    expect(issues(values({ percentage: '3', amount: '0.00' }))).toEqual({ amount: 'percentageAmount' });
+    // Until the percentage itself is right, that's the one thing to fix.
+    expect(issues(values({ percentage: 'x', amount: '0' }))).toEqual({ percentage: 'percentage' });
+  });
+
+  it('takes a base amount above zero beside a percentage, and ignores one without', () => {
+    expect(issues(values({ percentage: '5', percentageBase: '12 000,50' }))).toEqual({});
+    expect(issues(values({ percentage: '5', percentageBase: '0', amount: '0.00' }))).toEqual({ percentageBase: 'amount' });
+    expect(issues(values({ percentage: '5', percentageBase: 'x' }))).toEqual({ percentageBase: 'amount' });
+    expect(issues(values({ percentageBase: 'x' }))).toEqual({});
+  });
+});
+
+describe('amountFormSchema', () => {
+  const sheetIssues = (sides: Partial<TransactionFormValues>, overrides: Partial<TransactionFormValues>) => {
+    const { type, accountId, toAccountId, amount, destAmount, percentage, percentageBase } = values({ ...sides, ...overrides });
+    const result = amountFormSchema({ type, accountId, toAccountId }, accounts, messages).safeParse({
+      amount,
+      destAmount,
+      percentage,
+      percentageBase,
+    });
+    return result.success ? {} : Object.fromEntries(result.error.issues.map((issue) => [issue.path.join('.'), issue.message]));
+  };
+
+  it('checks the figures the way the form does', () => {
+    expect(sheetIssues({}, {})).toEqual({});
+    expect(sheetIssues({}, { amount: '0' })).toEqual({ amount: 'amount' });
+    expect(sheetIssues({}, { percentage: '150' })).toEqual({ percentage: 'percentage' });
+    expect(sheetIssues({}, { percentage: '5', percentageBase: '0', amount: '0.00' })).toEqual({ percentageBase: 'amount' });
+  });
+
+  it('asks for what arrived only across currencies', () => {
+    expect(sheetIssues({ type: 'transfer', toAccountId: usd2.id }, {})).toEqual({});
+    expect(sheetIssues({ type: 'transfer', toAccountId: eur.id }, {})).toEqual({ destAmount: 'amount' });
+    expect(sheetIssues({ type: 'transfer', toAccountId: eur.id }, { destAmount: '9,20' })).toEqual({});
+  });
 });
 
 describe('toTransactionBody', () => {
@@ -84,8 +140,22 @@ describe('toTransactionBody', () => {
       subcategoryId: null,
       toAccountId: null,
       destAmount: null,
+      percentage: null,
+      percentageBase: null,
       note: 'lunch',
     });
+  });
+
+  it('sends the percentage the amount came from, and null once it is cleared', () => {
+    expect(toTransactionBody(values({ percentage: ' 3,5 ' }), accounts, undefined, now).percentage).toBe('3.5');
+    expect(toTransactionBody(values({ percentage: '' }), accounts, undefined, now).percentage).toBeNull();
+  });
+
+  it('sends a base amount only with its percentage', () => {
+    const body = (overrides: Partial<TransactionFormValues>) => toTransactionBody(values(overrides), accounts, undefined, now);
+    expect(body({ percentage: '5', percentageBase: '12 000,5' })).toMatchObject({ percentage: '5', percentageBase: '12000.5' });
+    expect(body({ percentage: '5', percentageBase: ' ' })).toMatchObject({ percentage: '5', percentageBase: null });
+    expect(body({ percentage: '', percentageBase: '12000' })).toMatchObject({ percentage: null, percentageBase: null });
   });
 
   it('sends a subcategory only together with its category', () => {
@@ -288,5 +358,57 @@ describe('pickDefaultAccountId', () => {
     expect(pickDefaultAccountId(list, 'deleted-account')).toBe(usd2.id);
     expect(pickDefaultAccountId(list.map((account) => ({ ...account, isFavourite: false })))).toBe(usd.id);
     expect(pickDefaultAccountId([])).toBeUndefined();
+  });
+});
+
+describe('amountFromPercentage', () => {
+  const card = { id: usd.id, balance: '-10000.00' };
+  const worked = (percentage: string, percentageBase = '') => amountFromPercentage({ percentage, percentageBase }, card, undefined, now);
+
+  it('takes the percentage of the base amount when there is one', () => {
+    expect(worked('5', '12 000,50')).toBe('600.03');
+  });
+
+  it('takes it of the account balance otherwise', () => {
+    expect(worked('3,5')).toBe('350.00');
+    expect(amountFromPercentage({ percentage: '3', percentageBase: '' }, undefined, undefined, now)).toBeNull();
+  });
+
+  it('works nothing out from a wrong percentage or base amount', () => {
+    expect(worked('')).toBeNull();
+    expect(worked('150')).toBeNull();
+    expect(worked('5', 'x')).toBeNull();
+  });
+});
+
+describe('balanceBase', () => {
+  const card = { id: usd.id, balance: '-1030.00' };
+  const charge = {
+    type: 'expense' as const,
+    date: new Date(2026, 8, 1, 9).toISOString(),
+    amount: '30.00',
+    destAmount: null,
+    accountId: usd.id,
+    toAccountId: null,
+  } satisfies Partial<Transaction>;
+
+  it('is the balance as it is for a new transaction', () => {
+    expect(balanceBase(card, undefined, now)).toBe('-1030.00');
+  });
+
+  it('leaves out what the transaction being edited took from the account', () => {
+    expect(balanceBase(card, charge, now)).toBe('-1000.00');
+    expect(balanceBase(card, { ...charge, type: 'transfer', toAccountId: usd2.id }, now)).toBe('-1000.00');
+  });
+
+  it('leaves out what it brought in', () => {
+    expect(balanceBase({ id: usd.id, balance: '530.00' }, { ...charge, type: 'income' }, now)).toBe('500.00');
+    const arrived = { ...charge, type: 'transfer' as const, accountId: eur.id, toAccountId: usd.id, destAmount: '32.10' };
+    expect(balanceBase({ id: usd.id, balance: '532.10' }, arrived, now)).toBe('500.00');
+  });
+
+  it('takes nothing off for a transaction the balance does not hold yet, or holds elsewhere', () => {
+    expect(balanceBase(card, { ...charge, date: new Date(2026, 9, 1).toISOString() }, now)).toBe('-1030.00');
+    expect(balanceBase({ id: usd2.id, balance: '80.00' }, charge, now)).toBe('80.00');
   });
 });

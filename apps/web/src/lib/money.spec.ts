@@ -1,5 +1,34 @@
 import { describe, expect, it } from 'vitest';
-import { convertMoney, formatMoney, isValidAmountInput, moneySign, sumMoney } from './money';
+import {
+  convertMoney,
+  formatMoney,
+  formatPercentage,
+  isValidAmountInput,
+  moneySign,
+  parsePercentageInput,
+  percentOf,
+  sumMoney,
+} from './money';
+
+describe('parsePercentageInput', () => {
+  it.each([
+    ['3', '3'],
+    ['3.5', '3.5'],
+    ['3,5', '3.5'],
+    [' 2.75 ', '2.75'],
+    ['3%', '3'],
+    ['0.0125', '0.0125'],
+    ['05', '5'],
+    ['12.', '12'],
+    ['100', '100'],
+  ])('accepts %j as %j', (input, expected) => {
+    expect(parsePercentageInput(input)).toBe(expected);
+  });
+
+  it.each(['', '0', '0.00', '100.01', '150', '-3', '1.23456', 'abc', '3.5.1'])('rejects %j', (input) => {
+    expect(parsePercentageInput(input)).toBeNull();
+  });
+});
 
 describe('moneySign', () => {
   it.each([
@@ -44,6 +73,16 @@ describe('formatMoney', () => {
   });
 });
 
+describe('formatPercentage', () => {
+  it('writes the figure the locale’s way', () => {
+    expect(formatPercentage('3.5', 'en-US')).toBe('3.5%');
+    expect(formatPercentage('0.0125', 'en-US')).toBe('0.0125%');
+    expect(formatPercentage('100', 'en-US')).toBe('100%');
+    // Russian puts a no-break space before the sign.
+    expect(formatPercentage('3.5', 'ru')).toBe('3,5 %');
+  });
+});
+
 describe('sumMoney', () => {
   it.each([
     [[], '0'],
@@ -68,5 +107,20 @@ describe('convertMoney', () => {
     ['1', '0.004', '0.00'],
   ])('values %j at %j as %j', (amount, rate, expected) => {
     expect(convertMoney(amount, rate)).toBe(expected);
+  });
+});
+
+describe('percentOf', () => {
+  it.each([
+    ['10000.00', '3', '300.00'],
+    ['-1234.00', '3.5', '43.19'],
+    ['-1234', '3.5', '43.19'],
+    ['250.50', '100', '250.50'],
+    ['0.10', '5', '0.01'],
+    ['0.09', '5', '0.00'],
+    ['0', '12', '0.00'],
+    ['1000000000000.00', '0.0001', '1000000.00'],
+  ])('takes %j at %j%% as %j', (amount, percentage, expected) => {
+    expect(percentOf(amount, percentage)).toBe(expected);
   });
 });
