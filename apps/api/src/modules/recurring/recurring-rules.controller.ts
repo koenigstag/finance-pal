@@ -3,7 +3,7 @@ import { TsRestHandler, tsRestHandler } from '@ts-rest/nest';
 import { recurringRulesContract } from '@ft/shared-contracts';
 import { CurrentUser, type RequestUser } from '../_core/authn/request-user';
 import { requireUser } from '../_core/authn/require-user';
-import { toTransactionDto } from '../ledger/transactions/transaction.dto';
+import { toTransactionDto, withoutTrailingZeros } from '../ledger/transactions/transaction.dto';
 import { RecurringRulesService, type RecurringRuleView } from './recurring-rules.service';
 
 function toRecurringRuleDto({ rule, nextOccurrence }: RecurringRuleView) {
@@ -18,6 +18,8 @@ function toRecurringRuleDto({ rule, nextOccurrence }: RecurringRuleView) {
     subcategoryId: rule.subcategoryId,
     toAccountId: rule.toAccountId,
     note: rule.note,
+    percentage: rule.percentage === null ? null : withoutTrailingZeros(rule.percentage),
+    percentageBase: rule.percentageBase,
     intervalUnit: rule.intervalUnit,
     intervalValue: rule.intervalValue,
     startsAt: rule.startsAt.toISOString(),

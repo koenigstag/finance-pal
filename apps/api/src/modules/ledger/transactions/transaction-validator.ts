@@ -53,6 +53,38 @@ export function keptPercentageBase(
 }
 
 /**
+ * When a transaction's percentage of the balance (no base amount) was taken: now, whenever what it
+ * comes from — the percentage or the account — is new or changed, since the client has just worked
+ * it out afresh; otherwise the moment it already had. Taken before the transaction's `date`, the
+ * amount is an estimate, worked out again once that date comes — which only a date still ahead
+ * can be: saved with a date already past, the amount stands as the user saw it. A planned
+ * transaction moved to another future day, or with only its note changed, so stays an estimate.
+ * Null when the amount isn't a percentage of the balance.
+ */
+export function keptPercentageAsOf(
+  existing: { percentage: string | null; accountId: string; percentageAsOf: Date | null } | null,
+  merged: { percentage: string | null; percentageBase: string | null; accountId: string },
+  date: Date,
+  now: Date,
+): Date | null {
+  if (merged.percentage === null || merged.percentageBase !== null) {
+    return null;
+  }
+  let asOf = now;
+  if (
+    existing !== null &&
+    existing.percentageAsOf !== null &&
+    existing.percentage !== null &&
+    // numeric(7,4) reads back padded ("3.5000"): the same percentage may not be the same text.
+    Number(existing.percentage) === Number(merged.percentage) &&
+    existing.accountId === merged.accountId
+  ) {
+    asOf = existing.percentageAsOf;
+  }
+  return asOf.getTime() < date.getTime() && date.getTime() <= now.getTime() ? now : asOf;
+}
+
+/**
  * Checks, in application code, what the database would otherwise reject with a raw error: the
  * check constraints (chk_transaction_sides / chk_transaction_amount_positive /
  * chk_transaction_subcategory and their recurring twins, chk_transaction_percentage /

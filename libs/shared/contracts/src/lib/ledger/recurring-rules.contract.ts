@@ -3,6 +3,7 @@ import { z } from 'zod';
 import { booleanQuerySchema } from '../common/boolean-query.schema.js';
 import { moneySchema } from '../common/money.schema.js';
 import { errorSchema } from '../common/error.schema.js';
+import { percentageSchema } from '../common/percentage.schema.js';
 import { timezoneSchema } from '../common/timezone.schema.js';
 import { transactionSchema, transactionTypeSchema } from './transactions.contract.js';
 
@@ -23,6 +24,11 @@ export const recurringRuleSchema = z.object({
   subcategoryId: z.string().uuid().nullable(),
   toAccountId: z.string().uuid().nullable(),
   note: z.string().nullable(),
+  // As on a transaction. Each occurrence's amount is worked out as this percentage: of
+  // percentageBase if set, the same every time, otherwise of the account's balance on the
+  // occurrence's date. `amount` is then what it came to when the series was saved.
+  percentage: percentageSchema.nullable(),
+  percentageBase: moneySchema.nullable(),
   intervalUnit: recurrenceUnitSchema,
   intervalValue: z.number().int(),
   // Anchor of the series: occurrence k = startsAt + k·interval.
@@ -52,6 +58,9 @@ const createRecurringRuleBodySchema = z.object({
   subcategoryId: z.string().uuid().nullable().optional(),
   toAccountId: z.string().uuid().nullable().optional(),
   note: z.string().nullable().optional(),
+  // Read the same way as on a transaction's body; amount is then what it comes to now.
+  percentage: percentageSchema.nullable().optional(),
+  percentageBase: moneySchema.nullable().optional(),
   intervalUnit: recurrenceUnitSchema,
   intervalValue: z.number().int().min(1).optional(),
   startsAt: z.string().datetime(),

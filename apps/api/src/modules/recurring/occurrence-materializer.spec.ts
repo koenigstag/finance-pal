@@ -7,6 +7,8 @@ interface Occurrence {
   date: Date;
   deleted: boolean;
   customized: boolean;
+  amount?: string;
+  percentageAsOf?: Date | null;
 }
 
 const at = (iso: string) => new Date(iso);
@@ -20,6 +22,8 @@ const days = (list: Occurrence[]) => list.map((row) => row.date.toISOString().sl
 class FakeSeries {
   occurrences: Occurrence[] = [];
   frontier: Date | null = null;
+  // What a percentage comes to, for the balance as of a moment (null for a base amount).
+  percentOf: (asOf: Date | null) => string = () => '0.00';
   readonly manager = { query: (sql: string, params: unknown[]) => this.query(sql, params) } as unknown as EntityManager;
 
   live(): Occurrence[] {
@@ -34,13 +38,24 @@ class FakeSeries {
       const now = params[1] as Date;
       return this.occurrences.filter((row) => !row.deleted && row.date > now && row.recurrenceDate > now).map(() => ({}));
     }
+    if (sql.includes('AS amount')) {
+      // Of the balance as of $2, or (with no table in it) of a base amount.
+      return [{ amount: this.percentOf(sql.includes('FROM transactions') ? (params[1] as Date) : null) }];
+    }
     if (sql.includes('INSERT INTO transactions')) {
       const date = params[2] as Date;
       // The unique index on (recurring_rule_id, recurrence_date), soft-deleted rows included.
       if (this.occurrences.some((row) => row.recurrenceDate.getTime() === date.getTime())) {
         return [];
       }
-      this.occurrences.push({ recurrenceDate: date, date, deleted: false, customized: false });
+      this.occurrences.push({
+        recurrenceDate: date,
+        date,
+        deleted: false,
+        customized: false,
+        amount: params[3] as string,
+        percentageAsOf: params[14] as Date | null,
+      });
       return [{ id: String(this.occurrences.length) }];
     }
     if (sql.includes('UPDATE recurring_rules')) {
@@ -68,6 +83,8 @@ function monthlyRule(startsAt: string): RecurringRule {
     subcategoryId: null,
     toAccountId: null,
     note: null,
+    percentage: null,
+    percentageBase: null,
     intervalUnit: 'month',
     intervalValue: 1,
     startsAt: at(startsAt),
@@ -166,6 +183,52 @@ describe('materializeOccurrences', () => {
     await materializeOccurrences(series.manager, rule, at('2027-03-01T00:00:00Z'));
 
     expect(days(series.live())).toEqual(['2027-02-28', '2027-04-10']);
+  });
+});
+
+describe('materializeOccurrences, for a percentage', () => {
+  const amounts = (list: Occurrence[]) => list.map((row) => [row.amount, row.percentageAsOf?.toISOString() ?? null]);
+
+  it('works dates already past out from the balance on each, and estimates the planned one from now', async () => {
+    const series = new FakeSeries();
+    // The balance grows by 1,000 a month: 3% of it comes to 30 more each time.
+    series.percentOf = (asOf) => (asOf ? `${30 * (asOf.getUTCMonth() + 1)}.00` : 'no base expected');
+    const rule = { ...monthlyRule('2027-01-10T12:00:00Z'), percentage: '3', amount: '1.00' } as RecurringRule;
+    const now = at('2027-03-15T00:00:00Z');
+
+    await materializeOccurrences(series.manager, rule, now);
+
+    expect(amounts(series.live())).toEqual([
+      ['30.00', '2027-01-10T12:00:00.000Z'],
+      ['60.00', '2027-02-10T12:00:00.000Z'],
+      ['90.00', '2027-03-10T12:00:00.000Z'],
+      // Taken of the balance now, before its date: an estimate, worked out again on the day.
+      ['90.00', '2027-03-15T00:00:00.000Z'],
+    ]);
+  });
+
+  it("skips a date already past that comes to nothing, and keeps the series' figure for an estimate of nothing", async () => {
+    const series = new FakeSeries();
+    const rule = { ...monthlyRule('2027-02-10T12:00:00Z'), percentage: '3', amount: '45.00' } as RecurringRule;
+
+    await materializeOccurrences(series.manager, rule, at('2027-03-15T00:00:00Z'));
+
+    expect(days(series.live())).toEqual(['2027-04-10']);
+    expect(amounts(series.live())).toEqual([['45.00', '2027-03-15T00:00:00.000Z']]);
+  });
+
+  it('comes to the same every time of a base amount, with no balance to name', async () => {
+    const series = new FakeSeries();
+    series.percentOf = (asOf) => (asOf ? 'no balance expected' : '600.03');
+    const rule = { ...monthlyRule('2027-02-10T12:00:00Z'), percentage: '5', percentageBase: '12000.50' } as RecurringRule;
+
+    await materializeOccurrences(series.manager, rule, at('2027-03-15T00:00:00Z'));
+
+    expect(amounts(series.live())).toEqual([
+      ['600.03', null],
+      ['600.03', null],
+      ['600.03', null],
+    ]);
   });
 });
 

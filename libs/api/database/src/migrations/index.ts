@@ -15,6 +15,7 @@ import { addTransactionIdempotency } from './20260918190000-add-transaction-idem
 import { keepOnePlannedOccurrence } from './20260918200000-keep-one-planned-occurrence.js';
 import { addTransactionPercentage } from './20260918180000-add-transaction-percentage.js';
 import { addTransactionPercentageBase } from './20260918190000-add-transaction-percentage-base.js';
+import { addPercentageToSeries } from './20260918210000-add-percentage-to-series.js';
 
 export const migrations: readonly Migration[] = [
   createAuthTables,
@@ -36,6 +37,7 @@ export const migrations: readonly Migration[] = [
   // already, they're the ones pending.
   addTransactionPercentage,
   addTransactionPercentageBase,
+  addPercentageToSeries,
 ];
 
 export * from './migration.interface.js';

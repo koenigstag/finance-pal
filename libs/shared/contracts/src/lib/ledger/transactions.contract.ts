@@ -30,6 +30,10 @@ export const transactionSchema = z.object({
   percentage: percentageSchema.nullable(),
   // Only ever beside a percentage.
   percentageBase: moneySchema.nullable(),
+  // For a percentage of the balance: when that balance was. Earlier than `date`, the amount is an
+  // estimate (a planned transaction, or a series' next occurrence) that the API works out again
+  // from the balance on its date once that comes. Set by the API; bodies don't take it.
+  percentageAsOf: z.string().datetime().nullable(),
   note: z.string().nullable(),
   tagIds: z.array(z.string().uuid()),
   // Set on occurrences a recurring rule materialized; null for hand-entered transactions.
