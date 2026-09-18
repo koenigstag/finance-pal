@@ -266,6 +266,7 @@ export const en = {
         step2: 'Choose that file below.',
         step3: 'Everything lands in a new group named after the file: accounts, categories, transactions and planned ones.',
         file: 'Backup file',
+        tooLarge: 'The server turned the file away for its size. It may need a moment to accept larger uploads — try again shortly.',
         submit: 'Import',
         importing: 'Importing…',
         counts: '{{accounts}} accounts, {{categories}} categories, {{transactions}} transactions',

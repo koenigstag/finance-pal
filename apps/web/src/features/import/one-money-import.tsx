@@ -18,14 +18,18 @@ export function OneMoneyImport({ onDone }: { onDone: () => void }) {
   const [file, setFile] = useState<File | null>(null);
   const [summary, setSummary] = useState<ImportSummary | null>(null);
 
+  const error = importBackup.error;
   const message =
-    // The API says what it couldn't read — a currency it has no code for, or a file that isn't a
-    // backup — and that's more use than a generic failure.
-    importBackup.error instanceof ApiError && importBackup.error.status < 500 && importBackup.error.message
-      ? importBackup.error.message
-      : importBackup.isError
-        ? t('errors.generic')
-        : null;
+    // 413 comes from whatever sits in front of the API, in its own words; say it plainly instead.
+    error instanceof ApiError && error.status === 413
+      ? t('data.import.oneMoney.tooLarge')
+      : // The API says what it couldn't read — a currency it has no code for, or a file that isn't
+        // a backup — and that's more use than a generic failure.
+        error instanceof ApiError && error.status < 500 && error.message
+        ? error.message
+        : importBackup.isError
+          ? t('errors.generic')
+          : null;
 
   return (
     <div className="flex flex-1 flex-col gap-4">
