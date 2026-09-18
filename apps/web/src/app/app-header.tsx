@@ -1,5 +1,5 @@
 import { observer } from 'mobx-react-lite';
-import { ChevronRightIcon, DatabaseIcon, DownloadIcon, SettingsIcon, UserIcon, WalletIcon } from 'lucide-react';
+import { ArrowLeftIcon, ChevronRightIcon, DatabaseIcon, DownloadIcon, SettingsIcon, UserIcon, WalletIcon } from 'lucide-react';
 import { useState } from 'react';
 import { useTranslation } from 'react-i18next';
 import { Link } from 'react-router';
@@ -27,7 +27,18 @@ import { useStores } from '@/stores/stores-context';
  * filters) on the right; from md up the app's name takes the left and both controls the right.
  * The account menu names the current group and opens a sheet to switch.
  */
-export const AppHeader = observer(function AppHeader({ currentGroupId }: { currentGroupId?: string }) {
+interface AppHeaderProps {
+  currentGroupId?: string;
+  /**
+   * A page that stands on its own, like settings: its title and the way back take the header,
+   * in place of the group's total and the account menu. On a phone that header is all the room
+   * there is, and a page reached from a menu needs its own way out of it more than it needs a
+   * total it can't act on.
+   */
+  page?: { title: string; backTo: string };
+}
+
+export const AppHeader = observer(function AppHeader({ currentGroupId, page }: AppHeaderProps) {
   const { t } = useTranslation();
   const { session } = useStores();
   const groups = useGroups();
@@ -80,7 +91,15 @@ export const AppHeader = observer(function AppHeader({ currentGroupId }: { curre
       {/* Equal side columns keep the total centered whatever the group name's length. */}
       <div className="mx-auto grid h-14 max-w-5xl grid-cols-[1fr_auto_1fr] items-center gap-2 px-4">
         <div className="flex min-w-0 items-center">
-          {accountMenu('-ml-2 md:hidden')}
+          {page ? (
+            <Button variant="ghost" size="icon" className="-ml-2 md:hidden" aria-label={t('common.back')} asChild>
+              <Link to={page.backTo}>
+                <ArrowLeftIcon />
+              </Link>
+            </Button>
+          ) : (
+            accountMenu('-ml-2 md:hidden')
+          )}
           <Link to="/" className="hidden items-center gap-2 font-semibold md:inline-flex">
             <span className="flex size-8 items-center justify-center rounded-lg bg-primary text-primary-foreground">
               <WalletIcon className="size-4" />
@@ -89,7 +108,13 @@ export const AppHeader = observer(function AppHeader({ currentGroupId }: { curre
           </Link>
         </div>
 
-        {currentGroupId ? <AccountsTotal groupId={currentGroupId} /> : <span />}
+        {page ? (
+          <h1 className="truncate font-semibold">{page.title}</h1>
+        ) : currentGroupId ? (
+          <AccountsTotal groupId={currentGroupId} />
+        ) : (
+          <span />
+        )}
 
         <div className="flex items-center gap-1 justify-self-end">
           <HeaderToolsOutlet className="flex items-center gap-1" />

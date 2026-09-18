@@ -67,9 +67,10 @@ export function SettingsPage() {
 
   return (
     <>
-      <AppHeader currentGroupId={lastGroupId} />
+      <AppHeader currentGroupId={lastGroupId} page={{ title: t('settings.title'), backTo: '/' }} />
       <main className="mx-auto flex max-w-xl flex-col gap-4 p-4 pb-[calc(1rem+env(safe-area-inset-bottom))]">
-        <div className="flex items-center gap-2">
+        {/* The title and the way back are in the header; from md up the back button joins them. */}
+        <div className="hidden items-center gap-2 md:flex">
           <Button variant="ghost" size="icon" asChild>
             <Link to="/" aria-label={t('common.back')}>
               <ArrowLeftIcon />
