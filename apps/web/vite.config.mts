@@ -52,8 +52,8 @@ export default defineConfig(() => ({
       registerType: 'prompt',
       // Deep links work offline: anything not in the cache falls back to the app shell.
       manifest: {
-        name: 'FinancePal',
-        short_name: 'FinancePal',
+        name: 'Finance Pal',
+        short_name: 'Finance Pal',
         description: 'Personal and shared budgets: accounts, categories and transactions.',
         start_url: '.',
         scope: '.',

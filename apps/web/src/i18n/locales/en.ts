@@ -2,7 +2,7 @@
 // so a key added here and forgotten there fails the build instead of rendering a raw key.
 export const en = {
   app: {
-    name: 'FinancePal',
+    name: 'Finance Pal',
     tagline: 'Personal and shared budgets',
   },
   auth: {
