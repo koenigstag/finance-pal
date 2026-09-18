@@ -23,7 +23,7 @@ export const queryKeys = {
   recurringRules: (groupId: string) => ['group', groupId, 'recurring-rules'] as const,
 };
 
-function startsWith(key: QueryKey, prefix: QueryKey): boolean {
+export function startsWith(key: QueryKey, prefix: QueryKey): boolean {
   return prefix.every((part, index) => key[index] === part);
 }
 
