@@ -1,6 +1,6 @@
 import { Module } from '@nestjs/common';
 import { TypeOrmModule } from '@nestjs/typeorm';
-import { Account, ApiKey, Category, Currency, Group } from '@ft/api-database';
+import { Account, ApiKey, Category, Currency, Group, Transaction } from '@ft/api-database';
 import { AuthzModule } from '../_core/authz/authz.module';
 import { AccountsModule } from '../ledger/accounts/accounts.module';
 import { CategoriesModule } from '../ledger/categories/categories.module';
@@ -19,7 +19,7 @@ import { ExternalTransactionsService } from './external-transactions.service';
  */
 @Module({
   imports: [
-    TypeOrmModule.forFeature([ApiKey, Group, Account, Category, Currency]),
+    TypeOrmModule.forFeature([ApiKey, Group, Account, Category, Currency, Transaction]),
     AuthzModule,
     AccountsModule,
     CategoriesModule,

@@ -1,14 +1,27 @@
-import { BadRequestException, Injectable } from '@nestjs/common';
+import { BadRequestException, Injectable, UnprocessableEntityException } from '@nestjs/common';
+import { InjectRepository } from '@nestjs/typeorm';
 import type { ServerInferRequest } from '@ts-rest/core';
-import type { Account, Transaction } from '@ft/api-database';
+import { Repository } from 'typeorm';
+import { Transaction, type Account } from '@ft/api-database';
 import type { externalContract } from '@ft/shared-contracts';
 import type { RequestApiKey } from '../_core/authn/request-user';
-import { TransactionsService, type UpdateTransactionInput } from '../ledger/transactions/transactions.service';
+import {
+  TransactionsService,
+  type TransactionIdempotency,
+  type UpdateTransactionInput,
+} from '../ledger/transactions/transactions.service';
 import { ExternalLookupService } from './external-lookup.service';
+import { hashIdempotencyKey, movementFingerprint } from './idempotency';
 import { favouriteAccount, findAccount, namesCategory, resolveCategoryPair, transferDestAmount } from './references';
 
 type CreateBody = ServerInferRequest<typeof externalContract.transactions.create>['body'];
 type UpdateBody = ServerInferRequest<typeof externalContract.transactions.update>['body'];
+
+export interface CreatedTransaction {
+  transaction: Transaction;
+  // An earlier request with the same idempotency key recorded it; this one recorded nothing.
+  replayed: boolean;
+}
 
 /**
  * Turns an external request into what TransactionsService takes: names become ids, the currency
@@ -20,9 +33,29 @@ export class ExternalTransactionsService {
   constructor(
     private readonly transactions: TransactionsService,
     private readonly lookup: ExternalLookupService,
+    @InjectRepository(Transaction) private readonly stored: Repository<Transaction>,
   ) {}
 
-  async create({ userId, groupId }: RequestApiKey, body: CreateBody): Promise<Transaction> {
+  /**
+   * With an idempotency key, a request repeating one the group has had answers with what that
+   * one recorded, and records nothing — whether the transaction has been edited since, or deleted,
+   * which a repeat mustn't undo. The same key asking for different money is refused instead.
+   */
+  async create({ userId, groupId }: RequestApiKey, body: CreateBody, idempotencyKey?: string): Promise<CreatedTransaction> {
+    let idempotency: TransactionIdempotency | undefined;
+    if (idempotencyKey !== undefined) {
+      idempotency = { key: hashIdempotencyKey(idempotencyKey), fingerprint: movementFingerprint(body) };
+      const earlier = await this.recordedFor(groupId, idempotency.key);
+      if (earlier) {
+        if (earlier.idempotencyFingerprint !== idempotency.fingerprint) {
+          throw new UnprocessableEntityException(
+            'This idempotency key was already used for a different transaction; a new transaction needs a new key',
+          );
+        }
+        return { transaction: earlier, replayed: true };
+      }
+    }
+
     const accounts = await this.lookup.accountsOf(groupId);
     const account = findAccount(accounts, body.accountId, body.accountName, 'account') ?? favouriteAccount(accounts);
 
@@ -43,21 +76,40 @@ export class ExternalTransactionsService {
     const pair = namesCategory(body) ? resolveCategoryPair(await this.lookup.categoriesOf(groupId), body.type, body) : {};
     const note = body.note?.trim();
 
-    const { transaction } = await this.transactions.create(userId, groupId, {
-      type: body.type,
-      // The moment the request arrives, which for a notification is when the money moved.
-      date: body.date ?? new Date().toISOString(),
-      amount: body.amount,
-      // A transaction is recorded in its account's currency, as the app itself does.
-      currencyId: account.currencyId,
-      accountId: account.id,
-      categoryId: pair.categoryId ?? null,
-      subcategoryId: pair.subcategoryId ?? null,
-      toAccountId,
-      destAmount,
-      note: note || undefined,
-    });
-    return transaction;
+    const { transaction } = await this.transactions.create(
+      userId,
+      groupId,
+      {
+        type: body.type,
+        // The moment the request arrives, which for a notification is when the money moved.
+        date: body.date ?? new Date().toISOString(),
+        amount: body.amount,
+        // A transaction is recorded in its account's currency, as the app itself does.
+        currencyId: account.currencyId,
+        accountId: account.id,
+        categoryId: pair.categoryId ?? null,
+        subcategoryId: pair.subcategoryId ?? null,
+        toAccountId,
+        destAmount,
+        note: note || undefined,
+      },
+      idempotency,
+    );
+    return { transaction, replayed: false };
+  }
+
+  /**
+   * The transaction an earlier request with this key recorded, deleted ones included. Duplicate
+   * notifications arrive milliseconds apart, so two requests with one key are often in flight at
+   * once: the lock makes the second wait until the first's transaction ends, and then find what it
+   * recorded. It's transaction-scoped, so the request's own commit or rollback releases it; the
+   * unique index on the key stays as the last word.
+   */
+  private async recordedFor(groupId: string, keyHash: string): Promise<Transaction | null> {
+    await this.stored.query(`SELECT pg_advisory_xact_lock(hashtext('ft:idempotency'), hashtext($1))`, [
+      `${groupId}:${keyHash}`,
+    ]);
+    return this.stored.findOne({ where: { groupId, idempotencyKey: keyHash }, withDeleted: true });
   }
 
   async update({ userId, groupId }: RequestApiKey, transactionId: string, body: UpdateBody): Promise<Transaction> {

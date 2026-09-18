@@ -57,6 +57,16 @@ const currencyCodeSchema = z
   .regex(/^[A-Za-z]{3}$/, 'Expected an ISO 4217 currency code, like "UAH"')
   .transform((code) => code.toUpperCase());
 
+// A key the client picks for a request it may send more than once: a request repeating one the
+// group has already had records nothing new, and gets the transaction the first one recorded.
+// Any text up to 1000 characters — only its digest is kept — so a notification's own text can be
+// the key. The header's quoted form ("…") is the same key as the bare one.
+export const idempotencyKeySchema = z.string().trim().min(1).max(1000);
+const idempotencyHeaderSchema = z
+  .string()
+  .transform((value) => value.trim().replace(/^"(.*)"$/, '$1'))
+  .pipe(idempotencyKeySchema);
+
 export const externalKeySchema = z.object({
   id: z.string().uuid(),
   name: z.string(),
@@ -169,12 +179,15 @@ const createTransactionBodySchema = z.object({
   subcategoryId: z.string().uuid().optional(),
   subcategoryName: nameSchema.optional(),
   note: z.string().max(1000).optional(),
+  // The Idempotency-Key header's twin, for keys a header can't carry: HTTP clients on Android
+  // refuse a header with Cyrillic in it, for one. Both at once must agree.
+  idempotencyKey: idempotencyKeySchema.optional(),
 });
 
 // What a request leaves out stays as it was, and the type can't change. A new category drops a
 // subcategory the request doesn't restate, null clears either, and an empty note clears the note.
 const updateTransactionBodySchema = createTransactionBodySchema
-  .omit({ type: true })
+  .omit({ type: true, idempotencyKey: true })
   .extend({
     categoryId: z.string().uuid().nullable().optional(),
     subcategoryId: z.string().uuid().nullable().optional(),
@@ -305,9 +318,17 @@ export const externalContract = c.router(
       create: {
         method: 'POST',
         path: '/transactions',
+        headers: z.object({ 'idempotency-key': idempotencyHeaderSchema.optional() }),
         body: createTransactionBodySchema,
-        responses: { 201: externalTransactionSchema, ...errors },
-        summary: 'Record an expense, an income or a transfer',
+        responses: {
+          // A repeat of an earlier request (same idempotency key) is answered like it, with the
+          // transaction that request recorded, and an Idempotent-Replayed: true header.
+          201: externalTransactionSchema,
+          ...errors,
+          // The idempotency key was already used for a request asking for something else.
+          422: errorSchema,
+        },
+        summary: 'Record an expense, an income or a transfer; repeats with an idempotency key record it once',
         ...needs('transactions:create'),
       },
       update: {

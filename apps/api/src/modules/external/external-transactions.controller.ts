@@ -1,5 +1,6 @@
-import { Controller } from '@nestjs/common';
+import { Controller, Res } from '@nestjs/common';
 import { TsRestHandler, tsRestHandler } from '@ts-rest/nest';
+import type { Response } from 'express';
 import { externalContract } from '@ft/shared-contracts';
 import { ApiKeyAuth } from '../_core/authn/api-key-auth.decorator';
 import { CurrentApiKey, type RequestApiKey } from '../_core/authn/request-user';
@@ -8,6 +9,7 @@ import { TransactionsService } from '../ledger/transactions/transactions.service
 import { toExternalTransaction } from './external.dto';
 import { ExternalLookupService } from './external-lookup.service';
 import { ExternalTransactionsService } from './external-transactions.service';
+import { idempotencyKeyOf } from './idempotency';
 
 const routes = externalContract.transactions;
 
@@ -45,9 +47,15 @@ export class ExternalTransactionsController {
 
   @ApiKeyAuth(routes.create)
   @TsRestHandler(routes.create)
-  create(@CurrentApiKey() apiKey?: RequestApiKey) {
-    return tsRestHandler(routes.create, async ({ body }) => {
-      const transaction = await this.external.create(requireApiKey(apiKey), body);
+  // passthrough: the header below is set here, the body is still sent by ts-rest.
+  create(@CurrentApiKey() apiKey?: RequestApiKey, @Res({ passthrough: true }) response?: Response) {
+    return tsRestHandler(routes.create, async ({ headers, body }) => {
+      const idempotencyKey = idempotencyKeyOf(headers['idempotency-key'], body.idempotencyKey);
+      const { transaction, replayed } = await this.external.create(requireApiKey(apiKey), body, idempotencyKey);
+      if (replayed) {
+        // The same answer as the first time, marked the way Stripe's API marks one.
+        response?.setHeader('Idempotent-Replayed', 'true');
+      }
       return { status: 201 as const, body: toExternalTransaction(transaction, await this.lookup.currencyCodes()) };
     });
   }

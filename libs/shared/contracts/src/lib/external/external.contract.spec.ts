@@ -37,4 +37,24 @@ describe('externalContract', () => {
     const body = externalContract.transactions.update.body.parse({ type: 'income', amount: '3' });
     expect(body).toEqual({ amount: '3' });
   });
+
+  it('reads the idempotency key from the header, quoted or not', () => {
+    const headers = externalContract.transactions.create.headers;
+    expect(headers.parse({ 'idempotency-key': ' "abc-1" ' })).toEqual({ 'idempotency-key': 'abc-1' });
+    expect(headers.parse({ 'idempotency-key': 'abc-1', authorization: 'Bearer fpk_x' })).toEqual({ 'idempotency-key': 'abc-1' });
+    expect(headers.parse({})).toEqual({});
+  });
+
+  it('refuses an empty or overlong idempotency key', () => {
+    const headers = externalContract.transactions.create.headers;
+    expect(headers.safeParse({ 'idempotency-key': '""' }).success).toBe(false);
+    expect(headers.safeParse({ 'idempotency-key': 'k'.repeat(1001) }).success).toBe(false);
+    expect(externalContract.transactions.create.body.safeParse({ type: 'expense', amount: '1', idempotencyKey: ' ' }).success).toBe(
+      false,
+    );
+  });
+
+  it('keeps the idempotency key to recording, not updating', () => {
+    expect(externalContract.transactions.update.body.parse({ idempotencyKey: 'abc', amount: '3' })).toEqual({ amount: '3' });
+  });
 });
