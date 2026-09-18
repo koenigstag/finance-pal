@@ -1,7 +1,7 @@
 import { BadRequestException, NotFoundException } from '@nestjs/common';
 import type { ObjectLiteral, Repository } from 'typeorm';
 import { TransactionType, type Account, type Category } from '@ft/api-database';
-import { TransactionValidator, keptSubcategory, type TransactionShape } from './transaction-validator';
+import { TransactionValidator, keptPercentageBase, keptSubcategory, type TransactionShape } from './transaction-validator';
 
 // The real module builds its DataSource from DATABASE_URL the moment it's imported. The validator
 // only needs the entity classes as injection tokens, and the enum's values as enums.ts has them.
@@ -43,6 +43,8 @@ const expense = (categoryId: string | null, subcategoryId: string | null = null)
   toAccountId: null,
   amount: '10.00',
   destAmount: null,
+  percentage: null,
+  percentageBase: null,
 });
 
 describe('TransactionValidator', () => {
@@ -80,6 +82,39 @@ describe('TransactionValidator', () => {
   it('refuses a subcategory on a transfer', async () => {
     const transfer = { ...expense(null, 'taxi'), type: TransactionType.TRANSFER, toAccountId: 'cash' };
     await expect(validator.validate(GROUP, transfer)).rejects.toThrow(BadRequestException);
+  });
+
+  it('takes a percentage above 0 and up to 100', async () => {
+    const withPercentage = (percentage: string) => validator.validate(GROUP, { ...expense('food'), percentage });
+    await expect(withPercentage('0.0125')).resolves.toEqual({ categoryId: 'food', subcategoryId: null });
+    await expect(withPercentage('100')).resolves.toEqual({ categoryId: 'food', subcategoryId: null });
+    await expect(withPercentage('0')).rejects.toThrow(BadRequestException);
+    await expect(withPercentage('100.5')).rejects.toThrow(BadRequestException);
+  });
+
+  it('takes a base amount above zero, and only beside a percentage', async () => {
+    const withBase = (percentage: string | null, percentageBase: string) =>
+      validator.validate(GROUP, { ...expense('food'), percentage, percentageBase });
+    await expect(withBase('5', '12000.00')).resolves.toEqual({ categoryId: 'food', subcategoryId: null });
+    await expect(withBase('5', '0.00')).rejects.toThrow(BadRequestException);
+    await expect(withBase(null, '12000.00')).rejects.toThrow(BadRequestException);
+  });
+});
+
+describe('keptPercentageBase', () => {
+  const existing = { percentageBase: '12000.00' };
+
+  it('keeps the base amount while there is a percentage', () => {
+    expect(keptPercentageBase({}, existing, '5')).toBe('12000.00');
+  });
+
+  it('drops it along with the percentage', () => {
+    expect(keptPercentageBase({}, existing, null)).toBeNull();
+  });
+
+  it('takes the one an update names', () => {
+    expect(keptPercentageBase({ percentageBase: null }, existing, '5')).toBeNull();
+    expect(keptPercentageBase({ percentageBase: '500.00' }, existing, '5')).toBe('500.00');
   });
 });
 

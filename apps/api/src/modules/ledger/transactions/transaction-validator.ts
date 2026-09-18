@@ -2,10 +2,10 @@ import { BadRequestException, Injectable, NotFoundException } from '@nestjs/comm
 import { InjectRepository } from '@nestjs/typeorm';
 import { Repository } from 'typeorm';
 import { Account, Category, TransactionType } from '@ft/api-database';
-import { isPositiveMoney } from '@ft/shared-contracts';
+import { isPercentageInRange, isPositiveMoney } from '@ft/shared-contracts';
 
 // The money-movement part of a transaction — shared by transactions and recurring rules, which
-// carry the same fields (a rule has no destAmount, so it passes null).
+// carry the same fields (a rule has no destAmount or percentage, so it passes null for those).
 export interface TransactionShape {
   type: TransactionType;
   accountId: string;
@@ -14,6 +14,8 @@ export interface TransactionShape {
   toAccountId: string | null;
   amount: string;
   destAmount: string | null;
+  percentage: string | null;
+  percentageBase: string | null;
 }
 
 // What a transaction is filed under, as it's stored: a top-level category and, optionally, one of
@@ -36,9 +38,25 @@ export function keptSubcategory(
 }
 
 /**
+ * The base amount an update leaves in place when it doesn't name one: it's what the percentage is
+ * of, so it stays while there's a percentage and goes when the percentage does.
+ */
+export function keptPercentageBase(
+  patch: { percentageBase?: string | null },
+  existing: { percentageBase: string | null },
+  percentage: string | null,
+): string | null {
+  if (patch.percentageBase !== undefined) {
+    return patch.percentageBase;
+  }
+  return percentage === null ? null : existing.percentageBase;
+}
+
+/**
  * Checks, in application code, what the database would otherwise reject with a raw error: the
  * check constraints (chk_transaction_sides / chk_transaction_amount_positive /
- * chk_transaction_subcategory and their recurring twins) and the check_group_consistency trigger.
+ * chk_transaction_subcategory and their recurring twins, chk_transaction_percentage /
+ * chk_transaction_percentage_base) and the check_group_consistency trigger.
  * GlobalExceptionFilter turns any non-HTTP error into a bare 500, so without this a bad request
  * would look like a server fault.
  */
@@ -56,6 +74,17 @@ export class TransactionValidator {
     }
     if (shape.destAmount !== null && !isPositiveMoney(shape.destAmount)) {
       throw new BadRequestException('destAmount must be greater than zero');
+    }
+    if (shape.percentage !== null && !isPercentageInRange(shape.percentage)) {
+      throw new BadRequestException('percentage must be greater than zero and at most 100');
+    }
+    if (shape.percentageBase !== null) {
+      if (shape.percentage === null) {
+        throw new BadRequestException('percentageBase needs a percentage');
+      }
+      if (!isPositiveMoney(shape.percentageBase)) {
+        throw new BadRequestException('percentageBase must be greater than zero');
+      }
     }
 
     if (shape.type === TransactionType.TRANSFER) {

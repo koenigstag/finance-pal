@@ -33,6 +33,8 @@ import { TransactionType } from './enums.js';
 )
 @Check('chk_transaction_subcategory', `subcategory_id IS NULL OR category_id IS NOT NULL`)
 @Check('chk_transaction_amount_positive', `amount > 0 AND (dest_amount IS NULL OR dest_amount > 0)`)
+@Check('chk_transaction_percentage', `percentage IS NULL OR (percentage > 0 AND percentage <= 100)`)
+@Check('chk_transaction_percentage_base', `percentage_base IS NULL OR (percentage IS NOT NULL AND percentage_base > 0)`)
 // Soft-deleted rows included: a deleted transaction keeps its key, so a repeat can't bring it back.
 @Index('uq_transactions_idempotency_key', ['groupId', 'idempotencyKey'], {
   unique: true,
@@ -101,6 +103,15 @@ export class Transaction {
   // transfer with currency conversion only
   @Column({ type: 'numeric', precision: 14, scale: 2, name: 'dest_amount', nullable: true })
   destAmount!: string | null;
+
+  // the percentage the amount was worked out as, when it was one: of percentage_base if set,
+  // otherwise of the account's balance
+  @Column({ type: 'numeric', precision: 7, scale: 4, nullable: true })
+  percentage!: string | null;
+
+  // only ever beside a percentage
+  @Column({ type: 'numeric', precision: 14, scale: 2, name: 'percentage_base', nullable: true })
+  percentageBase!: string | null;
 
   @Column({ type: 'text', nullable: true })
   note!: string | null;

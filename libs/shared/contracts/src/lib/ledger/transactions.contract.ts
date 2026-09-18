@@ -2,6 +2,7 @@ import { initContract } from '@ts-rest/core';
 import { z } from 'zod';
 import { moneySchema } from '../common/money.schema.js';
 import { errorSchema } from '../common/error.schema.js';
+import { percentageSchema } from '../common/percentage.schema.js';
 
 const c = initContract();
 
@@ -22,6 +23,13 @@ export const transactionSchema = z.object({
   subcategoryId: z.string().uuid().nullable(),
   toAccountId: z.string().uuid().nullable(),
   destAmount: moneySchema.nullable(),
+  // Set when the amount was worked out as this percentage — of percentageBase when there is one
+  // (the income a tax is a share of, say), otherwise of the account's balance (a card's monthly
+  // charge on its debt). The client does the arithmetic; the API keeps the figures, so the
+  // transaction reads as a percentage again when it's edited.
+  percentage: percentageSchema.nullable(),
+  // Only ever beside a percentage.
+  percentageBase: moneySchema.nullable(),
   note: z.string().nullable(),
   tagIds: z.array(z.string().uuid()),
   // Set on occurrences a recurring rule materialized; null for hand-entered transactions.
@@ -49,6 +57,11 @@ const createTransactionBodySchema = z.object({
   subcategoryId: z.string().uuid().nullable().optional(),
   toAccountId: z.string().uuid().nullable().optional(),
   destAmount: moneySchema.nullable().optional(),
+  // Above 0 and at most 100. Recorded as sent, beside the amount: it isn't checked against it.
+  percentage: percentageSchema.nullable().optional(),
+  // Above 0, and only with a percentage. Left out of an update, it stays while the percentage does
+  // and is cleared along with it.
+  percentageBase: moneySchema.nullable().optional(),
   note: z.string().optional(),
   tagIds: z.array(z.string().uuid()).optional(),
 });

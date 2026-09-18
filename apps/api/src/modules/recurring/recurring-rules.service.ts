@@ -58,6 +58,8 @@ function shapeOf(rule: RecurringRule): TransactionShape {
     toAccountId: rule.toAccountId,
     amount: rule.amount,
     destAmount: null,
+    percentage: null,
+    percentageBase: null,
   };
 }
 
