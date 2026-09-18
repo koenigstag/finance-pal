@@ -4,7 +4,8 @@ import type { Transaction } from './queries';
 export interface FiledUnder {
   // "Category › Subcategory", or the category's name alone.
   name: string;
-  // The subcategory's own look where it has one, the category's otherwise.
+  // The subcategory's look when one is set, just as its chip shows it — even with no icon of its
+  // own — and the category's when none is.
   icon: string | null;
   color: string | null;
 }
@@ -23,9 +24,10 @@ export function filedUnder(
   if (!category && !subcategory) {
     return undefined;
   }
+  const look = subcategory ?? category;
   return {
     name: [category?.name, subcategory?.name].filter(Boolean).join(' › '),
-    icon: subcategory?.icon ?? category?.icon ?? null,
-    color: subcategory?.color ?? category?.color ?? null,
+    icon: look?.icon ?? null,
+    color: look?.color ?? null,
   };
 }

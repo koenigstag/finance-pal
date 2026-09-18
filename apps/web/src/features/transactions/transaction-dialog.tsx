@@ -102,9 +102,9 @@ export function TransactionDialog({
     defaultValues: defaultTransactionFormValues({}),
   });
   const errors = form.formState.errors;
-  const [type, accountId, toAccountId, categoryId, subcategoryId] = useWatch({
+  const [type, accountId, toAccountId, categoryId] = useWatch({
     control: form.control,
-    name: ['type', 'accountId', 'toAccountId', 'categoryId', 'subcategoryId'],
+    name: ['type', 'accountId', 'toAccountId', 'categoryId'],
   });
 
   const fallbackAccountId = pickDefaultAccountId(accountList, defaultAccountId);
@@ -157,13 +157,12 @@ export function TransactionDialog({
       form.setValue('categoryId', '');
       form.setValue('subcategoryId', '');
     } else {
-      // A subcategory picked from the list is filed under its parent, with itself as the
-      // subcategory: the card shows the parent and the chips under it which one. One whose parent
-      // isn't listed (archived) was offered at the top level, and is taken as it was offered.
-      const picked = categoryList.find((candidate) => candidate.id === pick.categoryId);
-      const parent = picked?.parentId ? categoryList.find((candidate) => candidate.id === picked.parentId) : undefined;
-      form.setValue('categoryId', parent ? parent.id : pick.categoryId);
-      form.setValue('subcategoryId', parent ? pick.categoryId : '');
+      // A subcategory belongs to the category it was chosen under: another category drops it,
+      // picking the same one again keeps it.
+      if (pick.categoryId !== form.getValues('categoryId')) {
+        form.setValue('subcategoryId', '');
+      }
+      form.setValue('categoryId', pick.categoryId);
       form.setValue('toAccountId', '');
     }
     setStage('form');
@@ -209,8 +208,6 @@ export function TransactionDialog({
       name={category?.name ?? t('transactions.noCategory')}
     />
   );
-  // What the category sheet marks as chosen: the subcategory when there is one.
-  const pickedInSheet = type === 'transfer' ? toAccountId : subcategoryId || categoryId;
 
   // The money flows left to right, which the cards' captions spell out: from a category into an
   // account, from an account into a category, or from one account into another.
@@ -250,7 +247,7 @@ export function TransactionDialog({
         categories={categoryList}
         // Every account can be the target here: the source so far is only a default.
         accounts={accountList}
-        selected={pickedInSheet}
+        selected={type === 'transfer' ? toAccountId : categoryId}
         onPick={applyPick}
       />
 
@@ -362,7 +359,7 @@ export function TransactionDialog({
         categories={categoryList}
         accounts={accountList}
         fromAccountId={accountId}
-        selected={pickedInSheet}
+        selected={type === 'transfer' ? toAccountId : categoryId}
         onPick={applyPick}
       />
 

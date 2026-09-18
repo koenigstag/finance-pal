@@ -36,13 +36,14 @@ describe('filedUnder', () => {
     });
   });
 
-  it('adds the subcategory, taking its look where it has its own', () => {
+  it('adds the subcategory, and shows its look rather than the category’s', () => {
     expect(filedUnder({ categoryId: 'transport', subcategoryId: 'taxi' }, find)).toEqual({
       name: 'Transport › Taxi',
       icon: 'car',
-      color: '#FFAB40',
+      color: null,
     });
-    expect(filedUnder({ categoryId: 'transport', subcategoryId: 'tram' }, find)?.icon).toBe('bus');
+    // Not Transport's bus: a subcategory without an icon of its own reads as it does on its chip.
+    expect(filedUnder({ categoryId: 'transport', subcategoryId: 'tram' }, find)?.icon).toBeNull();
   });
 
   it('is undefined without a category, or when none of it is known', () => {

@@ -4,7 +4,7 @@ import { AppearanceIcon } from '@/components/appearance/appearance-icon';
 import { Dialog, DialogContent, DialogHeader, DialogTitle } from '@/components/ui/dialog';
 import { ToggleGroup, ToggleGroupItem } from '@/components/ui/toggle-group';
 import type { Account } from '@/features/accounts/queries';
-import { categoryOptions, type Category } from '@/features/categories/queries';
+import { categoriesUnder, type Category } from '@/features/categories/queries';
 import { useCurrencyCodes } from '@/features/currencies/queries';
 import { formatMoney, moneySign } from '@/lib/money';
 import { signColor } from '@/lib/money-colors';
@@ -20,8 +20,8 @@ export type KindPick =
 
 /**
  * The first step of a transaction: what kind it is, and what it's for. Income and expense list
- * their categories; a transfer lists the accounts it could go to. A bottom sheet on phones, a
- * dialog from sm up.
+ * their top-level categories — a subcategory is picked afterwards, from chips on the form; a
+ * transfer lists the accounts it could go to. A bottom sheet on phones, a dialog from sm up.
  */
 export function KindPicker({
   open,
@@ -113,13 +113,12 @@ export function KindPicker({
                 icon={<AppearanceIcon placeholder="none" />}
                 label={t('transactions.noCategory')}
               />
-              {categoryOptions(categories, tab).map(({ category, depth }) => (
+              {categoriesUnder(categories, tab, null).map((category) => (
                 <PickerRow
                   key={category.id}
-                  depth={depth}
                   selected={selected === category.id}
                   onClick={() => onPick({ type: tab, categoryId: category.id })}
-                  icon={<AppearanceIcon icon={category.icon} color={category.color} size={depth ? 'sm' : 'md'} />}
+                  icon={<AppearanceIcon icon={category.icon} color={category.color} />}
                   label={category.name}
                 />
               ))}
@@ -201,14 +200,12 @@ function PickerRow({
   icon,
   label,
   aside,
-  depth = 0,
   selected,
   onClick,
 }: {
   icon: ReactNode;
   label: string;
   aside?: ReactNode;
-  depth?: number;
   selected: boolean;
   onClick: () => void;
 }) {
@@ -219,8 +216,6 @@ function PickerRow({
         aria-pressed={selected}
         onClick={onClick}
         className="flex min-h-12 w-full items-center gap-3 rounded-lg px-2 text-left hover:bg-muted focus-visible:bg-muted focus-visible:outline-none"
-        // Subcategories sit under their parent's name.
-        style={depth ? { paddingInlineStart: `${0.5 + depth * 2.25}rem` } : undefined}
       >
         {icon}
         <span className="min-w-0 flex-1 truncate font-medium">{label}</span>
