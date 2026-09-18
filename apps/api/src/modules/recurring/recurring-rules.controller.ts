@@ -1,13 +1,12 @@
 import { Controller } from '@nestjs/common';
 import { TsRestHandler, tsRestHandler } from '@ts-rest/nest';
 import { recurringRulesContract } from '@ft/shared-contracts';
-import { RecurringRule } from '@ft/api-database';
 import { CurrentUser, type RequestUser } from '../_core/authn/request-user';
 import { requireUser } from '../_core/authn/require-user';
 import { toTransactionDto } from '../ledger/transactions/transaction.dto';
-import { RecurringRulesService } from './recurring-rules.service';
+import { RecurringRulesService, type RecurringRuleView } from './recurring-rules.service';
 
-function toRecurringRuleDto(rule: RecurringRule) {
+function toRecurringRuleDto({ rule, nextOccurrence }: RecurringRuleView) {
   return {
     id: rule.id,
     groupId: rule.groupId,
@@ -23,6 +22,7 @@ function toRecurringRuleDto(rule: RecurringRule) {
     intervalValue: rule.intervalValue,
     startsAt: rule.startsAt.toISOString(),
     nextRunDate: rule.nextRunDate.toISOString(),
+    nextOccurrence: nextOccurrence?.toISOString() ?? null,
     reminderDaysBefore: rule.reminderDaysBefore,
     timezone: rule.timezone,
     active: rule.active,
@@ -80,8 +80,8 @@ export class RecurringRulesController {
 
   @TsRestHandler(recurringRulesContract.remove)
   remove(@CurrentUser() user?: RequestUser) {
-    return tsRestHandler(recurringRulesContract.remove, async ({ params }) => {
-      const removed = await this.rules.remove(requireUser(user).id, params.groupId, params.ruleId);
+    return tsRestHandler(recurringRulesContract.remove, async ({ params, query }) => {
+      const removed = await this.rules.remove(requireUser(user).id, params.groupId, params.ruleId, query.keepPlanned ?? false);
       return { status: 200 as const, body: toRecurringRuleDto(removed) };
     });
   }

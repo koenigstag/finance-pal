@@ -1,19 +1,22 @@
 import { Injectable, Logger, OnApplicationBootstrap, OnModuleDestroy, OnModuleInit } from '@nestjs/common';
 import { Cron, CronExpression } from '@nestjs/schedule';
-import { DataSource, LessThanOrEqual } from 'typeorm';
+import { DataSource } from 'typeorm';
 import { RecurringRule, createMigrationDataSource } from '@ft/api-database';
 import { RealtimeEmitterService } from '../realtime/realtime-emitter.service';
-import { materializeOccurrences } from './occurrence-materializer';
-import { horizonEnd } from './recurrence-dates';
+import { materializeOccurrences, plannedOccurrence } from './occurrence-materializer';
 
 // Session-level advisory lock serializing ticks across every instance of the API. hashtext()
 // turns a readable name into the lock key, so nothing else has to agree on a magic number.
 const LOCK_SQL = `SELECT pg_try_advisory_lock(hashtext('ft:recurring-occurrences')) AS locked`;
 const UNLOCK_SQL = `SELECT pg_advisory_unlock(hashtext('ft:recurring-occurrences'))`;
 
-// The horizon ends with next calendar month, at most ~62 days out in any zone. Rules whose
-// frontier is further than this can't be due; the exact per-zone check happens per rule.
-const CANDIDATE_WINDOW_MS = 63 * 24 * 60 * 60 * 1000;
+// Active series with no planned occurrence: the one they had has landed (or the user deleted it),
+// so the next is due to be written.
+const DUE_RULES_SQL = `
+  SELECT r.id FROM recurring_rules r
+  WHERE r.active AND r.deleted_at IS NULL
+    AND NOT EXISTS (SELECT 1 FROM transactions t WHERE t.recurring_rule_id = r.id AND ${plannedOccurrence('t', '$1')})
+`;
 
 // Can this connection see and write every group's rules despite RLS? Only a table's owner, a
 // superuser or a BYPASSRLS role can.
@@ -24,8 +27,9 @@ const BYPASSES_RLS_SQL = `
 `;
 
 /**
- * Keeps every active rule's occurrences materialized through the end of next month as time moves
- * on — mostly extending the horizon when a month rolls over, and filling it right after downtime.
+ * Moves every active series on to its next occurrence once its planned one lands: each series keeps
+ * one upcoming transaction, and when that one's date passes this writes the one after it — or,
+ * after downtime, every one that fell due meanwhile and then the next.
  *
  * Runs on its own connection as the schema owner, bypassing RLS, unlike every request-driven
  * write in the app: a background job acts for no user, and a rule's creator may have long since
@@ -61,8 +65,8 @@ export class RecurringProcessorService implements OnModuleInit, OnApplicationBoo
   }
 
   onApplicationBootstrap(): void {
-    // Fill horizons straight away after a restart instead of waiting up to an hour. Not awaited,
-    // so a slow first run doesn't hold up the app accepting requests.
+    // Catch up straight away after a restart instead of waiting for the next run. Not awaited, so
+    // a slow first run doesn't hold up the app accepting requests.
     void this.tick();
   }
 
@@ -72,7 +76,9 @@ export class RecurringProcessorService implements OnModuleInit, OnApplicationBoo
     }
   }
 
-  @Cron(CronExpression.EVERY_HOUR, { name: 'recurring-occurrences' })
+  // Often enough that a series' next occurrence shows up soon after its planned one lands; a run
+  // with nothing due is a single query.
+  @Cron(CronExpression.EVERY_10_MINUTES, { name: 'recurring-occurrences' })
   async tick(): Promise<void> {
     const lockRunner = this.dataSource.createQueryRunner();
     try {
@@ -95,17 +101,11 @@ export class RecurringProcessorService implements OnModuleInit, OnApplicationBoo
   }
 
   private async processDueRules(now: Date): Promise<void> {
-    const candidates = await this.dataSource.getRepository(RecurringRule).find({
-      select: { id: true, nextRunDate: true, timezone: true },
-      where: { active: true, nextRunDate: LessThanOrEqual(new Date(now.getTime() + CANDIDATE_WINDOW_MS)) },
-    });
+    const due: { id: string }[] = await this.dataSource.query(DUE_RULES_SQL, [now]);
 
     let processed = 0;
-    for (const candidate of candidates) {
-      if (candidate.nextRunDate.getTime() > horizonEnd(now, candidate.timezone).getTime()) {
-        continue;
-      }
-      if (await this.processRule(candidate.id, now)) {
+    for (const { id } of due) {
+      if (await this.processRule(id, now)) {
         processed++;
       }
     }

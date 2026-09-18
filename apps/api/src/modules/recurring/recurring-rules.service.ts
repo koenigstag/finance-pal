@@ -1,8 +1,8 @@
-import { ForbiddenException, Injectable, NotFoundException } from '@nestjs/common';
+import { BadRequestException, ForbiddenException, Injectable, NotFoundException } from '@nestjs/common';
 import { InjectRepository } from '@nestjs/typeorm';
-import { Repository } from 'typeorm';
+import { In, Repository } from 'typeorm';
 import { Transactional } from 'typeorm-transactional';
-import { RecurrenceUnit, RecurringRule, Transaction, TransactionType } from '@ft/api-database';
+import { Account, RecurrenceUnit, RecurringRule, Transaction, TransactionType } from '@ft/api-database';
 import {
   RECURRENCE_UNITS,
   TRANSACTION_TYPES,
@@ -13,7 +13,14 @@ import {
 import { AbilityFactory } from '../_core/authz/ability.factory';
 import { RealtimeEmitterService } from '../realtime/realtime-emitter.service';
 import { TransactionValidator, keptSubcategory, type TransactionShape } from '../ledger/transactions/transaction-validator';
-import { materializeOccurrences, regenerateOccurrences, removeFutureOccurrences } from './occurrence-materializer';
+import {
+  detachFutureOccurrences,
+  materializeOccurrences,
+  nextOccurrence,
+  plannedOccurrenceDates,
+  regenerateOccurrences,
+  removeFutureOccurrences,
+} from './occurrence-materializer';
 
 // The shared string unions, not api-database's TypeORM enums — see the identical comment on
 // GroupWithRole.role in GroupsService for why (assignable one way, not the other).
@@ -31,9 +38,16 @@ export interface CreateRecurringRuleInput {
   startsAt: string;
   reminderDaysBefore?: number | null;
   timezone?: string;
+  replacesTransactionId?: string;
 }
 
-export type UpdateRecurringRuleInput = Partial<CreateRecurringRuleInput> & { active?: boolean };
+export type UpdateRecurringRuleInput = Partial<Omit<CreateRecurringRuleInput, 'replacesTransactionId'>> & { active?: boolean };
+
+// A rule as the API shows it: with the date its series next produces a transaction.
+export interface RecurringRuleView {
+  rule: RecurringRule;
+  nextOccurrence: Date | null;
+}
 
 function shapeOf(rule: RecurringRule): TransactionShape {
   return {
@@ -71,22 +85,24 @@ export class RecurringRulesService {
   constructor(
     @InjectRepository(RecurringRule) private readonly rules: Repository<RecurringRule>,
     @InjectRepository(Transaction) private readonly transactions: Repository<Transaction>,
+    @InjectRepository(Account) private readonly accounts: Repository<Account>,
     private readonly abilities: AbilityFactory,
     private readonly validator: TransactionValidator,
     private readonly realtime: RealtimeEmitterService,
   ) {}
 
-  async list(userId: string, groupId: string, includeInactive: boolean): Promise<RecurringRule[]> {
+  async list(userId: string, groupId: string, includeInactive: boolean): Promise<RecurringRuleView[]> {
     await this.authorize(userId, groupId, 'read', 'RecurringRule');
-    return this.rules.find({
+    const rules = await this.rules.find({
       where: includeInactive ? { groupId } : { groupId, active: true },
       order: { createdAt: 'ASC' },
     });
+    return this.withNextOccurrences(rules);
   }
 
-  async get(userId: string, groupId: string, ruleId: string): Promise<RecurringRule> {
+  async get(userId: string, groupId: string, ruleId: string): Promise<RecurringRuleView> {
     await this.authorize(userId, groupId, 'read', 'RecurringRule');
-    return this.findOrFail(groupId, ruleId);
+    return this.viewOf(await this.findOrFail(groupId, ruleId));
   }
 
   /** Future occurrences whose date falls inside their own rule's reminder window. */
@@ -106,7 +122,7 @@ export class RecurringRulesService {
   }
 
   @Transactional()
-  async create(userId: string, groupId: string, input: CreateRecurringRuleInput): Promise<RecurringRule> {
+  async create(userId: string, groupId: string, input: CreateRecurringRuleInput): Promise<RecurringRuleView> {
     await this.authorize(userId, groupId, 'create', 'RecurringRule');
 
     const startsAt = new Date(input.startsAt);
@@ -133,16 +149,20 @@ export class RecurringRulesService {
     // input too, but as a bare 500 instead of a 400/404. The category pair is stored the way the
     // validator settles it (a subcategory sent as the category lands under its parent).
     Object.assign(rule, await this.validator.validate(groupId, shapeOf(rule)));
+    await this.assertOneCurrency(groupId, rule);
+    if (input.replacesTransactionId) {
+      await this.replacePlanned(userId, groupId, input.replacesTransactionId);
+    }
 
     const saved = await this.rules.save(rule);
     await materializeOccurrences(this.rules.manager, saved, new Date());
 
     this.realtime.emitToGroup(groupId, { resourceType: 'RecurringRule', resourceId: saved.id, action: 'created', groupId });
-    return this.findOrFail(groupId, saved.id);
+    return this.viewOf(await this.findOrFail(groupId, saved.id));
   }
 
   @Transactional()
-  async update(userId: string, groupId: string, ruleId: string, patch: UpdateRecurringRuleInput): Promise<RecurringRule> {
+  async update(userId: string, groupId: string, ruleId: string, patch: UpdateRecurringRuleInput): Promise<RecurringRuleView> {
     await this.authorize(userId, groupId, 'update', 'RecurringRule');
     const before = await this.findOrFail(groupId, ruleId);
 
@@ -165,6 +185,7 @@ export class RecurringRulesService {
       active: patch.active ?? before.active,
     });
     Object.assign(after, await this.validator.validate(groupId, shapeOf(after)));
+    await this.assertOneCurrency(groupId, after);
     await this.rules.save(after);
 
     const manager = this.rules.manager;
@@ -180,19 +201,74 @@ export class RecurringRulesService {
     }
 
     this.realtime.emitToGroup(groupId, { resourceType: 'RecurringRule', resourceId: ruleId, action: 'updated', groupId });
-    return this.findOrFail(groupId, ruleId);
+    return this.viewOf(await this.findOrFail(groupId, ruleId));
   }
 
   @Transactional()
-  async remove(userId: string, groupId: string, ruleId: string): Promise<RecurringRule> {
+  async remove(userId: string, groupId: string, ruleId: string, keepPlanned = false): Promise<RecurringRuleView> {
     await this.authorize(userId, groupId, 'delete', 'RecurringRule');
     const rule = await this.findOrFail(groupId, ruleId);
+    const now = new Date();
+    if (keepPlanned) {
+      await detachFutureOccurrences(this.rules.manager, ruleId, now);
+    }
     // Occurrences that already happened are real history and stay; so do future ones a user
     // edited. Everything else ahead of now was only ever a projection of this rule.
-    await removeFutureOccurrences(this.rules.manager, ruleId, new Date());
+    await removeFutureOccurrences(this.rules.manager, ruleId, now);
     await this.rules.softDelete({ id: ruleId, groupId });
     this.realtime.emitToGroup(groupId, { resourceType: 'RecurringRule', resourceId: ruleId, action: 'deleted', groupId });
-    return rule;
+    // A deleted series produces nothing more.
+    return { rule, nextOccurrence: null };
+  }
+
+  /**
+   * A planned one-off transaction that a new series takes over goes, so the series' own first
+   * occurrence doesn't stand beside it. Only a planned one: what already happened stays as it was.
+   */
+  private async replacePlanned(userId: string, groupId: string, transactionId: string): Promise<void> {
+    await this.authorize(userId, groupId, 'delete', 'Transaction');
+    const replaced = await this.transactions.findOneBy({ id: transactionId, groupId });
+    if (!replaced) {
+      throw new NotFoundException('Transaction not found');
+    }
+    if (replaced.recurringRuleId !== null) {
+      throw new BadRequestException('The transaction already belongs to a series');
+    }
+    if (replaced.date.getTime() <= Date.now()) {
+      throw new BadRequestException('Only a planned transaction can become a series');
+    }
+    await this.transactions.softDelete({ id: transactionId, groupId });
+    this.realtime.emitToGroup(groupId, { resourceType: 'Transaction', resourceId: transactionId, action: 'deleted', groupId });
+  }
+
+  /**
+   * A transfer series carries one amount, sent and received alike: between accounts in different
+   * currencies every occurrence would credit the target with the source's figure in the wrong
+   * currency, since the balance trigger reads a missing received amount as "the same".
+   */
+  private async assertOneCurrency(groupId: string, rule: RecurringRule): Promise<void> {
+    if (rule.type !== TransactionType.TRANSFER || !rule.toAccountId) {
+      return;
+    }
+    const sides = await this.accounts.findBy({ id: In([rule.accountId, rule.toAccountId]), groupId });
+    if (new Set(sides.map((account) => account.currencyId)).size > 1) {
+      throw new BadRequestException('A recurring transfer needs both accounts in the same currency');
+    }
+  }
+
+  private async viewOf(rule: RecurringRule): Promise<RecurringRuleView> {
+    const [view] = await this.withNextOccurrences([rule]);
+    return view;
+  }
+
+  private async withNextOccurrences(rules: RecurringRule[]): Promise<RecurringRuleView[]> {
+    const now = new Date();
+    const planned = await plannedOccurrenceDates(
+      this.rules.manager,
+      rules.map((rule) => rule.id),
+      now,
+    );
+    return rules.map((rule) => ({ rule, nextOccurrence: nextOccurrence(rule, planned.get(rule.id), now) }));
   }
 
   private async findOrFail(groupId: string, ruleId: string): Promise<RecurringRule> {

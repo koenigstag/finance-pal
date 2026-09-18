@@ -1,4 +1,4 @@
-import { firstIndexAtOrAfter, gapCutoff, horizonEnd, occurrenceAt, type Schedule } from './recurrence-dates';
+import { firstIndexAtOrAfter, firstOccurrenceAtOrAfter, occurrenceAt, startOfLocalDay, type Schedule } from './recurrence-dates';
 
 const iso = (date: Date) => date.toISOString();
 
@@ -77,16 +77,23 @@ describe('firstIndexAtOrAfter', () => {
   });
 });
 
-describe('gapCutoff / horizonEnd', () => {
-  // 23:30 UTC on Jan 15 is already 02:30 on Jan 16 in Moscow.
-  const now = new Date('2027-01-15T23:30:00Z');
-
-  it('uses the start of the local day, not now', () => {
-    expect(iso(gapCutoff(now, 'Europe/Moscow'))).toBe('2027-01-15T21:00:00.000Z');
+describe('firstOccurrenceAtOrAfter', () => {
+  it('is the occurrence itself, not its index', () => {
+    const monthly: Schedule = {
+      startsAt: new Date('2027-01-31T06:00:00Z'),
+      intervalUnit: 'month',
+      intervalValue: 1,
+      timezone: 'Europe/Moscow',
+    };
+    expect(iso(firstOccurrenceAtOrAfter(monthly, new Date('2027-03-01T00:00:00Z')))).toBe('2027-03-31T06:00:00.000Z');
   });
+});
 
-  it('ends at the last instant of next calendar month in the zone', () => {
-    expect(iso(horizonEnd(now, 'Europe/Moscow'))).toBe('2027-02-28T20:59:59.999Z');
-    expect(iso(horizonEnd(now, 'UTC'))).toBe('2027-02-28T23:59:59.999Z');
+describe('startOfLocalDay', () => {
+  it('is midnight on the calendar day in the zone, not in UTC', () => {
+    // 23:30 UTC on Jan 15 is already 02:30 on Jan 16 in Moscow.
+    const now = new Date('2027-01-15T23:30:00Z');
+    expect(iso(startOfLocalDay(now, 'Europe/Moscow'))).toBe('2027-01-15T21:00:00.000Z');
+    expect(iso(startOfLocalDay(now, 'UTC'))).toBe('2027-01-15T00:00:00.000Z');
   });
 });
