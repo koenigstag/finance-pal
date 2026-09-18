@@ -13,6 +13,8 @@ module.exports = {
   displayName: 'api',
   preset: '../../jest.preset.js',
   testEnvironment: 'node',
+  // Runs before the first import in a spec file — see the file for why that matters.
+  setupFiles: ['<rootDir>/jest.setup.ts'],
   transform: {
     '^.+\\.[tj]s$': ['@swc/jest', swcJestConfig],
   },
