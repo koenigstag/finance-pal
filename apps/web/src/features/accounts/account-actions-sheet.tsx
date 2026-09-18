@@ -12,7 +12,7 @@ import { AppearanceIcon } from '@/components/appearance/appearance-icon';
 import { Dialog, DialogContent, DialogDescription, DialogHeader, DialogTitle } from '@/components/ui/dialog';
 import { useCurrencyCodes } from '@/features/currencies/queries';
 import { pickDefaultAccountId } from '@/features/transactions/transaction-form-model';
-import { formatMoney } from '@/lib/money';
+import { formatMoney, moneySign } from '@/lib/money';
 import { cn } from '@/lib/utils';
 import { FavouriteToggle } from './favourite-toggle';
 import type { Account } from './queries';
@@ -72,9 +72,26 @@ export function AccountActionsSheet({
   }
   actions.push({ action: 'transactions', label: t('nav.transactions'), icon: ReceiptTextIcon });
   if (canAddTransactions) {
+    // On a debt account these are money changing hands with a person, not income and spending,
+    // and which way each goes depends on who owes whom: with a negative balance, the debt is
+    // yours, so the two read the other way round.
+    const isDebt = account?.type === 'debt';
+    const owing = isDebt && moneySign(account.balance) < 0;
+    const debtLabel = (kind: 'income' | 'expense') =>
+      t(`accounts.debtActions.${(kind === 'income') !== owing ? 'get' : 'give'}`);
     actions.push(
-      { action: 'income', label: t('transactions.types.income'), icon: PlusIcon, tone: 'text-emerald-600 dark:text-emerald-400' },
-      { action: 'expense', label: t('transactions.types.expense'), icon: MinusIcon, tone: 'text-destructive' },
+      {
+        action: 'income',
+        label: isDebt ? debtLabel('income') : t('transactions.types.income'),
+        icon: PlusIcon,
+        tone: 'text-emerald-600 dark:text-emerald-400',
+      },
+      {
+        action: 'expense',
+        label: isDebt ? debtLabel('expense') : t('transactions.types.expense'),
+        icon: MinusIcon,
+        tone: 'text-destructive',
+      },
     );
     // Debt and savings accounts are tracked by what's recorded on them directly; transfers belong
     // to regular accounts.

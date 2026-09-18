@@ -89,6 +89,10 @@ export const en = {
       debt: 'Debt',
       savings: 'Savings',
     },
+    debtActions: {
+      get: 'Get money',
+      give: 'Give money',
+    },
     tabs: {
       balance: 'Balance',
       debts: 'Debts',

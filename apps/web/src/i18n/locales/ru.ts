@@ -91,6 +91,10 @@ export const ru: Catalog<typeof en> = {
       debt: 'Долг',
       savings: 'Накопления',
     },
+    debtActions: {
+      get: 'Получить деньги',
+      give: 'Отдать деньги',
+    },
     tabs: {
       balance: 'Баланс',
       debts: 'Долги',
