@@ -83,7 +83,7 @@ export function ExchangeRatesCard() {
 
         <div className="flex items-center gap-2">
           <Select value={adding ?? ''} onValueChange={setAdding}>
-            <SelectTrigger className="flex-1" aria-label={t('settings.rates.add')}>
+            <SelectTrigger className="flex-1 [&_[data-hint]]:hidden" aria-label={t('settings.rates.add')}>
               <SelectValue placeholder={t('settings.rates.add')} />
             </SelectTrigger>
             <SelectContent>
@@ -91,7 +91,11 @@ export function ExchangeRatesCard() {
                 .filter((currency) => currency.id !== base.id && !(currency.code in rates))
                 .map((currency) => (
                   <SelectItem key={currency.id} value={currency.code}>
-                    {currency.code} · {currency.name}
+                    {/* The closed select shows only the code; the name is for the list. */}
+                    <span className="flex flex-col">
+                      <span>{currency.code}</span>
+                      <span data-hint className="text-xs text-muted-foreground">{currency.name}</span>
+                    </span>
                   </SelectItem>
                 ))}
             </SelectContent>

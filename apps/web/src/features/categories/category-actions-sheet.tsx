@@ -40,10 +40,8 @@ export function CategoryActionsSheet({ category, parent, open, onOpenChange, can
                 <AppearanceIcon icon={category.icon} color={category.color} size="lg" />
                 <div className="min-w-0 flex-1 text-left">
                   <DialogTitle className="truncate">{category.name}</DialogTitle>
-                  <DialogDescription className="truncate">
-                    {t(`categories.types.${category.type}`)}
-                    {parent && ` · ${parent.name}`}
-                  </DialogDescription>
+                  <DialogDescription className="truncate">{t(`categories.types.${category.type}`)}</DialogDescription>
+                  {parent && <p className="truncate text-sm text-muted-foreground">{parent.name}</p>}
                 </div>
               </div>
             </DialogHeader>

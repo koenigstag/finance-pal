@@ -1,5 +1,5 @@
 import { format } from 'date-fns';
-import { ArrowRightIcon, ChevronUpIcon, RepeatIcon } from 'lucide-react';
+import { ChevronUpIcon, RepeatIcon } from 'lucide-react';
 import { useMemo } from 'react';
 import { useTranslation } from 'react-i18next';
 import { AppearanceIcon } from '@/components/appearance/appearance-icon';
@@ -131,16 +131,8 @@ function TransactionRow({ transaction, planned, accountsById, categoriesById, on
             <RepeatIcon className="size-3.5 shrink-0 text-muted-foreground" aria-label={t('transactions.recurring')} />
           )}
         </p>
-        <p className="flex items-center gap-1 truncate text-sm text-muted-foreground">
-          {account?.name ?? '—'}
-          {isTransfer && (
-            <>
-              {/* The arrow points at the title above: this is where it came from. */}
-              <ArrowRightIcon className="size-3.5 shrink-0" />
-            </>
-          )}
-          {transaction.note && <span className="truncate"> · {transaction.note}</span>}
-        </p>
+        <p className="truncate text-sm text-muted-foreground">{account?.name ?? '—'}</p>
+        {transaction.note && <p className="truncate text-sm text-muted-foreground">{transaction.note}</p>}
         {transaction.isCustomized && (
           <div className="mt-1 flex gap-1">
             <Badge variant="secondary">{t('transactions.customized')}</Badge>
@@ -154,7 +146,7 @@ function TransactionRow({ transaction, planned, accountsById, categoriesById, on
           {/* No + or −: the color already says which way the money went. */}
           {amount}
         </p>
-        {destAmount && <p className="text-sm whitespace-nowrap text-muted-foreground tabular-nums">→ {destAmount}</p>}
+        {destAmount && <p className="text-sm whitespace-nowrap text-muted-foreground tabular-nums">{destAmount}</p>}
       </div>
     </>
   );

@@ -53,10 +53,10 @@ export const GroupMembers = observer(function GroupMembers({ group, open }: { gr
           {members.data.map((member) => (
             <li key={member.userId} className="flex items-center gap-2 px-3 py-2">
               <div className="min-w-0 flex-1">
-                <p className="truncate text-sm">
-                  {member.email}
-                  {member.userId === session.session?.user.id && ` · ${t('groups.members.you')}`}
-                </p>
+                <p className="truncate text-sm">{member.email}</p>
+                {member.userId === session.session?.user.id && (
+                  <p className="truncate text-xs text-muted-foreground">{t('groups.members.you')}</p>
+                )}
               </div>
               {/* The owner's role can't be handed over here: that moves ownership, a flow of its own. */}
               {canManage && member.role !== 'owner' ? (
