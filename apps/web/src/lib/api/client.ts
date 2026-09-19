@@ -15,8 +15,13 @@ import { ApiError, toApiError } from './errors';
 import { refreshSession } from './refresh';
 import { rootStore } from '@/stores/root-store';
 
-// Attaches the access token and, on a 401 from a protected route, refreshes once and retries
-// once. Auth routes are exempt: a 401 from login means bad credentials, not an expired token.
+// The auth routes that run without a session. A 401 from one of them means bad credentials,
+// not an expired token, so there is nothing to refresh. Changing a password is authenticated
+// and therefore not among them — its 401 is an expired token like anywhere else, which is why
+// a wrong current password answers 403.
+const UNAUTHENTICATED_PATHS = ['/api/auth/login', '/api/auth/register', '/api/auth/refresh', '/api/auth/logout'];
+
+// Attaches the access token and, on a 401 from a protected route, refreshes once and retries once.
 const authorizedFetch: ApiFetcher = async (args) => {
   const send = (accessToken: string | undefined) =>
     tsRestFetchApi({
@@ -26,7 +31,7 @@ const authorizedFetch: ApiFetcher = async (args) => {
 
   const session = rootStore.session.session;
   const response = await send(session?.accessToken);
-  if (response.status !== 401 || !session || args.path.includes('/api/auth/')) {
+  if (response.status !== 401 || !session || UNAUTHENTICATED_PATHS.some((path) => args.path.includes(path))) {
     return response;
   }
 

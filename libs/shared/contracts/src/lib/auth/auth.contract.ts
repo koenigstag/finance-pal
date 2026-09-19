@@ -20,6 +20,20 @@ const credentialsSchema = z.object({
   password: z.string().min(8),
 });
 
+// The fields on their own, so a form can extend them (with a "repeat the new password" field,
+// say) without losing the refinement below, which no longer applies once a schema is extended.
+export const changePasswordFieldsSchema = z.object({
+  // Only that something was typed: what the old password had to satisfy is whatever the rules
+  // were when it was set, not today's.
+  currentPassword: z.string().min(1),
+  newPassword: z.string().min(8),
+});
+
+export const changePasswordSchema = changePasswordFieldsSchema.refine(
+  (body) => body.currentPassword !== body.newPassword,
+  { message: 'New password must be different from the current one', path: ['newPassword'] },
+);
+
 export const authContract = c.router(
   {
     register: {
@@ -60,6 +74,20 @@ export const authContract = c.router(
         204: z.void(),
       },
       summary: 'Revoke a refresh token',
+    },
+    changePassword: {
+      method: 'POST',
+      path: '/auth/password',
+      body: changePasswordSchema,
+      responses: {
+        // A fresh pair for the caller, because changing a password revokes every token issued
+        // before it — including the one this request was made with.
+        200: authTokensSchema,
+        // 403, not 401: the request itself is authenticated, it's the password in the body that
+        // is wrong. A 401 here would be indistinguishable from an expired access token.
+        403: errorSchema,
+      },
+      summary: "Change the signed-in user's password and sign every other session out",
     },
   },
   { pathPrefix: '/api' },

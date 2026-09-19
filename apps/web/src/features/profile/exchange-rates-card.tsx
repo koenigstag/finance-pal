@@ -1,6 +1,7 @@
 import { PlusIcon, XIcon } from 'lucide-react';
 import { useState } from 'react';
 import { useTranslation } from 'react-i18next';
+import { QueryError } from '@/components/query-error';
 import { Alert, AlertDescription } from '@/components/ui/alert';
 import { Button } from '@/components/ui/button';
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card';
@@ -32,6 +33,21 @@ export function ExchangeRatesCard() {
   const edit = (next: Record<string, string>) => setDraft(next);
   const codes = Object.keys(rates).sort();
   const invalid = Object.values(rates).some((rate) => !RATE_PATTERN.test(rate.trim()));
+
+  if (profile.isPending || currencies.isPending) {
+    return <Spinner className="mx-auto size-6 text-muted-foreground" />;
+  }
+
+  if (profile.isError || currencies.isError) {
+    return (
+      <QueryError
+        onRetry={() => {
+          void profile.refetch();
+          void currencies.refetch();
+        }}
+      />
+    );
+  }
 
   if (!profile.data || !currencies.data || !base) {
     return null;
