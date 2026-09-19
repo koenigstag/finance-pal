@@ -3,7 +3,7 @@ import { useTranslation } from 'react-i18next';
 import { AppearanceIcon } from '@/components/appearance/appearance-icon';
 import { Dialog, DialogContent, DialogHeader, DialogTitle } from '@/components/ui/dialog';
 import { ToggleGroup, ToggleGroupItem } from '@/components/ui/toggle-group';
-import type { Account } from '@/features/accounts/queries';
+import { debtsLast, type Account } from '@/features/accounts/queries';
 import { categoriesUnder, type Category } from '@/features/categories/queries';
 import { useCurrencyCodes } from '@/features/currencies/queries';
 import { formatMoney, moneySign } from '@/lib/money';
@@ -21,7 +21,8 @@ export type KindPick =
 /**
  * The first step of a transaction: what kind it is, and what it's for. Income and expense list
  * their top-level categories — a subcategory is picked afterwards, from chips on the form; a
- * transfer lists the accounts it could go to. A bottom sheet on phones, a dialog from sm up.
+ * transfer lists the accounts it could go to, debts last. A bottom sheet on phones, a dialog
+ * from sm up.
  */
 export function KindPicker({
   open,
@@ -93,18 +94,16 @@ export function KindPicker({
 
         <ul className="-mx-2 flex min-h-0 flex-1 flex-col overflow-y-auto [scrollbar-gutter:stable]">
           {tab === 'transfer' ? (
-            accounts
-              .filter((account) => account.id !== fromAccountId)
-              .map((account) => (
-                <PickerRow
-                  key={account.id}
-                  selected={selected === account.id}
-                  onClick={() => onPick({ type: 'transfer', toAccountId: account.id })}
-                  icon={<AppearanceIcon icon={account.icon} color={account.color} fallbackIcon="wallet" />}
-                  label={account.name}
-                  aside={<AccountBalance account={account} />}
-                />
-              ))
+            debtsLast(accounts.filter((account) => account.id !== fromAccountId)).map((account) => (
+              <PickerRow
+                key={account.id}
+                selected={selected === account.id}
+                onClick={() => onPick({ type: 'transfer', toAccountId: account.id })}
+                icon={<AppearanceIcon icon={account.icon} color={account.color} fallbackIcon="wallet" />}
+                label={account.name}
+                aside={<AccountBalance account={account} />}
+              />
+            ))
           ) : (
             <>
               <PickerRow
@@ -132,7 +131,7 @@ export function KindPicker({
 
 /**
  * Choosing one account for one side of a transaction: the account chosen now on top, the rest
- * below. Its title says which side it's for.
+ * below it and the debts last of those. Its title says which side it's for.
  */
 export function AccountPicker({
   open,
@@ -168,18 +167,16 @@ export function AccountPicker({
           </div>
         )}
         <ul className="-mx-2 flex min-h-0 flex-1 flex-col overflow-y-auto [scrollbar-gutter:stable]">
-          {accounts
-            .filter((account) => account.id !== excludeId)
-            .map((account) => (
-              <PickerRow
-                key={account.id}
-                selected={account.id === selectedId}
-                onClick={() => onPick(account.id)}
-                icon={<AppearanceIcon icon={account.icon} color={account.color} fallbackIcon="wallet" />}
-                label={account.name}
-                aside={<AccountBalance account={account} />}
-              />
-            ))}
+          {debtsLast(accounts.filter((account) => account.id !== excludeId)).map((account) => (
+            <PickerRow
+              key={account.id}
+              selected={account.id === selectedId}
+              onClick={() => onPick(account.id)}
+              icon={<AppearanceIcon icon={account.icon} color={account.color} fallbackIcon="wallet" />}
+              label={account.name}
+              aside={<AccountBalance account={account} />}
+            />
+          ))}
         </ul>
       </DialogContent>
     </Dialog>

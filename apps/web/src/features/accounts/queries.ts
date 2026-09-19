@@ -9,6 +9,17 @@ export type CreateAccountBody = ClientInferRequest<typeof accountsContract.creat
 export type UpdateAccountBody = ClientInferRequest<typeof accountsContract.update>['body'];
 
 /**
+ * The same accounts, with the debts after the rest and the order they came in kept on either side
+ * of that. A debt account is money owed to or by someone rather than money to spend with, so it is
+ * seldom the account a transfer is headed for — and a handful of them at the top of a picker push
+ * the accounts that usually are out of reach. The accounts page already lists its sections this
+ * way round: everyday money, then what's put aside, then what's owed.
+ */
+export function debtsLast(accounts: Account[]): Account[] {
+  return [...accounts].sort((a, b) => Number(a.type === 'debt') - Number(b.type === 'debt'));
+}
+
+/**
  * The group's accounts. Archived ones are left out unless asked for — they belong in the past, not
  * in a picker — and are cached apart, so a screen that wants them doesn't push them at the rest.
  */
