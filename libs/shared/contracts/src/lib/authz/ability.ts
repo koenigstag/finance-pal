@@ -8,7 +8,14 @@ export type MemberRole = (typeof MEMBER_ROLES)[number];
 // deliberate act, not something that silently inherits write access.
 export const LEDGER_SUBJECTS = ['Account', 'AccountTarget', 'Category', 'Tag', 'Transaction', 'RecurringRule'] as const;
 
-export type Subject = (typeof LEDGER_SUBJECTS)[number] | 'Group' | 'GroupMember' | 'Profile' | 'all';
+export type Subject =
+  | (typeof LEDGER_SUBJECTS)[number]
+  | 'Group'
+  | 'GroupMember'
+  | 'Profile'
+  // Not ledger data — a note someone schedules for the group, which says nothing about money.
+  | 'ScheduledNotification'
+  | 'all';
 
 export type Action =
   | 'read'
@@ -57,6 +64,10 @@ export function defineAbilityFor(ctx: GroupContext): AppAbility {
 
   if (ctx.role !== 'viewer') {
     can(['create', 'update', 'delete'], [...LEDGER_SUBJECTS]);
+    // The same rule as the ledger's, spelled out because it isn't one of its subjects: whoever
+    // may record money in this group may schedule a note about it, and call one off. There is no
+    // update — a note is a sentence and a moment, and changing either is a new one.
+    can(['create', 'delete'], 'ScheduledNotification');
   }
 
   if (ctx.role === 'owner' || ctx.role === 'admin') {

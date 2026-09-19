@@ -63,6 +63,7 @@ every device the signed-in person has registered, whatever they left switched on
 | What others record      | no            | A transaction is recorded, dated now or earlier                 | Everyone in the group but whoever recorded it |
 | Being added to a group  | yes           | Someone is added to a group                                     | The person who was added          |
 | Planned transactions    | yes           | A series' planned occurrence lands and the next one is written  | Everyone in the group             |
+| Scheduled notes         | yes           | A note the group scheduled reaches the moment it was set for    | Everyone in the group             |
 
 Each is a switch per device, so a phone can buzz about all three and a laptop about none.
 
@@ -78,8 +79,28 @@ may well read the app in different languages — from the catalogue in
 `apps/api/src/modules/push/push-messages.ts`. It deliberately carries no more than the line being
 shown: it is rendered by the operating system, often on a locked screen.
 
-Edits and deletions are not notified. The socket reports them to whoever is looking, and a
-notification for every correction to a figure would be noise.
+A scheduled note is the exception to the catalogue: its line is the words somebody typed, passed
+through as they wrote them. Translating a person's sentence would put words in their mouth.
+
+Edits and deletions to the ledger are not notified. The socket reports them to whoever is looking,
+and a notification for every correction to a figure would be noise.
+
+## Scheduled notes
+
+Anyone who may record money in a group may schedule one — open the group's settings and
+**Scheduled notifications**. A note is a sentence, a date and a time; when the moment comes it
+reaches everyone in the group who has that switch on, once.
+
+The date and time are read in the zone of the device that picked them, and that zone is stored
+beside the moment, so 09:00 picked in Kyiv arrives at 09:00 in Kyiv and still reads as 09:00 on a
+laptop in Berlin. The job that sends them runs every minute, so "09:00" means within the minute
+rather than within ten.
+
+Claiming and marking sent are one statement (`claim_due_notifications`), which is what keeps two
+API instances from sending the same note twice. It is deliberately at-most-once: a crash between
+the claim and the push loses a note, where the other way round would buzz everyone's phone twice
+for it. Notes stay in the group's list for a week after they have gone out, so "did it send?" has
+an answer, and calling one off before its moment is a delete.
 
 ## How it fits together
 
@@ -90,7 +111,11 @@ notification for every correction to a figure would be noise.
   nothing else there is theirs.
 - `apps/web/public/push-handler.js` — the app's half of the service worker, imported by the one
   Workbox generates. It shows the notification and decides where tapping it goes.
-- `apps/web/src/features/push/` — permission, the browser's subscription, and the settings card.
+- `apps/api/src/modules/scheduled-notifications/` — the notes a group schedules, and the job that
+  sends them at the minute they were set for. A source of notifications like the ledger is: it
+  says what happened and leaves the push module to decide whose devices hear it.
+- `apps/web/src/features/push/` — permission, the browser's subscription, the notifications page,
+  and the group's scheduled notes.
 
 Devices live in `push_subscriptions`, one row per browser, behind a row-level security policy that
 shows a person their own and nobody else's. Sending goes the other way — the recipients are by

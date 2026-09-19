@@ -25,6 +25,13 @@ export interface AddedToGroupInput {
   userId: string;
 }
 
+export interface ScheduledDueInput {
+  id: string;
+  groupId: string;
+  groupName: string;
+  text: string;
+}
+
 export interface PlannedRecordedInput {
   groupId: string;
   groupName: string;
@@ -119,6 +126,25 @@ export class PushNotificationsService {
       type: input.type,
       amount: input.amount,
       currency,
+    });
+  }
+
+  /**
+   * A note somebody scheduled for the group has come round. Sent straight away, for the same
+   * reason as a planned transaction's: its caller is a scheduler with its own transactions,
+   * already committed by the time it says so.
+   */
+  async scheduledDueNow(input: ScheduledDueInput): Promise<void> {
+    if (!this.sender.isConfigured) {
+      return;
+    }
+    // Everyone in the group, whoever scheduled it included: they asked to be reminded too.
+    await this.deliverToGroup(input.groupId, null, {
+      kind: 'scheduled.due',
+      id: input.id,
+      groupId: input.groupId,
+      groupName: input.groupName,
+      text: input.text,
     });
   }
 

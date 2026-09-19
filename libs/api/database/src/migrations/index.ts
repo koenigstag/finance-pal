@@ -19,6 +19,7 @@ import { addPercentageToSeries } from './20260918210000-add-percentage-to-series
 import { addBalanceRounding } from './20260919120000-add-balance-rounding.js';
 import { allowZeroEstimates } from './20260919150000-allow-zero-estimates.js';
 import { createPushSubscriptions } from './20260919160000-create-push-subscriptions.js';
+import { createScheduledNotifications } from './20260919170000-create-scheduled-notifications.js';
 
 export const migrations: readonly Migration[] = [
   createAuthTables,
@@ -44,6 +45,7 @@ export const migrations: readonly Migration[] = [
   addBalanceRounding,
   allowZeroEstimates,
   createPushSubscriptions,
+  createScheduledNotifications,
 ];
 
 export * from './migration.interface.js';

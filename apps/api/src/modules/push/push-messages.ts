@@ -20,6 +20,8 @@ export type PushMessage =
     }
   | { kind: 'member.added'; groupId: string; groupName: string; actor: string | null }
   | { kind: 'planned.recorded'; groupId: string; groupName: string; type: TransactionKind; amount: string; currency: string }
+  // Somebody's own note, scheduled for this moment. Its text is theirs, not the catalogue's.
+  | { kind: 'scheduled.due'; id: string; groupId: string; groupName: string; text: string }
   | { kind: 'push.test' };
 
 /**
@@ -35,6 +37,8 @@ export function topicFor(message: PushMessage): PushTopic | null {
       return 'members';
     case 'planned.recorded':
       return 'planned';
+    case 'scheduled.due':
+      return 'scheduled';
     case 'push.test':
       return null;
   }
@@ -148,6 +152,17 @@ export function renderPushMessage(message: PushMessage, language: string): PushP
         body: strings.memberAdded(message.actor ?? strings.someone),
         path: `g/${message.groupId}`,
         tag: `members:${message.groupId}`,
+      };
+    case 'scheduled.due':
+      return {
+        title: message.groupName,
+        // Written by a person, in whatever language they wrote it: there is nothing to translate,
+        // and translating it would put words in their mouth.
+        body: message.text,
+        path: `g/${message.groupId}`,
+        // Its own tag, unlike the others: two notes due at the same moment are two things to
+        // read, not one taking the other's place.
+        tag: `scheduled:${message.id}`,
       };
     case 'push.test':
       // No path: it opens the app wherever it was left, since there is nothing new to look at.

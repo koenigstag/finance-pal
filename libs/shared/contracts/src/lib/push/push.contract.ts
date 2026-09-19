@@ -25,6 +25,8 @@ export const PUSH_TOPICS = [
   'members',
   // A planned transaction has come round and is now part of the ledger.
   'planned',
+  // A note someone in the group scheduled for this moment.
+  'scheduled',
 ] as const;
 export type PushTopic = (typeof PUSH_TOPICS)[number];
 export const pushTopicSchema = z.enum(PUSH_TOPICS);
@@ -36,7 +38,7 @@ export const pushTopicSchema = z.enum(PUSH_TOPICS);
 // and an app that buzzes on every coffee is one whose notifications get turned off altogether —
 // taking the other two with them. So it is offered, unticked, for the people who do want it, and
 // an open app still shows every change at once over the socket either way.
-export const DEFAULT_PUSH_TOPICS: readonly PushTopic[] = ['members', 'planned'];
+export const DEFAULT_PUSH_TOPICS: readonly PushTopic[] = ['members', 'planned', 'scheduled'];
 
 // A push service's URL for one device. Long, opaque, and the closest thing to an identifier a
 // subscription has — the API stores one row per endpoint and replaces it when the same device

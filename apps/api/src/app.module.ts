@@ -9,6 +9,7 @@ import { LedgerModule } from './modules/ledger/ledger.module';
 import { PushModule } from './modules/push/push.module';
 import { RealtimeModule } from './modules/realtime/realtime.module';
 import { RecurringModule } from './modules/recurring/recurring.module';
+import { ScheduledNotificationsModule } from './modules/scheduled-notifications/scheduled-notifications.module';
 
 @Module({
   imports: [
@@ -22,6 +23,7 @@ import { RecurringModule } from './modules/recurring/recurring.module';
     PushModule,
     RealtimeModule,
     RecurringModule,
+    ScheduledNotificationsModule,
   ],
 })
 export class AppModule {}

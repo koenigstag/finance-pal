@@ -9,6 +9,7 @@ import {
   onboardingContract,
   pushContract,
   recurringRulesContract,
+  scheduledNotificationsContract,
   transactionsContract,
 } from '@ft/shared-contracts';
 import { API_ORIGIN } from './api-url';
@@ -57,6 +58,7 @@ export const api = {
   recurringRules: clientFor(recurringRulesContract),
   apiKeys: clientFor(apiKeysContract),
   push: clientFor(pushContract),
+  scheduledNotifications: clientFor(scheduledNotificationsContract),
 };
 
 type Response = { status: number; body: unknown };

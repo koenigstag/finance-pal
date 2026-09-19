@@ -73,6 +73,21 @@ describe('renderPushMessage', () => {
     expect(payload.body).toMatch(/^A planned expense of/);
   });
 
+  it("passes a scheduled note's own words through, untranslated", () => {
+    const note = { kind: 'scheduled.due' as const, id: 'a1', groupId: GROUP_ID, groupName: 'Household', text: 'Rent goes out tomorrow' };
+
+    // The same words whichever language the recipient reads the app in: they are not ours.
+    expect(renderPushMessage(note, 'en').body).toBe('Rent goes out tomorrow');
+    expect(renderPushMessage(note, 'ru')).toMatchObject({ title: 'Household', body: 'Rent goes out tomorrow' });
+  });
+
+  it('gives each scheduled note its own tag, so two due together are both read', () => {
+    const note = { kind: 'scheduled.due' as const, id: 'a1', groupId: GROUP_ID, groupName: 'Household', text: 'One' };
+    const other = { ...note, id: 'b2', text: 'Two' };
+
+    expect(renderPushMessage(note, 'en').tag).not.toBe(renderPushMessage(other, 'en').tag);
+  });
+
   it('sends whoever was added to a group to that group', () => {
     const payload = renderPushMessage({ kind: 'member.added', groupId: GROUP_ID, groupName: 'Household', actor: 'Anna' }, 'en');
 
@@ -88,6 +103,9 @@ describe('renderPushMessage', () => {
 
 describe('topicFor', () => {
   it('routes each kind to the switch it answers to', () => {
+    expect(topicFor({ kind: 'scheduled.due', id: 'a1', groupId: GROUP_ID, groupName: 'Household', text: 'Rent' })).toBe(
+      'scheduled',
+    );
     expect(topicFor(recorded)).toBe('transactions');
     expect(topicFor({ kind: 'member.added', groupId: GROUP_ID, groupName: 'Household', actor: null })).toBe('members');
   });
