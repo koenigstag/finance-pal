@@ -1,5 +1,7 @@
 import type { EntityManager } from 'typeorm';
 import type { RecurringRule } from '@ft/api-database';
+import { isPositiveMoney } from '@ft/shared-contracts';
+import { percentageAmount } from './percentage-amount';
 import { firstIndexAtOrAfter, firstOccurrenceAtOrAfter, occurrenceAt, startOfLocalDay, type Schedule } from './recurrence-dates';
 
 // A series writes one row per run, a few when it has some catching up to do. This only exists to
@@ -42,9 +44,10 @@ const PLANNED_DATES_SQL = `
 const INSERT_OCCURRENCE_SQL = `
   INSERT INTO transactions (
     group_id, type, date, amount, currency_id, account_id, category_id, subcategory_id, to_account_id,
-    note, recurring_rule_id, recurrence_date, is_customized, created_by
+    note, recurring_rule_id, recurrence_date, is_customized, created_by,
+    percentage, percentage_base, percentage_as_of
   )
-  VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $3, false, $12)
+  VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $3, false, $12, $13, $14, $15)
   ON CONFLICT (recurring_rule_id, recurrence_date) WHERE recurring_rule_id IS NOT NULL DO NOTHING
   RETURNING id
 `;
@@ -71,6 +74,38 @@ const DETACH_FUTURE_OCCURRENCES_SQL = `
     AND deleted_at IS NULL
 `;
 
+interface OccurrenceAmount {
+  amount: string;
+  // See transactions.percentage_as_of: set for a percentage of the balance.
+  asOf: Date | null;
+}
+
+/**
+ * An occurrence's amount as it's written. A fixed series: its amount. A percentage of a base
+ * amount: what that comes to, the same every time. A percentage of the balance: for a date already
+ * past (catching up), of the balance on that date, final; for the planned one, of the balance now —
+ * an estimate, which the scheduler works out again once its date comes. An estimate of nothing
+ * keeps the series' own figure until then. A date already past that comes to nothing isn't
+ * written at all (null): nothing was charged.
+ */
+async function occurrenceAmount(manager: EntityManager, rule: RecurringRule, date: Date, now: Date): Promise<OccurrenceAmount | null> {
+  if (rule.percentage === null) {
+    return { amount: rule.amount, asOf: null };
+  }
+  const template = { accountId: rule.accountId, percentage: rule.percentage, percentageBase: rule.percentageBase };
+  if (rule.percentageBase !== null) {
+    const amount = await percentageAmount(manager, template, date);
+    return { amount: isPositiveMoney(amount) ? amount : rule.amount, asOf: null };
+  }
+  const passed = date.getTime() <= now.getTime();
+  const asOf = passed ? date : now;
+  const amount = await percentageAmount(manager, template, asOf);
+  if (isPositiveMoney(amount)) {
+    return { amount, asOf };
+  }
+  return passed ? null : { amount: rule.amount, asOf };
+}
+
 function scheduleOf(rule: RecurringRule): Schedule {
   return {
     startsAt: rule.startsAt,
@@ -87,8 +122,9 @@ function scheduleOf(rule: RecurringRule): Schedule {
  * one upcoming transaction at a time, and until then this writes nothing.
  *
  * Nothing is skipped on the way. An occurrence that fell due while the scheduler wasn't running, or
- * between a start date in the past and today, is written as one that happened. A date the user
- * deleted, or an occurrence they moved, keeps its row and is stepped over.
+ * between a start date in the past and today, is written as one that happened — unless it's a
+ * percentage of a balance that was empty then (see occurrenceAmount). A date the user deleted, or an
+ * occurrence they moved, keeps its row and is stepped over.
  *
  * Must run inside the caller's transaction so the inserts and the frontier move commit or fail
  * together. Returns the number of rows inserted.
@@ -105,20 +141,26 @@ export async function materializeOccurrences(manager: EntityManager, rule: Recur
   let inserted = 0;
   for (let i = 0; i < MAX_OCCURRENCES_PER_RUN; i++) {
     const date = occurrenceAt(schedule, k);
-    const rows: { id: string }[] = await manager.query(INSERT_OCCURRENCE_SQL, [
-      rule.groupId,
-      rule.type,
-      date,
-      rule.amount,
-      rule.currencyId,
-      rule.accountId,
-      rule.categoryId,
-      rule.subcategoryId,
-      rule.toAccountId,
-      rule.note,
-      rule.id,
-      rule.createdBy,
-    ]);
+    const worked = await occurrenceAmount(manager, rule, date, now);
+    const rows: { id: string }[] = worked
+      ? await manager.query(INSERT_OCCURRENCE_SQL, [
+          rule.groupId,
+          rule.type,
+          date,
+          worked.amount,
+          rule.currencyId,
+          rule.accountId,
+          rule.categoryId,
+          rule.subcategoryId,
+          rule.toAccountId,
+          rule.note,
+          rule.id,
+          rule.createdBy,
+          rule.percentage,
+          rule.percentageBase,
+          worked.asOf,
+        ])
+      : [];
     inserted += rows.length;
     k++;
     if (rows.length > 0 && date.getTime() > now.getTime()) {

@@ -12,7 +12,12 @@ import {
 } from '@ft/shared-contracts';
 import { AbilityFactory } from '../_core/authz/ability.factory';
 import { RealtimeEmitterService } from '../realtime/realtime-emitter.service';
-import { TransactionValidator, keptSubcategory, type TransactionShape } from '../ledger/transactions/transaction-validator';
+import {
+  TransactionValidator,
+  keptPercentageBase,
+  keptSubcategory,
+  type TransactionShape,
+} from '../ledger/transactions/transaction-validator';
 import {
   detachFutureOccurrences,
   materializeOccurrences,
@@ -33,6 +38,8 @@ export interface CreateRecurringRuleInput {
   subcategoryId?: string | null;
   toAccountId?: string | null;
   note?: string | null;
+  percentage?: string | null;
+  percentageBase?: string | null;
   intervalUnit: (typeof RECURRENCE_UNITS)[number];
   intervalValue?: number;
   startsAt: string;
@@ -58,6 +65,8 @@ function shapeOf(rule: RecurringRule): TransactionShape {
     toAccountId: rule.toAccountId,
     amount: rule.amount,
     destAmount: null,
+    percentage: rule.percentage,
+    percentageBase: rule.percentageBase,
   };
 }
 
@@ -73,6 +82,11 @@ function occurrencesAffected(before: RecurringRule, after: RecurringRule): boole
     before.subcategoryId !== after.subcategoryId ||
     before.toAccountId !== after.toAccountId ||
     before.note !== after.note ||
+    // numeric(7,4) reads back padded ("3.5000"), while a patch has it as typed ("3.5").
+    (before.percentage === null || after.percentage === null
+      ? before.percentage !== after.percentage
+      : Number(before.percentage) !== Number(after.percentage)) ||
+    before.percentageBase !== after.percentageBase ||
     before.intervalUnit !== after.intervalUnit ||
     before.intervalValue !== after.intervalValue ||
     before.startsAt.getTime() !== after.startsAt.getTime() ||
@@ -136,6 +150,8 @@ export class RecurringRulesService {
       subcategoryId: input.subcategoryId ?? null,
       toAccountId: input.toAccountId ?? null,
       note: input.note ?? null,
+      percentage: input.percentage ?? null,
+      percentageBase: input.percentageBase ?? null,
       intervalUnit: input.intervalUnit as RecurrenceUnit,
       intervalValue: input.intervalValue ?? 1,
       startsAt,
@@ -167,6 +183,7 @@ export class RecurringRulesService {
     const before = await this.findOrFail(groupId, ruleId);
 
     const categoryId = patch.categoryId !== undefined ? patch.categoryId : before.categoryId;
+    const percentage = patch.percentage !== undefined ? patch.percentage : before.percentage;
     const after = this.rules.create({
       ...before,
       type: (patch.type as TransactionType | undefined) ?? before.type,
@@ -177,6 +194,8 @@ export class RecurringRulesService {
       subcategoryId: keptSubcategory(patch, before, categoryId),
       toAccountId: patch.toAccountId !== undefined ? patch.toAccountId : before.toAccountId,
       note: patch.note !== undefined ? patch.note : before.note,
+      percentage,
+      percentageBase: keptPercentageBase(patch, before, percentage),
       intervalUnit: (patch.intervalUnit as RecurrenceUnit | undefined) ?? before.intervalUnit,
       intervalValue: patch.intervalValue ?? before.intervalValue,
       startsAt: patch.startsAt !== undefined ? new Date(patch.startsAt) : before.startsAt,

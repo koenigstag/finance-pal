@@ -8,7 +8,7 @@ import { AbilityFactory } from '../../_core/authz/ability.factory';
 import { RealtimeEmitterService } from '../../realtime/realtime-emitter.service';
 import { materializeOccurrences } from '../../recurring/occurrence-materializer';
 import { decodeCursor, encodeCursor } from './cursor.util';
-import { TransactionValidator, keptSubcategory } from './transaction-validator';
+import { TransactionValidator, keptPercentageAsOf, keptPercentageBase, keptSubcategory } from './transaction-validator';
 
 // The shared string union, not api-database's TypeORM enum — see the identical comment on
 // GroupWithRole.role in GroupsService for why (assignable one way, not the other).
@@ -22,6 +22,8 @@ export interface CreateTransactionInput {
   subcategoryId?: string | null;
   toAccountId?: string | null;
   destAmount?: string | null;
+  percentage?: string | null;
+  percentageBase?: string | null;
   note?: string;
   tagIds?: string[];
 }
@@ -143,15 +145,18 @@ export class TransactionsService {
       toAccountId: input.toAccountId ?? null,
       amount: input.amount,
       destAmount: input.destAmount ?? null,
+      percentage: input.percentage ?? null,
+      percentageBase: input.percentageBase ?? null,
     };
     const filed = await this.validator.validate(groupId, merged);
     const tagIds = await this.assertTagsValid(groupId, input.tagIds);
 
+    const date = new Date(input.date);
     const transaction = await this.transactions.save(
       this.transactions.create({
         groupId,
         type: merged.type,
-        date: new Date(input.date),
+        date,
         amount: input.amount,
         currencyId: input.currencyId,
         accountId: input.accountId,
@@ -159,6 +164,9 @@ export class TransactionsService {
         subcategoryId: filed.subcategoryId,
         toAccountId: merged.toAccountId,
         destAmount: merged.destAmount,
+        percentage: merged.percentage,
+        percentageBase: merged.percentageBase,
+        percentageAsOf: keptPercentageAsOf(null, merged, date, new Date()),
         note: input.note ?? null,
         // Explicit, not left to column defaults: save() returns this object, and an omitted
         // nullable column comes back undefined, which the contract's .nullable() rejects.
@@ -199,6 +207,7 @@ export class TransactionsService {
     }
 
     const categoryId = patch.categoryId !== undefined ? patch.categoryId : existing.categoryId;
+    const percentage = patch.percentage !== undefined ? patch.percentage : existing.percentage;
     const merged = {
       type: (patch.type as TransactionType | undefined) ?? existing.type,
       accountId: patch.accountId ?? existing.accountId,
@@ -207,11 +216,14 @@ export class TransactionsService {
       toAccountId: patch.toAccountId !== undefined ? patch.toAccountId : existing.toAccountId,
       amount: patch.amount ?? existing.amount,
       destAmount: patch.destAmount !== undefined ? patch.destAmount : existing.destAmount,
+      percentage,
+      percentageBase: keptPercentageBase(patch, existing, percentage),
     };
     const filed = await this.validator.validate(groupId, merged);
 
     const patchedTagIds = patch.tagIds !== undefined ? await this.assertTagsValid(groupId, patch.tagIds) : undefined;
 
+    const date = patch.date !== undefined ? new Date(patch.date) : existing.date;
     // Every field below is fully resolved (existing value or patch override), never `undefined`
     // — passing `undefined` into a TypeORM partial update is unreliable to reason about, so the
     // safe rule here is: always write a concrete value.
@@ -219,7 +231,7 @@ export class TransactionsService {
       { id: transactionId, groupId },
       {
         type: merged.type,
-        date: patch.date !== undefined ? new Date(patch.date) : existing.date,
+        date,
         amount: merged.amount,
         currencyId: patch.currencyId ?? existing.currencyId,
         accountId: merged.accountId,
@@ -227,6 +239,9 @@ export class TransactionsService {
         subcategoryId: filed.subcategoryId,
         toAccountId: merged.toAccountId,
         destAmount: merged.destAmount,
+        percentage: merged.percentage,
+        percentageBase: merged.percentageBase,
+        percentageAsOf: keptPercentageAsOf(existing, merged, date, new Date()),
         note: patch.note !== undefined ? patch.note : existing.note,
         // Editing one occurrence of a series directly pins it: regenerating the series after a
         // rule change replaces only occurrences nobody has touched.

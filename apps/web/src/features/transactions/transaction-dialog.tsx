@@ -1,6 +1,6 @@
 import { zodResolver } from '@hookform/resolvers/zod';
-import { CalendarDaysIcon, ChevronRightIcon, RepeatIcon } from 'lucide-react';
-import { useEffect, useMemo, useRef, useState, type FocusEvent, type ReactNode } from 'react';
+import { BanknoteIcon, CalendarDaysIcon, ChevronRightIcon, RepeatIcon } from 'lucide-react';
+import { useEffect, useMemo, useRef, useState, type ReactNode } from 'react';
 import { Controller, useForm, useWatch } from 'react-hook-form';
 import { useTranslation } from 'react-i18next';
 import { AppearanceIcon } from '@/components/appearance/appearance-icon';
@@ -8,7 +8,6 @@ import { Alert, AlertDescription } from '@/components/ui/alert';
 import { Button } from '@/components/ui/button';
 import { Dialog, DialogContent, DialogFooter, DialogHeader, DialogTitle } from '@/components/ui/dialog';
 import { Field, FieldError, FieldGroup, FieldLabel } from '@/components/ui/field';
-import { Input } from '@/components/ui/input';
 import { Textarea } from '@/components/ui/textarea';
 import { ToggleGroup, ToggleGroupItem } from '@/components/ui/toggle-group';
 import { useAccounts } from '@/features/accounts/queries';
@@ -16,8 +15,11 @@ import { categoriesUnder, useCategories } from '@/features/categories/queries';
 import { useCurrencyCodes } from '@/features/currencies/queries';
 import { useGroupScope } from '@/features/groups/group-context';
 import { toDayInput, todayInput } from '@/lib/dates';
+import { formatMoney, formatPercentage, isValidAmountInput, parseMoneyInput, parsePercentageInput } from '@/lib/money';
+import { transactionTypeColor } from '@/lib/money-colors';
 import { capitalizeFirst } from '@/lib/text';
 import { cn } from '@/lib/utils';
+import { AmountSheet } from './amount-sheet';
 import { DateSheet } from './date-sheet';
 import { AccountBalance, AccountPicker, KindPicker, type KindPick } from './pickers';
 import {
@@ -29,6 +31,7 @@ import {
 } from './queries';
 import { parseRepeatKey, repeatOf, useRepeatLabel } from './repeat';
 import {
+  amountFromPercentage,
   defaultTransactionFormValues,
   isPlannedDay,
   nextDateOf,
@@ -42,9 +45,6 @@ import {
   transactionToFormValues,
   type TransactionFormValues,
 } from './transaction-form-model';
-
-// Amount fields start at "0": selecting on focus lets typing replace it rather than append.
-const selectOnFocus = (event: FocusEvent<HTMLInputElement>) => event.currentTarget.select();
 
 type AccountSide = 'accountId' | 'toAccountId';
 
@@ -78,6 +78,10 @@ interface TransactionDialogProps {
  * A transaction whose sides are already known — an edit, a duplicate, a debt's Lend or Pay back —
  * skips the first step.
  *
+ * How much is a card as well, opening the Amount sheet: the amount typed, or worked out as a
+ * percentage — of the account's balance, as a card's monthly charge is of its debt, or of an amount
+ * typed beside it, as a tax is of an income.
+ *
  * When it happens is a card of its own, opening a sheet with a calendar and, where it can, how
  * often it repeats. A new transaction that repeats is saved as a series, whose first transaction is
  * the one on that date. The same form edits a series, from its planned occurrence: its next date for
@@ -95,7 +99,7 @@ export function TransactionDialog({
   open,
   onOpenChange,
 }: TransactionDialogProps) {
-  const { t } = useTranslation();
+  const { t, i18n } = useTranslation();
   const { ability } = useGroupScope();
   const accounts = useAccounts(groupId);
   const categories = useCategories(groupId);
@@ -107,11 +111,13 @@ export function TransactionDialog({
   const [kindPickerOpen, setKindPickerOpen] = useState(false);
   const [accountSide, setAccountSide] = useState<AccountSide | null>(null);
   const [dateSheetOpen, setDateSheetOpen] = useState(false);
+  const [amountSheetOpen, setAmountSheetOpen] = useState(false);
   // Bumped each time a card opens its sheet, so the sheet mounts fresh, above the form.
   const [layer, setLayer] = useState(0);
 
   const accountList = useMemo(() => accounts.data ?? [], [accounts.data]);
   const categoryList = useMemo(() => categories.data ?? [], [categories.data]);
+  const accountOf = (id: string) => accountList.find((account) => account.id === id);
   const seriesNextDay = rule ? toDayInput(nextDateOf(rule)) : undefined;
   const schema = useMemo(
     () =>
@@ -123,6 +129,8 @@ export function TransactionDialog({
           sameAccount: t('transactions.errors.sameAccount'),
           repeatCurrency: t('transactions.errors.repeatCurrency'),
           pastNextDate: t('transactions.errors.pastNextDate'),
+          percentage: t('validation.percentage'),
+          percentageAmount: t('transactions.errors.percentageAmount'),
         },
         { seriesNextDay },
       ),
@@ -137,10 +145,22 @@ export function TransactionDialog({
     defaultValues: defaultTransactionFormValues({}),
   });
   const errors = form.formState.errors;
-  const [type, accountId, toAccountId, categoryId, day, repeat] = useWatch({
+  const [type, accountId, toAccountId, categoryId, day, repeat, amount, destAmount, percentage, percentageBase] = useWatch({
     control: form.control,
-    name: ['type', 'accountId', 'toAccountId', 'categoryId', 'day', 'repeat'],
+    name: ['type', 'accountId', 'toAccountId', 'categoryId', 'day', 'repeat', 'amount', 'destAmount', 'percentage', 'percentageBase'],
   });
+
+  // Works the amount out from the percentage, when there is one: of the base amount if one is
+  // typed, otherwise of the balance of the account the transaction is on — where an expense or a
+  // transfer takes the money from, where an income puts it. Run when any of those changes, but not
+  // on opening a saved transaction: its amount may have come from the balance as it was then, and
+  // opening it to fix a note mustn't restate it.
+  const recalculate = () => {
+    const worked = amountFromPercentage(form.getValues(), accountOf(form.getValues('accountId')), transaction);
+    if (worked !== null) {
+      form.setValue('amount', worked, { shouldValidate: form.formState.isSubmitted });
+    }
+  };
 
   const fallbackAccountId = pickDefaultAccountId(accountList, defaultAccountId);
   useEffect(() => {
@@ -155,12 +175,18 @@ export function TransactionDialog({
           ? { ...transactionToFormValues(template), day: todayInput() }
           : defaultTransactionFormValues({ accountId: fallbackAccountId, toAccountId: defaultToAccountId, type: defaultType });
     form.reset(values);
+    // A duplicate is a new transaction, and a series works its amount out again on each date: without
+    // a base amount, their percentage is of the balance as it stands today.
+    if (rule || (!transaction && template)) {
+      recalculate();
+    }
     // A new transaction starts with what it is, unless both its sides were handed over already.
     const known = !!rule || !!transaction || !!template || (values.type === 'transfer' && !!values.toAccountId);
     setStage(known ? 'form' : 'pick');
     setKindPickerOpen(false);
     setAccountSide(null);
     setDateSheetOpen(false);
+    setAmountSheetOpen(false);
     // Only on opening: re-running when accounts refetch would wipe what's being typed.
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [open, transaction, template, rule]);
@@ -185,7 +211,6 @@ export function TransactionDialog({
     (mode === 'planned' && mayStartSeries && ability.can('delete', 'Transaction') && !transaction?.recurringRuleId);
 
   const showDestAmount = needsDestAmount({ type, accountId, toAccountId }, accountList);
-  const accountOf = (id: string) => accountList.find((account) => account.id === id);
   const currencyOf = (id: string) => currencyCodes.get(accountOf(id)?.currencyId ?? -1);
   const category = categoryList.find((candidate) => candidate.id === categoryId);
   // The chosen category's own subcategories, offered as chips under the cards.
@@ -201,6 +226,7 @@ export function TransactionDialog({
       if (pick.toAccountId === form.getValues('accountId')) {
         const others = accountList.filter((account) => account.id !== pick.toAccountId);
         form.setValue('accountId', pickDefaultAccountId(others) ?? '');
+        recalculate();
       }
       form.setValue('toAccountId', pick.toAccountId, { shouldValidate: form.formState.isSubmitted });
       form.setValue('categoryId', '');
@@ -281,21 +307,35 @@ export function TransactionDialog({
   const titleFor = (kind: TransactionFormValues['type']) =>
     t(`transactions.${rule ? 'editSeriesOf' : transaction ? 'editOf' : 'addOf'}.${kind}`);
 
-  const amountInput = (name: 'amount' | 'destAmount', label: string) => (
-    <Field data-invalid={!!errors[name]}>
-      <FieldLabel htmlFor={`transaction-${name}`}>{label}</FieldLabel>
-      <Input
-        id={`transaction-${name}`}
-        inputMode="decimal"
-        autoComplete="off"
-        aria-invalid={!!errors[name]}
-        onFocus={selectOnFocus}
-        {...form.register(name)}
-      />
-      <FieldError errors={[errors[name]]} />
-    </Field>
-  );
   const withCurrency = (label: string, id: string) => (currencyOf(id) ? `${label} (${currencyOf(id)})` : label);
+  // A figure as the inputs hold it, shown in the given account's currency.
+  const moneyIn = (value: string, id: string) => {
+    const parsed = parseMoneyInput(value);
+    return parsed === null ? value : formatMoney(parsed, currencyOf(id), i18n.language, { currencyDisplay: 'narrowSymbol' });
+  };
+  // Under the amount on its card, a line each: what arrives across currencies, and what the
+  // amount was worked out from.
+  const amountLines: string[] = [];
+  if (showDestAmount) {
+    amountLines.push(t('transactions.receivedAmount', { amount: moneyIn(destAmount, toAccountId) }));
+  }
+  const validPercentage = parsePercentageInput(percentage);
+  if (validPercentage) {
+    const shown = formatPercentage(validPercentage, i18n.language);
+    amountLines.push(
+      percentageBase.trim()
+        ? t('transactions.percentageOfBase', { percentage: shown, base: moneyIn(percentageBase, accountId) })
+        : t('transactions.percentageOfBalance', { percentage: shown, account: accountOf(accountId)?.name ?? '' }),
+    );
+    // A balance still to come: the figure above is today's, and the day itself decides.
+    if (!percentageBase.trim() && (repeat || day > todayInput())) {
+      amountLines.push(t(repeat ? 'transactions.percentageSeriesOnTheDay' : 'transactions.percentageOnTheDay'));
+    }
+  }
+  // Only those there are: FieldError lists several as bullets, and counts an empty slot as one.
+  const amountErrors = [errors.amount, errors.destAmount, errors.percentage, errors.percentageBase].filter(
+    (error) => error !== undefined,
+  );
 
   return (
     <>
@@ -376,16 +416,21 @@ export function TransactionDialog({
                 />
               )}
 
-              {type === 'transfer' ? (
-                // Each amount under its own side, in that side's currency.
-                <div className="grid grid-cols-2 gap-3">
-                  {amountInput('amount', withCurrency(t('transactions.amountWithdrawn'), accountId))}
-                  {/* The same currency on both sides means the same amount arrives: nothing to ask. */}
-                  {showDestAmount && amountInput('destAmount', withCurrency(t('transactions.destAmount'), toAccountId))}
-                </div>
-              ) : (
-                amountInput('amount', withCurrency(t('transactions.amount'), accountId))
-              )}
+              <div className="flex flex-col gap-1">
+                <AmountCard
+                  caption={withCurrency(t('transactions.amount'), accountId)}
+                  amount={moneyIn(amount, accountId)}
+                  // In the type's colour once there is one; muted while it's still nothing.
+                  tone={isValidAmountInput(amount) ? transactionTypeColor(type) : 'text-muted-foreground'}
+                  lines={amountLines}
+                  invalid={amountErrors.length > 0}
+                  onClick={() => {
+                    setLayer((current) => current + 1);
+                    setAmountSheetOpen(true);
+                  }}
+                />
+                <FieldError errors={amountErrors} />
+              </div>
 
               {/* When it happens: the day, and how often it repeats if it does. */}
               <div className="flex flex-col gap-1">
@@ -459,6 +504,21 @@ export function TransactionDialog({
         }}
       />
 
+      <AmountSheet
+        key={`amount-${layer}`}
+        open={open && amountSheetOpen}
+        onOpenChange={setAmountSheetOpen}
+        sides={{ type, accountId, toAccountId }}
+        accounts={accountList}
+        editing={transaction}
+        values={{ amount, destAmount, percentage, percentageBase }}
+        onDone={(values) => {
+          for (const name of ['amount', 'destAmount', 'percentage', 'percentageBase'] as const) {
+            form.setValue(name, values[name], { shouldValidate: form.formState.isSubmitted });
+          }
+        }}
+      />
+
       <AccountPicker
         key={`account-${layer}`}
         open={open && accountSide !== null}
@@ -475,10 +535,60 @@ export function TransactionDialog({
           if (accountSide) {
             form.setValue(accountSide, id, { shouldValidate: form.formState.isSubmitted });
           }
+          // The percentage is of this account's balance: another account, another amount.
+          if (accountSide === 'accountId') {
+            recalculate();
+          }
           setAccountSide(null);
         }}
       />
     </>
+  );
+}
+
+/** How much, tappable to change it in the Amount sheet: laid out like the date's card below it. */
+function AmountCard({
+  caption,
+  amount,
+  tone,
+  lines,
+  invalid,
+  onClick,
+}: {
+  caption: string;
+  amount: string;
+  tone: string;
+  // Further lines under the amount, each on its own: sentences, so they wrap rather than cut off.
+  lines: string[];
+  invalid?: boolean;
+  onClick: () => void;
+}) {
+  return (
+    <button
+      type="button"
+      onClick={onClick}
+      // As on the side cards: the red border says it, the error text under the card is what
+      // assistive technology reads.
+      data-invalid={invalid || undefined}
+      className={cn(
+        'flex w-full min-w-0 items-center gap-3 rounded-xl border p-3 text-left transition-colors hover:bg-muted/60 focus-visible:ring-3 focus-visible:ring-ring/50 focus-visible:outline-none',
+        invalid && 'border-destructive',
+      )}
+    >
+      <span className="flex size-8 shrink-0 items-center justify-center rounded-full bg-muted">
+        <BanknoteIcon className="size-4" />
+      </span>
+      <span className="flex min-w-0 flex-1 flex-col gap-0.5">
+        <span className="text-xs text-muted-foreground">{caption}</span>
+        <span className={cn('truncate text-base font-semibold tabular-nums', tone)}>{amount}</span>
+        {lines.map((line) => (
+          <span key={line} className="text-sm text-muted-foreground">
+            {line}
+          </span>
+        ))}
+      </span>
+      <ChevronRightIcon className="size-4 shrink-0 text-muted-foreground" />
+    </button>
   );
 }
 

@@ -1,7 +1,7 @@
 import { z } from 'zod';
 import { TRANSACTION_TYPES } from '@ft/shared-contracts';
 import { deviceTimezone, fromDayInput, toDayInput, todayInput } from '@/lib/dates';
-import { isValidAmountInput, parseMoneyInput } from '@/lib/money';
+import { isValidAmountInput, parseMoneyInput, parsePercentageInput, percentOf, sumMoney } from '@/lib/money';
 import type { RecurringRule, RecurringRuleBody, RecurringRulePatch, Transaction, TransactionBody } from './queries';
 import { parseRepeatKey, repeatOf, toRepeatKey } from './repeat';
 
@@ -42,10 +42,18 @@ export interface TransactionFormValues {
   // One of categoryId's subcategories; cleared whenever the category changes.
   subcategoryId: string;
   day: string;
+  // Per cent, when the amount is worked out from it; '' when the amount is typed.
+  percentage: string;
+  // What the percentage is of; '' for the account's balance.
+  percentageBase: string;
   note: string;
   // How often it repeats, as toRepeatKey writes it; '' for a one-off transaction.
   repeat: string;
 }
+
+// The figures the Amount sheet edits, and the sides that decide which of them a transaction needs.
+export type AmountValues = Pick<TransactionFormValues, 'amount' | 'destAmount' | 'percentage' | 'percentageBase'>;
+export type TransactionSides = Pick<TransactionFormValues, 'type' | 'accountId' | 'toAccountId'>;
 
 export interface TransactionFormMessages {
   required: string;
@@ -53,6 +61,9 @@ export interface TransactionFormMessages {
   sameAccount: string;
   repeatCurrency: string;
   pastNextDate: string;
+  percentage: string;
+  // The amount a valid percentage came to is nothing: what it's of is zero or too small for it.
+  percentageAmount: string;
 }
 
 export interface TransactionFormContext {
@@ -63,14 +74,35 @@ export interface TransactionFormContext {
   today?: string;
 }
 
+type AmountMessages = Pick<TransactionFormMessages, 'amount' | 'percentage' | 'percentageAmount'>;
+
 /** A transfer between accounts in different currencies records what arrived, too. */
-export function needsDestAmount(values: Pick<TransactionFormValues, 'type' | 'accountId' | 'toAccountId'>, accounts: AccountLike[]): boolean {
+export function needsDestAmount(values: TransactionSides, accounts: AccountLike[]): boolean {
   if (values.type !== 'transfer' || !values.accountId || !values.toAccountId) {
     return false;
   }
   const from = accounts.find((account) => account.id === values.accountId);
   const to = accounts.find((account) => account.id === values.toAccountId);
   return !!from && !!to && from.currencyId !== to.currencyId;
+}
+
+// What's wrong with the amounts, for the form and the Amount sheet alike. Worked out from a
+// percentage, the amount isn't typed: what can be wrong then is the percentage, the base amount
+// it's of, or else what the two came to. A base amount without a percentage isn't used, so it
+// isn't checked either.
+function checkAmounts(values: AmountValues & TransactionSides, accounts: AccountLike[], messages: AmountMessages, ctx: z.RefinementCtx) {
+  const percentage = values.percentage.trim() ? parsePercentageInput(values.percentage) : undefined;
+  if (percentage === null) {
+    ctx.addIssue({ code: z.ZodIssueCode.custom, path: ['percentage'], message: messages.percentage });
+  } else if (percentage && values.percentageBase.trim() && !isValidAmountInput(values.percentageBase)) {
+    ctx.addIssue({ code: z.ZodIssueCode.custom, path: ['percentageBase'], message: messages.amount });
+  } else if (!isValidAmountInput(values.amount)) {
+    const message = percentage ? messages.percentageAmount : messages.amount;
+    ctx.addIssue({ code: z.ZodIssueCode.custom, path: ['amount'], message });
+  }
+  if (needsDestAmount(values, accounts) && !isValidAmountInput(values.destAmount)) {
+    ctx.addIssue({ code: z.ZodIssueCode.custom, path: ['destAmount'], message: messages.amount });
+  }
 }
 
 // The API rejects the same things (see its TransactionValidator); checking here puts the message
@@ -90,21 +122,18 @@ export function transactionFormSchema(
       categoryId: z.string(),
       subcategoryId: z.string(),
       day: z.string().min(1, messages.required),
+      percentage: z.string(),
+      percentageBase: z.string(),
       note: z.string().max(1000),
       repeat: z.string(),
     })
     .superRefine((values, ctx) => {
-      if (!isValidAmountInput(values.amount)) {
-        ctx.addIssue({ code: z.ZodIssueCode.custom, path: ['amount'], message: messages.amount });
-      }
+      checkAmounts(values, accounts, messages, ctx);
       if (values.type === 'transfer') {
         if (!values.toAccountId) {
           ctx.addIssue({ code: z.ZodIssueCode.custom, path: ['toAccountId'], message: messages.required });
         } else if (values.toAccountId === values.accountId) {
           ctx.addIssue({ code: z.ZodIssueCode.custom, path: ['toAccountId'], message: messages.sameAccount });
-        }
-        if (needsDestAmount(values, accounts) && !isValidAmountInput(values.destAmount)) {
-          ctx.addIssue({ code: z.ZodIssueCode.custom, path: ['destAmount'], message: messages.amount });
         }
         // A series carries one amount for both sides, which only holds within one currency.
         if (values.repeat && needsDestAmount(values, accounts)) {
@@ -117,6 +146,18 @@ export function transactionFormSchema(
         ctx.addIssue({ code: z.ZodIssueCode.custom, path: ['day'], message: messages.pastNextDate });
       }
     });
+}
+
+/** The Amount sheet's figures, checked for a transaction with these sides. */
+export function amountFormSchema(sides: TransactionSides, accounts: AccountLike[], messages: AmountMessages) {
+  return z
+    .object({
+      amount: z.string(),
+      destAmount: z.string(),
+      percentage: z.string(),
+      percentageBase: z.string(),
+    })
+    .superRefine((values, ctx) => checkAmounts({ ...values, ...sides }, accounts, messages, ctx));
 }
 
 // Amounts start at "0" rather than empty, so the field always shows a number; the inputs select
@@ -138,6 +179,8 @@ export function defaultTransactionFormValues(defaults: {
     categoryId: '',
     subcategoryId: '',
     day: todayInput(defaults.now),
+    percentage: '',
+    percentageBase: '',
     note: '',
     repeat: '',
   };
@@ -153,6 +196,8 @@ export function transactionToFormValues(transaction: Transaction): TransactionFo
     categoryId: transaction.categoryId ?? '',
     subcategoryId: transaction.subcategoryId ?? '',
     day: toDayInput(transaction.date),
+    percentage: transaction.percentage ?? '',
+    percentageBase: transaction.percentageBase ?? '',
     note: transaction.note ?? '',
     repeat: '',
   };
@@ -183,6 +228,8 @@ export function ruleToFormValues(rule: RecurringRule): TransactionFormValues {
     categoryId: rule.categoryId ?? '',
     subcategoryId: rule.subcategoryId ?? '',
     day: toDayInput(nextDateOf(rule)),
+    percentage: rule.percentage ?? '',
+    percentageBase: rule.percentageBase ?? '',
     note: rule.note ?? '',
     repeat: toRepeatKey(repeatOf(rule)),
   };
@@ -204,6 +251,7 @@ export function toTransactionBody(
     throw new Error(`Unknown account ${values.accountId}`);
   }
   const isTransfer = values.type === 'transfer';
+  const percentage = parsePercentageInput(values.percentage);
   const note = values.note.trim();
 
   return {
@@ -218,6 +266,10 @@ export function toTransactionBody(
     subcategoryId: isTransfer || !values.categoryId ? null : values.subcategoryId || null,
     toAccountId: isTransfer ? values.toAccountId : null,
     destAmount: needsDestAmount(values, accounts) ? requireMoney(values.destAmount) : null,
+    // Null, not left out, once cleared: an edit keeps what it doesn't mention.
+    percentage,
+    // Only ever with its percentage, which without one is of the account's balance.
+    percentageBase: percentage && values.percentageBase.trim() ? requireMoney(values.percentageBase) : null,
     // The API can't set a note to null; an empty string is how an edit clears it.
     note: note || (existing ? '' : undefined),
   };
@@ -306,6 +358,8 @@ export function plannedToRecurringRuleBody(
     subcategoryId: transaction.subcategoryId,
     toAccountId: transaction.toAccountId,
     note: transaction.note,
+    percentage: transaction.percentage,
+    percentageBase: transaction.percentageBase,
     intervalUnit: repeat.unit,
     intervalValue: repeat.value,
     startsAt: fromDayInput(choice.day, transaction.date, now),
@@ -315,14 +369,18 @@ export function plannedToRecurringRuleBody(
 }
 
 // What each of a series' transactions will be. As in toTransactionBody, fields that don't apply to
-// the type go as null, and a series has no received amount (see transactionFormSchema).
+// the type go as null, and a series has no received amount (see transactionFormSchema). With a
+// percentage, the amount is what it comes to now; each occurrence works it out afresh.
 function seriesTemplate(values: TransactionFormValues, accounts: AccountLike[]) {
   const account = accounts.find((candidate) => candidate.id === values.accountId);
   if (!account) {
     throw new Error(`Unknown account ${values.accountId}`);
   }
   const isTransfer = values.type === 'transfer';
+  const percentage = parsePercentageInput(values.percentage);
   return {
+    percentage,
+    percentageBase: percentage && values.percentageBase.trim() ? requireMoney(values.percentageBase) : null,
     amount: requireMoney(values.amount),
     currencyId: account.currencyId,
     accountId: account.id,
@@ -332,6 +390,53 @@ function seriesTemplate(values: TransactionFormValues, accounts: AccountLike[]) 
     // Unlike a transaction's, a series' note can be cleared with null.
     note: values.note.trim() || null,
   };
+}
+
+// What of a saved transaction moves money, and when.
+type Contribution = Pick<Transaction, 'type' | 'date' | 'amount' | 'destAmount' | 'accountId' | 'toAccountId'>;
+
+interface BalanceLike {
+  id: string;
+  balance: string;
+}
+
+/**
+ * The amount a percentage comes to: of the base amount when one is typed, otherwise of the
+ * account's balance as balanceBase has it. Null until there's a valid percentage and something
+ * valid for it to be of.
+ */
+export function amountFromPercentage(
+  values: Pick<AmountValues, 'percentage' | 'percentageBase'>,
+  account: BalanceLike | undefined,
+  editing?: Contribution,
+  now = new Date(),
+): string | null {
+  const percentage = parsePercentageInput(values.percentage);
+  const base = values.percentageBase.trim()
+    ? parseMoneyInput(values.percentageBase)
+    : account
+      ? balanceBase(account, editing, now)
+      : null;
+  return percentage && base !== null ? percentOf(base, percentage) : null;
+}
+
+/**
+ * The balance a percentage is taken of without a base amount: the account's current one, less what
+ * the transaction being edited has already put into it — worked out afresh, a charge mustn't count
+ * itself. A future-dated transaction isn't in the current balance yet, so then nothing comes off.
+ */
+export function balanceBase(account: BalanceLike, editing?: Contribution, now = new Date()): string {
+  if (!editing || new Date(editing.date) > now) {
+    return account.balance;
+  }
+  // The reverse of what the database's transaction_balance_contribution() adds for it.
+  if (editing.accountId === account.id) {
+    return sumMoney([account.balance, editing.type === 'income' ? `-${editing.amount}` : editing.amount]);
+  }
+  if (editing.type === 'transfer' && editing.toAccountId === account.id) {
+    return sumMoney([account.balance, `-${editing.destAmount ?? editing.amount}`]);
+  }
+  return account.balance;
 }
 
 function requireMoney(input: string): string {

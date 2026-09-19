@@ -13,6 +13,9 @@ import { addTransactionSubcategory } from './20260918160000-add-transaction-subc
 import { createApiKeys } from './20260918180000-create-api-keys.js';
 import { addTransactionIdempotency } from './20260918190000-add-transaction-idempotency.js';
 import { keepOnePlannedOccurrence } from './20260918200000-keep-one-planned-occurrence.js';
+import { addTransactionPercentage } from './20260918180000-add-transaction-percentage.js';
+import { addTransactionPercentageBase } from './20260918190000-add-transaction-percentage-base.js';
+import { addPercentageToSeries } from './20260918210000-add-percentage-to-series.js';
 
 export const migrations: readonly Migration[] = [
   createAuthTables,
@@ -29,6 +32,12 @@ export const migrations: readonly Migration[] = [
   createApiKeys,
   addTransactionIdempotency,
   keepOnePlannedOccurrence,
+  // Written alongside the three above on another branch, and stamped among them. Migrations are
+  // known by name and run in this list's order, so these come last: where the others are applied
+  // already, they're the ones pending.
+  addTransactionPercentage,
+  addTransactionPercentageBase,
+  addPercentageToSeries,
 ];
 
 export * from './migration.interface.js';

@@ -32,6 +32,7 @@ export const en = {
     retry: 'Try again',
     save: 'Save',
     cancel: 'Cancel',
+    done: 'Done',
     back: 'Back',
     delete: 'Delete',
     edit: 'Edit',
@@ -206,6 +207,19 @@ export const en = {
     date: 'Date',
     // A series' date: when it next produces a transaction.
     nextDate: 'Next date',
+    advanced: 'Advanced',
+    percentage: 'Percentage',
+    percentageBase: 'Base amount',
+    percentageBaseHint: 'Leave empty to use the balance of {{account}}',
+    // Editing one the balance on the account's card already includes.
+    percentageBaseHintWithout: 'Leave empty to use the balance of {{account}}, without this transaction',
+    // Lines under the amount on the form's Amount card.
+    receivedAmount: 'Received {{amount}}',
+    percentageOfBalance: '{{percentage}} of the balance of {{account}}',
+    percentageOfBase: '{{percentage}} of {{base}}',
+    // Under a percentage of the balance on the Amount card, while that balance is still to come.
+    percentageOnTheDay: 'Recalculated on the day',
+    percentageSeriesOnTheDay: 'Recalculated on each date',
     note: 'Note',
     recurring: 'Recurring',
     repeat: {
@@ -256,6 +270,7 @@ export const en = {
       sameAccount: 'Choose a different account',
       repeatCurrency: 'Only a transfer within one currency can repeat',
       pastNextDate: "The next date can't be in the past",
+      percentageAmount: 'This percentage comes to zero',
     },
     actions: {
       duplicate: 'Duplicate',
@@ -507,6 +522,7 @@ export const en = {
     minLength: 'At least {{min}} characters',
     maxLength: 'At most {{max}} characters',
     amount: 'Enter an amount greater than zero',
+    percentage: 'Enter a percentage above 0 and up to 100',
   },
   errors: {
     generic: 'Something went wrong. Please try again.',

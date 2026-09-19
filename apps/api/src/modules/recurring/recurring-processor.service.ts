@@ -2,8 +2,10 @@ import { Injectable, Logger, OnApplicationBootstrap, OnModuleDestroy, OnModuleIn
 import { Cron, CronExpression } from '@nestjs/schedule';
 import { DataSource } from 'typeorm';
 import { RecurringRule, createMigrationDataSource } from '@ft/api-database';
+import { isPositiveMoney } from '@ft/shared-contracts';
 import { RealtimeEmitterService } from '../realtime/realtime-emitter.service';
 import { materializeOccurrences, plannedOccurrence } from './occurrence-materializer';
+import { percentageAmount } from './percentage-amount';
 
 // Session-level advisory lock serializing ticks across every instance of the API. hashtext()
 // turns a readable name into the lock key, so nothing else has to agree on a magic number.
@@ -18,6 +20,36 @@ const DUE_RULES_SQL = `
     AND NOT EXISTS (SELECT 1 FROM transactions t WHERE t.recurring_rule_id = r.id AND ${plannedOccurrence('t', '$1')})
 `;
 
+// Transactions whose amount is a percentage of a balance taken before their date — a series' planned
+// occurrence, or a one-off entered ahead — now that the date has passed. Earliest first, so one
+// worked out later sees what an earlier one on the same account came to.
+const DUE_ESTIMATES_SQL = `
+  SELECT t.id FROM transactions t
+  WHERE t.percentage_as_of < t.date AND t.deleted_at IS NULL AND t.date <= $1
+  ORDER BY t.date, t.id
+`;
+
+// Re-read under a row lock: a request may have edited or deleted it since it was listed.
+const LOCK_ESTIMATE_SQL = `
+  SELECT id, group_id, account_id, date, percentage
+  FROM transactions
+  WHERE id = $1 AND percentage_as_of < date AND deleted_at IS NULL
+  FOR UPDATE
+`;
+
+// A transfer between currencies keeps the rate its two amounts were entered at: the received amount
+// moves with the sent one (the right-hand side reads the row as it was).
+const SETTLE_SQL = `
+  UPDATE transactions
+  SET amount = $2,
+      dest_amount = CASE WHEN dest_amount IS NULL THEN NULL ELSE GREATEST(round(dest_amount * $2::numeric / amount, 2), 0.01) END,
+      percentage_as_of = date
+  WHERE id = $1
+`;
+
+// A percentage of nothing: no money moved, so there's no transaction to keep.
+const SETTLE_TO_NOTHING_SQL = `UPDATE transactions SET deleted_at = now(), percentage_as_of = date WHERE id = $1`;
+
 // Can this connection see and write every group's rules despite RLS? Only a table's owner, a
 // superuser or a BYPASSRLS role can.
 const BYPASSES_RLS_SQL = `
@@ -30,6 +62,9 @@ const BYPASSES_RLS_SQL = `
  * Moves every active series on to its next occurrence once its planned one lands: each series keeps
  * one upcoming transaction, and when that one's date passes this writes the one after it — or,
  * after downtime, every one that fell due meanwhile and then the next.
+ *
+ * Before that, it works out afresh the amounts that were only estimates: a percentage of the
+ * balance taken before the transaction's date is taken again, of the balance on that date.
  *
  * Runs on its own connection as the schema owner, bypassing RLS, unlike every request-driven
  * write in the app: a background job acts for no user, and a rule's creator may have long since
@@ -89,7 +124,11 @@ export class RecurringProcessorService implements OnModuleInit, OnApplicationBoo
         return;
       }
       try {
-        await this.processDueRules(new Date());
+        const now = new Date();
+        // Estimates first, so a series' next occurrence is estimated from a balance that already
+        // holds what the one that just landed came to.
+        await this.settleEstimates(now);
+        await this.processDueRules(now);
       } finally {
         await lockRunner.query(UNLOCK_SQL);
       }
@@ -97,6 +136,60 @@ export class RecurringProcessorService implements OnModuleInit, OnApplicationBoo
       this.logger.error('Recurring tick failed', error instanceof Error ? error.stack : error);
     } finally {
       await lockRunner.release();
+    }
+  }
+
+  private async settleEstimates(now: Date): Promise<void> {
+    const due: { id: string }[] = await this.dataSource.query(DUE_ESTIMATES_SQL, [now]);
+
+    let settled = 0;
+    for (const { id } of due) {
+      if (await this.settleEstimate(id)) {
+        settled++;
+      }
+    }
+    if (settled > 0) {
+      this.logger.log(`Worked out ${settled} percentage amount(s) on their date`);
+    }
+  }
+
+  // Each in its own transaction, like the rules below: one that fails is logged and skipped.
+  private async settleEstimate(transactionId: string): Promise<boolean> {
+    const runner = this.dataSource.createQueryRunner();
+    await runner.connect();
+    await runner.startTransaction();
+    try {
+      const [row]: { id: string; group_id: string; account_id: string; date: Date; percentage: string }[] =
+        await runner.query(LOCK_ESTIMATE_SQL, [transactionId]);
+      if (!row) {
+        await runner.commitTransaction();
+        return false;
+      }
+      const amount = await percentageAmount(
+        runner.manager,
+        { accountId: row.account_id, percentage: row.percentage, percentageBase: null },
+        row.date,
+        row.id,
+      );
+      const something = isPositiveMoney(amount);
+      await runner.query(something ? SETTLE_SQL : SETTLE_TO_NOTHING_SQL, something ? [row.id, amount] : [row.id]);
+      await runner.commitTransaction();
+
+      this.realtime.emitToGroupNow(row.group_id, {
+        resourceType: 'Transaction',
+        resourceId: row.id,
+        action: something ? 'updated' : 'deleted',
+        groupId: row.group_id,
+      });
+      return true;
+    } catch (error) {
+      if (runner.isTransactionActive) {
+        await runner.rollbackTransaction();
+      }
+      this.logger.error(`Percentage amount of transaction ${transactionId} failed`, error instanceof Error ? error.stack : error);
+      return false;
+    } finally {
+      await runner.release();
     }
   }
 

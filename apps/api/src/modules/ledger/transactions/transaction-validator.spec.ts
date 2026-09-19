@@ -1,7 +1,13 @@
 import { BadRequestException, NotFoundException } from '@nestjs/common';
 import type { ObjectLiteral, Repository } from 'typeorm';
 import { TransactionType, type Account, type Category } from '@ft/api-database';
-import { TransactionValidator, keptSubcategory, type TransactionShape } from './transaction-validator';
+import {
+  TransactionValidator,
+  keptPercentageAsOf,
+  keptPercentageBase,
+  keptSubcategory,
+  type TransactionShape,
+} from './transaction-validator';
 
 // The real module builds its DataSource from DATABASE_URL the moment it's imported. The validator
 // only needs the entity classes as injection tokens, and the enum's values as enums.ts has them.
@@ -43,6 +49,8 @@ const expense = (categoryId: string | null, subcategoryId: string | null = null)
   toAccountId: null,
   amount: '10.00',
   destAmount: null,
+  percentage: null,
+  percentageBase: null,
 });
 
 describe('TransactionValidator', () => {
@@ -80,6 +88,70 @@ describe('TransactionValidator', () => {
   it('refuses a subcategory on a transfer', async () => {
     const transfer = { ...expense(null, 'taxi'), type: TransactionType.TRANSFER, toAccountId: 'cash' };
     await expect(validator.validate(GROUP, transfer)).rejects.toThrow(BadRequestException);
+  });
+
+  it('takes a percentage above 0 and up to 100', async () => {
+    const withPercentage = (percentage: string) => validator.validate(GROUP, { ...expense('food'), percentage });
+    await expect(withPercentage('0.0125')).resolves.toEqual({ categoryId: 'food', subcategoryId: null });
+    await expect(withPercentage('100')).resolves.toEqual({ categoryId: 'food', subcategoryId: null });
+    await expect(withPercentage('0')).rejects.toThrow(BadRequestException);
+    await expect(withPercentage('100.5')).rejects.toThrow(BadRequestException);
+  });
+
+  it('takes a base amount above zero, and only beside a percentage', async () => {
+    const withBase = (percentage: string | null, percentageBase: string) =>
+      validator.validate(GROUP, { ...expense('food'), percentage, percentageBase });
+    await expect(withBase('5', '12000.00')).resolves.toEqual({ categoryId: 'food', subcategoryId: null });
+    await expect(withBase('5', '0.00')).rejects.toThrow(BadRequestException);
+    await expect(withBase(null, '12000.00')).rejects.toThrow(BadRequestException);
+  });
+});
+
+describe('keptPercentageBase', () => {
+  const existing = { percentageBase: '12000.00' };
+
+  it('keeps the base amount while there is a percentage', () => {
+    expect(keptPercentageBase({}, existing, '5')).toBe('12000.00');
+  });
+
+  it('drops it along with the percentage', () => {
+    expect(keptPercentageBase({}, existing, null)).toBeNull();
+  });
+
+  it('takes the one an update names', () => {
+    expect(keptPercentageBase({ percentageBase: null }, existing, '5')).toBeNull();
+    expect(keptPercentageBase({ percentageBase: '500.00' }, existing, '5')).toBe('500.00');
+  });
+});
+
+describe('keptPercentageAsOf', () => {
+  const now = new Date('2026-09-18T12:00:00Z');
+  const taken = new Date('2026-09-10T09:00:00Z');
+  const planned = new Date('2026-10-01T12:00:00Z');
+  const existing = { percentage: '3.5000', accountId: 'card', percentageAsOf: taken };
+  const merged = { percentage: '3.5', percentageBase: null, accountId: 'card' };
+
+  it('takes a new percentage of the balance as of now', () => {
+    expect(keptPercentageAsOf(null, merged, planned, now)).toBe(now);
+    expect(keptPercentageAsOf(null, merged, now, now)).toBe(now);
+    expect(keptPercentageAsOf(existing, { ...merged, percentage: '4' }, planned, now)).toBe(now);
+    expect(keptPercentageAsOf(existing, { ...merged, accountId: 'wallet' }, planned, now)).toBe(now);
+  });
+
+  it('keeps the moment it had while neither the percentage nor the account changed', () => {
+    expect(keptPercentageAsOf(existing, merged, planned, now)).toBe(taken);
+    expect(keptPercentageAsOf(existing, merged, new Date('2026-09-05T12:00:00Z'), now)).toBe(taken);
+  });
+
+  it('lets an amount dated in the past stand, rather than work it out again', () => {
+    // Moved to a later day that has passed already: the balance was taken before it, but that
+    // makes it no estimate.
+    expect(keptPercentageAsOf(existing, merged, new Date('2026-09-15T12:00:00Z'), now)).toBe(now);
+  });
+
+  it('has none for a fixed amount or a percentage of a base amount', () => {
+    expect(keptPercentageAsOf(existing, { ...merged, percentage: null }, planned, now)).toBeNull();
+    expect(keptPercentageAsOf(existing, { ...merged, percentageBase: '1000.00' }, planned, now)).toBeNull();
   });
 });
 

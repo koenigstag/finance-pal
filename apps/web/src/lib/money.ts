@@ -1,7 +1,21 @@
-import { parseMoneyInput } from '@ft/shared-contracts';
+import { isPercentageInRange, parseMoneyInput, percentageSchema } from '@ft/shared-contracts';
 
 // Shared with the API, whose external endpoints read amounts other apps send the same way.
 export { parseMoneyInput };
+
+/**
+ * Turns a typed percentage into the API's form ("3,5" → "3.5"), or null unless it's above zero, at
+ * most 100 and has no more than four decimals.
+ */
+export function parsePercentageInput(input: string): string | null {
+  const normalized = input
+    .replace(/\s/g, '')
+    .replace(/%$/, '')
+    .replace(',', '.')
+    .replace(/\.$/, '')
+    .replace(/^0+(?=\d)/, '');
+  return percentageSchema.safeParse(normalized).success && isPercentageInRange(normalized) ? normalized : null;
+}
 
 /** The sign of a money string, read from its text (no float parsing): "-0.00" and "0" are zero. */
 export function moneySign(amount: string): -1 | 0 | 1 {
@@ -38,11 +52,26 @@ export function sumMoney(amounts: string[]): string {
 export function convertMoney(amount: string, rate: string): string {
   const [value, valueScale] = toUnits(amount);
   const [factor, factorScale] = toUnits(rate);
-  const product = value * factor;
-  const negative = product < 0n;
-  const magnitude = negative ? -product : product;
-  // Taken to tenths of a cent first, so the last digit is the one to round on.
-  const shift = valueScale + factorScale - 3;
+  return roundToCents(value * factor, valueScale + factorScale);
+}
+
+/**
+ * `percentage` per cent of an amount, whatever its sign — 3.5% of a -1234.00 balance is 43.19 —
+ * rounded to the cent as convertMoney rounds.
+ */
+export function percentOf(amount: string, percentage: string): string {
+  const [value, valueScale] = toUnits(amount);
+  const [rate, rateScale] = toUnits(percentage);
+  // Per cent: two more decimals than the rate is written with.
+  return roundToCents((value < 0n ? -value : value) * rate, valueScale + rateScale + 2);
+}
+
+// An integer carrying `scale` decimals, rounded to the cent (half away from zero, as money rounding
+// is read). Taken to tenths of a cent first, so the last digit is the one to round on.
+function roundToCents(units: bigint, scale: number): string {
+  const negative = units < 0n;
+  const magnitude = negative ? -units : units;
+  const shift = scale - 3;
   const tenths = shift <= 0 ? magnitude * 10n ** BigInt(-shift) : magnitude / 10n ** BigInt(shift);
   const cents = (tenths + 5n) / 10n;
   const fraction = (cents % 100n).toString().padStart(2, '0');
@@ -82,4 +111,9 @@ export function formatMoney(
     return new Intl.NumberFormat(locale, { minimumFractionDigits: 2, maximumFractionDigits: 2 }).format(value);
   }
   return new Intl.NumberFormat(locale, { style: 'currency', currency: currencyCode, currencyDisplay }).format(value);
+}
+
+/** Display-only, like formatMoney: "3.5" as 3.5% in English, 3,5 % in Russian. */
+export function formatPercentage(percentage: string, locale: string): string {
+  return new Intl.NumberFormat(locale, { style: 'percent', maximumFractionDigits: 4 }).format(Number(percentage) / 100);
 }

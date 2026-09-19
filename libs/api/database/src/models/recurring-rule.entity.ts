@@ -25,6 +25,8 @@ import { RecurrenceUnit, TransactionType } from './enums.js';
 )
 @Check('chk_recurring_amount_positive', `amount > 0`)
 @Check('chk_recurring_subcategory', `subcategory_id IS NULL OR category_id IS NOT NULL`)
+@Check('chk_recurring_percentage', `percentage IS NULL OR (percentage > 0 AND percentage <= 100)`)
+@Check('chk_recurring_percentage_base', `percentage_base IS NULL OR (percentage IS NOT NULL AND percentage_base > 0)`)
 export class RecurringRule {
   @PrimaryColumn({ type: 'uuid', default: () => 'gen_random_uuid()' })
   id!: string;
@@ -81,6 +83,15 @@ export class RecurringRule {
 
   @Column({ type: 'text', nullable: true })
   note!: string | null;
+
+  // as on a transaction: each occurrence's amount worked out as this percentage, of percentage_base
+  // if set, otherwise of the account's balance on the occurrence's date. `amount` is then what it
+  // came to when the series was saved, and stands in for a planned estimate that comes to nothing
+  @Column({ type: 'numeric', precision: 7, scale: 4, nullable: true })
+  percentage!: string | null;
+
+  @Column({ type: 'numeric', precision: 14, scale: 2, name: 'percentage_base', nullable: true })
+  percentageBase!: string | null;
 
   @Column({ type: 'enum', enum: RecurrenceUnit, enumName: 'recurrence_unit', name: 'interval_unit' })
   intervalUnit!: RecurrenceUnit;
