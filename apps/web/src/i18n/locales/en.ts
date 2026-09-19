@@ -404,8 +404,28 @@ export const en = {
   settings: {
     title: 'Settings',
     saved: 'Saved',
+    tabs: {
+      profile: 'Profile',
+      appearance: 'Appearance',
+      rates: 'Rates',
+      account: 'Account',
+    },
     account: {
       title: 'Account',
+    },
+    password: {
+      title: 'Password',
+      description: 'Changing it signs every other device out.',
+      current: 'Current password',
+      new: 'New password',
+      confirm: 'Repeat new password',
+      submit: 'Change password',
+      changed: 'Password changed. Every other device has been signed out.',
+      errors: {
+        incorrect: 'Wrong current password.',
+        sameAsCurrent: 'Choose a password different from the current one.',
+        mismatch: "The passwords don't match.",
+      },
     },
     rates: {
       title: 'Exchange rates',
@@ -417,8 +437,6 @@ export const en = {
       addAction: 'Add',
       note: 'Nothing updates these on its own yet; fetching them daily is for later.',
     },
-
-
     appearance: {
       title: 'Appearance',
       description: 'Applies to this device only.',
