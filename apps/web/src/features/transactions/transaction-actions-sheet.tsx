@@ -20,6 +20,7 @@ import { formatMoney } from '@/lib/money';
 import { transactionTypeColor } from '@/lib/money-colors';
 import { cn } from '@/lib/utils';
 import { filedUnder } from './filed-under';
+import { usePercentageLabel } from './percentage-label';
 import type { RecurringRule, Transaction } from './queries';
 import { repeatOf, useRepeatLabel } from './repeat';
 import { isAhead, isPlannedOccurrence } from './transaction-form-model';
@@ -76,6 +77,7 @@ export function TransactionActionsSheet({
   const { t, i18n } = useTranslation();
   const currencyCodes = useCurrencyCodes();
   const repeatLabel = useRepeatLabel();
+  const percentageLabel = usePercentageLabel();
 
   // While a transaction is still to come, where it came from is part of what it is, so a series
   // shows; once it's recorded it stands on its own, whatever wrote it.
@@ -116,6 +118,11 @@ export function TransactionActionsSheet({
   const toAccount = transaction?.toAccountId ? accounts.find((candidate) => candidate.id === transaction.toAccountId) : undefined;
   const filed = transaction && filedUnder(transaction, (id) => categories.find((candidate) => candidate.id === id));
   const isTransfer = transaction?.type === 'transfer';
+  // As on the form's Amount card: what the amount was worked out from and, while it's taken of a
+  // balance still to come, that the day itself decides.
+  const percentage = transaction ? percentageLabel(transaction, account?.name ?? '—') : null;
+  const estimate =
+    !!transaction?.percentageAsOf && Date.parse(transaction.percentageAsOf) < Date.parse(transaction.date);
 
   return (
     <Dialog open={open} onOpenChange={onOpenChange}>
@@ -171,11 +178,15 @@ export function TransactionActionsSheet({
               </div>
               {/* A line of its own: account names leave no room beside them, least of all for a
                   transfer, which names two. */}
-              <p className={cn('text-left text-lg font-semibold tabular-nums', transactionTypeColor(transaction.type))}>
-                {formatMoney(transaction.amount, currencyCodes.get(transaction.currencyId), i18n.language, {
-                  currencyDisplay: 'narrowSymbol',
-                })}
-              </p>
+              <div className="text-left">
+                <p className={cn('text-lg font-semibold tabular-nums', transactionTypeColor(transaction.type))}>
+                  {formatMoney(transaction.amount, currencyCodes.get(transaction.currencyId), i18n.language, {
+                    currencyDisplay: 'narrowSymbol',
+                  })}
+                </p>
+                {percentage && <p className="text-sm text-muted-foreground">{percentage}</p>}
+                {estimate && <p className="text-sm text-muted-foreground">{t('transactions.percentageOnTheDay')}</p>}
+              </div>
               {/* Italic, as a note reads everywhere: in the list, and in the field it's typed in. */}
               {transaction.note && (
                 <p className="text-left text-sm break-words whitespace-pre-line italic">{transaction.note}</p>
