@@ -42,6 +42,16 @@ const createCategoryBodySchema = z.object({
 // were all filed under that type.
 const updateCategoryBodySchema = createCategoryBodySchema.omit({ type: true }).partial();
 
+// A whole level at a time, rather than one category's new place: the client already holds the
+// list it is showing, and sending it back whole is what makes the result the same however many
+// rows moved — no gaps, no ties, and nothing to reconcile against an order the server had.
+const reorderCategoriesBodySchema = z.object({
+  // The categories to renumber, in the order they are to appear. Siblings take their place from
+  // this list; where a category sits — its type, its parent — is left alone, which is what update
+  // is for. Ids of another group's categories, or repeated ones, are refused.
+  categoryIds: z.array(z.string().uuid()).min(1).max(500),
+});
+
 // What deleting a category takes with it, for the confirmation shown before doing so.
 export const categoryUsageSchema = z.object({
   // Subcategories, deleted along with it.
@@ -106,6 +116,14 @@ export const categoriesContract = c.router(
       body: z.object({}),
       responses: { 200: categorySchema, 403: errorSchema, 404: errorSchema },
       summary: 'Restore an archived category',
+    },
+    reorder: {
+      method: 'POST',
+      path: '/groups/:groupId/categories/reorder',
+      pathParams: groupPathParams,
+      body: reorderCategoriesBodySchema,
+      responses: { 200: z.array(categorySchema), 400: errorSchema, 403: errorSchema, 404: errorSchema },
+      summary: 'Renumber categories: each one takes its place among its siblings from the order given',
     },
     usage: {
       method: 'GET',

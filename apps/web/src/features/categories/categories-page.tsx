@@ -1,4 +1,15 @@
-import { ArrowDownIcon, ArrowUpIcon, ChevronDownIcon, PlusIcon, ShapesIcon, type LucideIcon } from 'lucide-react';
+import {
+  ArrowDownIcon,
+  ArrowUpDownIcon,
+  ArrowUpIcon,
+  CheckIcon,
+  ChevronDownIcon,
+  GripVerticalIcon,
+  PlusIcon,
+  ShapesIcon,
+  XIcon,
+  type LucideIcon,
+} from 'lucide-react';
 import { useMemo, useState } from 'react';
 import { useTranslation } from 'react-i18next';
 import { useNavigate, useSearchParams } from 'react-router';
@@ -6,15 +17,19 @@ import { CATEGORY_TYPES } from '@ft/shared-contracts';
 import { AppearanceIcon } from '@/components/appearance/appearance-icon';
 import { PAGE_BOTTOM_SPACE, PageHeader } from '@/components/page-header';
 import { QueryError } from '@/components/query-error';
+import { Alert, AlertDescription } from '@/components/ui/alert';
+import { Button } from '@/components/ui/button';
 import { Empty, EmptyDescription, EmptyHeader, EmptyMedia, EmptyTitle } from '@/components/ui/empty';
 import { Spinner } from '@/components/ui/spinner';
 import { ToggleGroup, ToggleGroupItem } from '@/components/ui/toggle-group';
 import { useGroupScope } from '@/features/groups/group-context';
+import { useDragReorder, type ReorderHandleProps } from '@/lib/drag-reorder';
 import { useSwipeTrack } from '@/lib/swipe';
 import { cn } from '@/lib/utils';
 import { CategoryActionsSheet, type CategoryAction } from './category-actions-sheet';
 import { CategoryDialog } from './category-dialog';
-import { useCategories, type Category } from './queries';
+import { buildTree, move, moveSubcategory, orderedIds, type CategoryTree } from './category-order';
+import { useCategories, useReorderCategories, type Category } from './queries';
 
 type CategoryType = Category['type'];
 
@@ -33,12 +48,17 @@ export function CategoriesPage() {
   const { t } = useTranslation();
   const { group, ability } = useGroupScope();
   const categories = useCategories(group.id);
+  const reorder = useReorderCategories(group.id);
   const [params, setParams] = useSearchParams();
   const navigate = useNavigate();
   const [dialog, setDialog] = useState<DialogState>({ open: false });
   const [sheet, setSheet] = useState<{ open: boolean; category?: Category }>({ open: false });
   // Parents whose subcategories are showing; each list starts folded away under its parent.
   const [expanded, setExpanded] = useState<ReadonlySet<string>>(new Set());
+  // The list as it is being rearranged, kept apart from the fetched one until it is saved — so a
+  // refetch never moves a row out from under a finger. Null while the page is only being read,
+  // which is what says whether the list is in reorder mode at all.
+  const [draft, setDraft] = useState<CategoryTree[] | null>(null);
   const toggle = (categoryId: string) =>
     setExpanded((current) => {
       const next = new Set(current);
@@ -69,7 +89,7 @@ export function CategoriesPage() {
   const trees = useMemo(
     () => Object.fromEntries(TYPE_ORDER.map((option) => [option, buildTree(categories.data ?? [], option)])),
     [categories.data],
-  ) as Record<CategoryType, ReturnType<typeof buildTree>>;
+  ) as Record<CategoryType, CategoryTree[]>;
 
   // Income and expense side by side, in the order the picker lists them: dragging the strip left
   // moves to the next along, right to the one before, and a drag towards nothing gives a little
@@ -81,6 +101,29 @@ export function CategoriesPage() {
     position: type,
     onCommit: (delta) => setParams({ type: TYPE_ORDER[typeIndex + delta] }, { replace: true }),
   });
+
+  // The tab on screen, as it stands: a reorder is one tab's, which is why the tabs are held while
+  // one is under way.
+  const startReordering = () => {
+    reorder.reset();
+    setDraft(trees[type]);
+  };
+  const stopReordering = () => {
+    reorder.reset();
+    setDraft(null);
+  };
+  const saveOrder = async () => {
+    // A second ✓ while the first is still in flight would send the same order twice.
+    if (!draft || reorder.isPending) {
+      return;
+    }
+    try {
+      await reorder.mutateAsync(orderedIds(draft));
+      setDraft(null);
+    } catch {
+      // Said by the alert above the list; the draft stays, so the ✓ can simply be pressed again.
+    }
+  };
 
   const tabContent = (option: CategoryType) => {
     if (trees[option].length === 0) {
@@ -112,16 +155,12 @@ export function CategoriesPage() {
                 />
                 {/* Its own button: the row itself opens the category's actions, as every row does. */}
                 {children.length > 0 && (
-                  <button
-                    type="button"
-                    aria-expanded={isExpanded}
-                    aria-controls={listId}
-                    aria-label={t('categories.subcategoriesOf', { name: category.name })}
-                    className="flex w-12 shrink-0 items-center justify-center text-muted-foreground hover:bg-muted/50"
+                  <ExpandButton
+                    expanded={isExpanded}
+                    listId={listId}
+                    label={t('categories.subcategoriesOf', { name: category.name })}
                     onClick={() => toggle(category.id)}
-                  >
-                    <ChevronDownIcon className={cn('size-4 transition-transform', isExpanded && 'rotate-180')} />
-                  </button>
+                  />
                 )}
               </div>
               {isExpanded && (
@@ -148,36 +187,97 @@ export function CategoriesPage() {
     <section className={cn('flex flex-1 flex-col gap-4', PAGE_BOTTOM_SPACE)}>
       <PageHeader
         title={t('categories.title')}
-        action={canCreate ? { label: t('categories.new'), icon: PlusIcon, onClick: () => setDialog({ open: true }) } : undefined}
+        // Saving the new order is what the page is for while it is being rearranged, so the ✓
+        // takes the + 's place — on a phone, that puts it under the thumb however far down the
+        // list the last row was dragged.
+        action={
+          draft
+            ? { label: t('categories.reorder.save'), icon: CheckIcon, onClick: () => void saveOrder() }
+            : canCreate
+              ? { label: t('categories.new'), icon: PlusIcon, onClick: () => setDialog({ open: true }) }
+              : undefined
+        }
       >
-        <ToggleGroup
-          type="single"
-          variant="outline"
-          className="w-full md:w-80"
-          value={type}
-          onValueChange={(value) => {
-            if (value) {
-              setParams({ type: value }, { replace: true });
-            }
-          }}
-        >
-          {TYPE_ORDER.map((option) => {
-            const Icon = TYPE_ICONS[option];
-            return (
-              <ToggleGroupItem key={option} value={option} className="flex-1">
-                <Icon />
-                {t(`categories.types.${option}`)}
-              </ToggleGroupItem>
-            );
-          })}
-        </ToggleGroup>
+        <div className="flex items-center gap-2">
+          <ToggleGroup
+            type="single"
+            variant="outline"
+            className="min-w-0 flex-1 md:w-80 md:flex-none"
+            value={type}
+            // Held while a reorder is under way: the draft is this tab's, and switching away
+            // would be a change nobody asked to throw out.
+            disabled={draft !== null}
+            onValueChange={(value) => {
+              if (value) {
+                setParams({ type: value }, { replace: true });
+              }
+            }}
+          >
+            {TYPE_ORDER.map((option) => {
+              const Icon = TYPE_ICONS[option];
+              return (
+                <ToggleGroupItem key={option} value={option} className="flex-1">
+                  <Icon />
+                  {t(`categories.types.${option}`)}
+                </ToggleGroupItem>
+              );
+            })}
+          </ToggleGroup>
+          {canUpdate &&
+            (draft ? (
+              <Button
+                variant="outline"
+                size="icon"
+                className="shrink-0"
+                aria-label={t('common.cancel')}
+                disabled={reorder.isPending}
+                onClick={stopReordering}
+              >
+                <XIcon />
+              </Button>
+            ) : (
+              trees[type].length > 0 && (
+                <Button
+                  variant="outline"
+                  size="icon"
+                  className="shrink-0"
+                  aria-label={t('categories.reorder.start')}
+                  onClick={startReordering}
+                >
+                  <ArrowUpDownIcon />
+                </Button>
+              )
+            ))}
+        </div>
       </PageHeader>
 
+      {draft && (
+        <>
+          {reorder.isError && (
+            <Alert variant="destructive">
+              <AlertDescription>{t('errors.generic')}</AlertDescription>
+            </Alert>
+          )}
+          <p className="text-sm text-muted-foreground">{t('categories.reorder.hint')}</p>
+        </>
+      )}
 
       {categories.isPending ? (
         <Spinner className="mx-auto size-6 text-muted-foreground" />
       ) : categories.isError ? (
         <QueryError onRetry={() => void categories.refetch()} />
+      ) : draft ? (
+        // No strip while rearranging: the tabs are held anyway, and a swipe across the page is
+        // one gesture too many next to rows being dragged up and down it.
+        <CategoryReorderList
+          tree={draft}
+          expanded={expanded}
+          onToggle={toggle}
+          onMove={(from, to) => setDraft((current) => (current ? move(current, from, to) : current))}
+          onMoveSubcategory={(parentId, from, to) =>
+            setDraft((current) => (current ? moveSubcategory(current, parentId, from, to) : current))
+          }
+        />
       ) : (
         /*
           The two lists side by side, clipped to the one on screen. The negative margin pays for
@@ -221,51 +321,164 @@ export function CategoriesPage() {
   );
 }
 
+interface CategoryReorderListProps {
+  tree: CategoryTree[];
+  expanded: ReadonlySet<string>;
+  onToggle: (categoryId: string) => void;
+  onMove: (from: number, to: number) => void;
+  onMoveSubcategory: (parentId: string, from: number, to: number) => void;
+}
+
+/**
+ * The same list, with each row taken by its grip instead of opening anything. A parent moves with
+ * its subcategories, since they travel inside its row; a subcategory moves among the subcategories
+ * of the parent it is under. Nothing changes levels here — moving a category under another parent
+ * re-files its transactions, which is the edit dialog's job, not a drag's.
+ */
+function CategoryReorderList({ tree, expanded, onToggle, onMove, onMoveSubcategory }: CategoryReorderListProps) {
+  const { t } = useTranslation();
+  const reorder = useDragReorder(tree.length, onMove);
+
+  return (
+    <ul className="divide-y rounded-xl border">
+      {tree.map(({ category, children }, index) => {
+        const isExpanded = children.length > 0 && expanded.has(category.id);
+        const listId = `subcategories-${category.id}`;
+        return (
+          <li
+            key={category.id}
+            {...reorder.row(index)}
+            // Only the row being carried paints a background — over the rows it passes, and
+            // without squaring off the corners of the list it sits in.
+            className={cn(reorder.dragging === index && 'rounded-xl bg-background shadow-lg ring-1 ring-border')}
+          >
+            <div className="flex">
+              <ReorderGrip {...reorder.handle(index)} label={t('categories.reorder.move', { name: category.name })} />
+              <CategoryRow
+                category={category}
+                detail={children.length > 0 ? t('categories.subcategoryCount', { count: children.length }) : undefined}
+                className="flex-1"
+              />
+              {children.length > 0 && (
+                <ExpandButton
+                  expanded={isExpanded}
+                  listId={listId}
+                  label={t('categories.subcategoriesOf', { name: category.name })}
+                  onClick={() => onToggle(category.id)}
+                />
+              )}
+            </div>
+            {isExpanded && (
+              <SubcategoryReorderList
+                listId={listId}
+                subcategories={children}
+                onMove={(from, to) => onMoveSubcategory(category.id, from, to)}
+              />
+            )}
+          </li>
+        );
+      })}
+    </ul>
+  );
+}
+
+interface SubcategoryReorderListProps {
+  listId: string;
+  subcategories: Category[];
+  onMove: (from: number, to: number) => void;
+}
+
+function SubcategoryReorderList({ listId, subcategories, onMove }: SubcategoryReorderListProps) {
+  const { t } = useTranslation();
+  const reorder = useDragReorder(subcategories.length, onMove);
+
+  return (
+    <ul id={listId} className="divide-y border-t">
+      {subcategories.map((subcategory, index) => (
+        <li
+          key={subcategory.id}
+          {...reorder.row(index)}
+          className={cn('flex', reorder.dragging === index && 'rounded-xl bg-background shadow-lg ring-1 ring-border')}
+        >
+          <ReorderGrip {...reorder.handle(index)} label={t('categories.reorder.move', { name: subcategory.name })} />
+          <CategoryRow category={subcategory} nested className="flex-1" />
+        </li>
+      ))}
+    </ul>
+  );
+}
+
+interface ReorderGripProps extends ReorderHandleProps {
+  label: string;
+}
+
+/** What a row is dragged by — and, for a keyboard, what moves it with the up and down arrows. */
+function ReorderGrip({ label, ...handle }: ReorderGripProps) {
+  return (
+    <button
+      type="button"
+      aria-label={label}
+      className="flex w-12 shrink-0 cursor-grab items-center justify-center text-muted-foreground hover:bg-muted/50 focus-visible:bg-muted/50 focus-visible:outline-none active:cursor-grabbing"
+      {...handle}
+    >
+      <GripVerticalIcon className="size-4" />
+    </button>
+  );
+}
+
+interface ExpandButtonProps {
+  expanded: boolean;
+  listId: string;
+  label: string;
+  onClick: () => void;
+}
+
+function ExpandButton({ expanded, listId, label, onClick }: ExpandButtonProps) {
+  return (
+    <button
+      type="button"
+      aria-expanded={expanded}
+      aria-controls={listId}
+      aria-label={label}
+      className="flex w-12 shrink-0 items-center justify-center text-muted-foreground hover:bg-muted/50"
+      onClick={onClick}
+    >
+      <ChevronDownIcon className={cn('size-4 transition-transform', expanded && 'rotate-180')} />
+    </button>
+  );
+}
+
 interface CategoryRowProps {
   category: Category;
   nested?: boolean;
   detail?: string;
-  onSelect: () => void;
+  // What opening the row does, where it opens anything: a row being rearranged is only read.
+  onSelect?: () => void;
   className?: string;
 }
 
 function CategoryRow({ category, nested = false, detail, onSelect, className }: CategoryRowProps) {
-  return (
-    <button
-      type="button"
-      // Subcategories line their smaller icon up under the parent's name.
-      className={cn(
-        'flex min-h-12 w-full min-w-0 items-center gap-3 px-4 py-2 text-left hover:bg-muted/50',
-        nested && 'pl-[3.75rem]',
-        className,
-      )}
-      onClick={onSelect}
-    >
+  // Subcategories line their smaller icon up under the parent's name.
+  const layout = cn(
+    'flex min-h-12 w-full min-w-0 items-center gap-3 px-4 py-2 text-left',
+    nested && 'pl-[3.75rem]',
+    className,
+  );
+  const content = (
+    <>
       <AppearanceIcon icon={category.icon} color={category.color} size={nested ? 'sm' : 'md'} />
       <div className="min-w-0 flex-1">
         <p className={cn('truncate', nested ? 'text-sm' : 'font-medium')}>{category.name}</p>
         {detail && <p className="text-sm text-muted-foreground">{detail}</p>}
       </div>
-    </button>
+    </>
   );
-}
 
-interface TreeNode {
-  category: Category;
-  children: Category[];
-}
-
-// Two levels, as the API enforces. A subcategory whose parent isn't in the list (archived, or a
-// leftover of another type) is shown at the top level rather than hidden.
-function buildTree(categories: Category[], type: CategoryType): TreeNode[] {
-  const byOrder = (a: Category, b: Category) => a.sortOrder - b.sortOrder || a.name.localeCompare(b.name);
-  const ofType = categories.filter((category) => category.type === type);
-  const topLevelIds = new Set(ofType.filter((category) => category.parentId === null).map((category) => category.id));
-  return ofType
-    .filter((category) => category.parentId === null || !topLevelIds.has(category.parentId))
-    .sort(byOrder)
-    .map((category) => ({
-      category,
-      children: ofType.filter((child) => child.parentId === category.id).sort(byOrder),
-    }));
+  return onSelect ? (
+    <button type="button" className={cn(layout, 'hover:bg-muted/50')} onClick={onSelect}>
+      {content}
+    </button>
+  ) : (
+    <div className={layout}>{content}</div>
+  );
 }

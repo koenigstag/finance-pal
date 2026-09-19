@@ -39,6 +39,20 @@ export function useSaveCategory(groupId: string) {
   });
 }
 
+/**
+ * Puts the categories in the order given — the whole tree of one type, parents and their
+ * subcategories, as the list shows it. One request settles however many rows were dragged.
+ */
+export function useReorderCategories(groupId: string) {
+  const queryClient = useQueryClient();
+
+  return useMutation({
+    mutationFn: (categoryIds: string[]) => unwrap(api.categories.reorder({ params: { groupId }, body: { categoryIds } }), 200),
+    // Only where the categories sit changed, so nothing filed under them is stale.
+    onSuccess: () => queryClient.invalidateQueries({ queryKey: queryKeys.categories(groupId) }),
+  });
+}
+
 export function useCategoryUsage(groupId: string, categoryId: string, enabled: boolean) {
   return useQuery({
     queryKey: queryKeys.categoryUsage(groupId, categoryId),
