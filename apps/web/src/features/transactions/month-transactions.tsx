@@ -28,6 +28,8 @@ interface MonthTransactionsProps {
   rules: RecurringRule[];
   // Absent for callers who can't edit: rows then render as plain, non-interactive items.
   onSelect?: (transaction: Transaction) => void;
+  // Set on a panel waiting off to the side: it can be seen, but not read out or tabbed into.
+  inert?: boolean;
 }
 
 /**
@@ -49,6 +51,7 @@ export function MonthTransactions({
   categories,
   rules,
   onSelect,
+  inert,
 }: MonthTransactionsProps) {
   const { t } = useTranslation();
   const monthKey = toMonthParam(month);
@@ -70,6 +73,7 @@ export function MonthTransactions({
   return (
     <div
       ref={scrollerRef}
+      inert={inert}
       // A panel of the strip: as wide as the page, never squeezed by the two beside it, and
       // scrolling up and down by itself.
       className={cn('w-full shrink-0 overflow-y-auto px-2 scrollbar-none', PAGE_BOTTOM_SPACE)}

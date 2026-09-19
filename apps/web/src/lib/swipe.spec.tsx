@@ -111,36 +111,56 @@ describe('useSwipeTrack', () => {
     vi.useRealTimers();
   });
 
-  // A caller that moves its panels when told to, as the transactions page does.
-  function Strip({ onCommit, moves = true }: { onCommit: (delta: -1 | 1) => void; moves?: boolean }) {
-    const [at, setAt] = useState(0);
-    const strip = useSwipeTrack(String(at), (delta) => {
-      onCommit(delta);
-      if (moves) {
-        setAt((current) => current + delta);
-      }
+  interface StripProps {
+    onCommit: (delta: -1 | 1) => void;
+    // A caller that catches up with the move it is told about, as both pages do.
+    moves?: boolean;
+    count?: number;
+    // The months keep the strip on the middle of three and shift which months those are, so the
+    // panel on screen never changes; the tabs move along a strip with two ends.
+    fixedIndex?: number;
+    start?: number;
+  }
+
+  function Strip({ onCommit, moves = true, count = 3, fixedIndex, start = 0 }: StripProps) {
+    const [at, setAt] = useState(start);
+    const strip = useSwipeTrack({
+      count,
+      index: fixedIndex ?? at,
+      position: String(at),
+      onCommit: (delta) => {
+        onCommit(delta);
+        if (moves) {
+          setAt((current) => current + delta);
+        }
+      },
     });
     return (
       <div data-testid="viewport" {...strip.viewport}>
         <div data-testid="track" style={strip.track} />
         <span data-testid="showing">{strip.showing}</span>
+        <span data-testid="active">{String(strip.active)}</span>
         <span data-testid="at">{at}</span>
         <button data-testid="step-forward" onClick={() => strip.step(1)} />
+        <button data-testid="step-back" onClick={() => strip.step(-1)} />
       </div>
     );
   }
 
-  const setup = (moves?: boolean) => {
+  const setup = (props: Partial<StripProps> = {}) => {
     const onCommit = vi.fn<(delta: -1 | 1) => void>();
-    render(<Strip onCommit={onCommit} moves={moves} />);
+    render(<Strip onCommit={onCommit} fixedIndex={1} {...props} />);
     const track = screen.getByTestId('track');
     return {
       onCommit,
       viewport: screen.getByTestId('viewport'),
-      // How far the strip sits from its middle panel, in pixels.
-      offset: () => Number(/\+ (-?\d+)px/.exec(track.style.transform)?.[1] ?? NaN),
+      // How far the strip sits from the panel it rests on, in pixels.
+      offset: () => Number(/[+] (-?\d+)px/.exec(track.style.transform)?.[1] ?? NaN),
+      // And which panel that is, as a share of the strip's width.
+      resting: () => Number(/calc\((-?\d+)%/.exec(track.style.transform)?.[1] ?? NaN),
       easing: () => track.style.transition !== 'none',
       showing: () => screen.getByTestId('showing').textContent,
+      active: () => screen.getByTestId('active').textContent,
       at: () => screen.getByTestId('at').textContent,
     };
   };
@@ -242,7 +262,7 @@ describe('useSwipeTrack', () => {
 
   it('stays where it landed until the panels have moved under it', () => {
     // A caller that never moves its panels: the strip must not sit off to one side for good.
-    const strip = setup(false);
+    const strip = setup({ moves: false });
 
     fireEvent.touchStart(strip.viewport, { touches: at(360) });
     fireEvent.touchMove(strip.viewport, { touches: at(340) });
@@ -281,5 +301,81 @@ describe('useSwipeTrack', () => {
 
     expect(strip.offset()).toBe(0);
     expect(strip.onCommit).not.toHaveBeenCalled();
+  });
+
+  it('says when it is being moved, so panels off to the side need only exist then', () => {
+    const strip = setup();
+    expect(strip.active()).toBe('false');
+
+    fireEvent.touchStart(strip.viewport, { touches: at(300) });
+    fireEvent.touchMove(strip.viewport, { touches: at(280) });
+    fireEvent.touchMove(strip.viewport, { touches: at(240) });
+    expect(strip.active()).toBe('true');
+
+    fireEvent.touchEnd(strip.viewport, { changedTouches: at(240) });
+    act(() => vi.runAllTimers());
+    expect(strip.active()).toBe('false');
+  });
+
+  it('rests on whichever panel of a bounded strip is on screen', () => {
+    const strip = setup({ count: 3, fixedIndex: undefined, start: 0 });
+    expect(strip.resting()).toBe(0);
+
+    fireEvent.touchStart(strip.viewport, { touches: at(360) });
+    fireEvent.touchMove(strip.viewport, { touches: at(340) });
+    act(() => vi.advanceTimersByTime(400));
+    fireEvent.touchMove(strip.viewport, { touches: at(60) });
+    fireEvent.touchEnd(strip.viewport, { changedTouches: at(60) });
+    act(() => vi.runAllTimers());
+
+    expect(strip.at()).toBe('1');
+    expect(strip.resting()).toBe(-100);
+    expect(strip.offset()).toBe(0);
+  });
+
+  it('only gives a little at the start of the strip, and stays there', () => {
+    const strip = setup({ count: 3, fixedIndex: undefined, start: 0 });
+
+    fireEvent.touchStart(strip.viewport, { touches: at(100) });
+    fireEvent.touchMove(strip.viewport, { touches: at(140) });
+    fireEvent.touchMove(strip.viewport, { touches: at(340) });
+
+    // A quarter of the 200px the finger went, rather than following it out to nothing.
+    expect(strip.offset()).toBe(50);
+    expect(strip.showing()).toBe('0');
+
+    fireEvent.touchEnd(strip.viewport, { changedTouches: at(340) });
+    act(() => vi.runAllTimers());
+    expect(strip.onCommit).not.toHaveBeenCalled();
+    expect(strip.resting()).toBe(0);
+    expect(strip.offset()).toBe(0);
+  });
+
+  it('only gives a little at the end of the strip too', () => {
+    const strip = setup({ count: 3, fixedIndex: undefined, start: 2 });
+
+    fireEvent.touchStart(strip.viewport, { touches: at(340) });
+    fireEvent.touchMove(strip.viewport, { touches: at(300) });
+    fireEvent.touchMove(strip.viewport, { touches: at(100) });
+
+    expect(strip.offset()).toBe(-50);
+    fireEvent.touchEnd(strip.viewport, { changedTouches: at(100) });
+    act(() => vi.runAllTimers());
+    expect(strip.onCommit).not.toHaveBeenCalled();
+    expect(strip.resting()).toBe(-200);
+  });
+
+  it('will not step a button past either end', () => {
+    const first = setup({ count: 2, fixedIndex: undefined, start: 0 });
+    fireEvent.click(screen.getByTestId('step-back'));
+    expect(first.onCommit).not.toHaveBeenCalled();
+
+    fireEvent.click(screen.getByTestId('step-forward'));
+    expect(first.onCommit).toHaveBeenCalledExactlyOnceWith(1);
+    expect(first.at()).toBe('1');
+
+    // And now it is the last panel.
+    fireEvent.click(screen.getByTestId('step-forward'));
+    expect(first.onCommit).toHaveBeenCalledOnce();
   });
 });

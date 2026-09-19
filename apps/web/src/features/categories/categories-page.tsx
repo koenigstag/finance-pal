@@ -10,6 +10,7 @@ import { Empty, EmptyDescription, EmptyHeader, EmptyMedia, EmptyTitle } from '@/
 import { Spinner } from '@/components/ui/spinner';
 import { ToggleGroup, ToggleGroupItem } from '@/components/ui/toggle-group';
 import { useGroupScope } from '@/features/groups/group-context';
+import { useSwipeTrack } from '@/lib/swipe';
 import { cn } from '@/lib/utils';
 import { CategoryActionsSheet, type CategoryAction } from './category-actions-sheet';
 import { CategoryDialog } from './category-dialog';
@@ -63,10 +64,88 @@ export function CategoriesPage() {
     }
   };
 
-  const tree = useMemo(() => buildTree(categories.data ?? [], type), [categories.data, type]);
+  // A tree per tab rather than just the one on screen: the other is rendered while the strip is
+  // being dragged, and both come out of the categories already fetched.
+  const trees = useMemo(
+    () => Object.fromEntries(TYPE_ORDER.map((option) => [option, buildTree(categories.data ?? [], option)])),
+    [categories.data],
+  ) as Record<CategoryType, ReturnType<typeof buildTree>>;
+
+  // Income and expense side by side, in the order the picker lists them: dragging the strip left
+  // moves to the next along, right to the one before, and a drag towards nothing gives a little
+  // and comes back.
+  const typeIndex = TYPE_ORDER.indexOf(type);
+  const strip = useSwipeTrack({
+    count: TYPE_ORDER.length,
+    index: typeIndex,
+    position: type,
+    onCommit: (delta) => setParams({ type: TYPE_ORDER[typeIndex + delta] }, { replace: true }),
+  });
+
+  const tabContent = (option: CategoryType) => {
+    if (trees[option].length === 0) {
+      return (
+        <Empty className="border">
+          <EmptyHeader>
+            <EmptyMedia variant="icon">
+              <ShapesIcon />
+            </EmptyMedia>
+            <EmptyTitle>{t('categories.empty.title')}</EmptyTitle>
+            <EmptyDescription>{t('categories.empty.description')}</EmptyDescription>
+          </EmptyHeader>
+        </Empty>
+      );
+    }
+    return (
+      <ul className="divide-y rounded-xl border">
+        {trees[option].map(({ category, children }) => {
+          const isExpanded = children.length > 0 && expanded.has(category.id);
+          const listId = `subcategories-${category.id}`;
+          return (
+            <li key={category.id}>
+              <div className="flex">
+                <CategoryRow
+                  category={category}
+                  detail={children.length > 0 ? t('categories.subcategoryCount', { count: children.length }) : undefined}
+                  onSelect={() => setSheet({ open: true, category })}
+                  className="flex-1"
+                />
+                {/* Its own button: the row itself opens the category's actions, as every row does. */}
+                {children.length > 0 && (
+                  <button
+                    type="button"
+                    aria-expanded={isExpanded}
+                    aria-controls={listId}
+                    aria-label={t('categories.subcategoriesOf', { name: category.name })}
+                    className="flex w-12 shrink-0 items-center justify-center text-muted-foreground hover:bg-muted/50"
+                    onClick={() => toggle(category.id)}
+                  >
+                    <ChevronDownIcon className={cn('size-4 transition-transform', isExpanded && 'rotate-180')} />
+                  </button>
+                )}
+              </div>
+              {isExpanded && (
+                <ul id={listId} className="divide-y border-t">
+                  {children.map((child) => (
+                    <li key={child.id}>
+                      <CategoryRow
+                        category={child}
+                        nested
+                        onSelect={() => setSheet({ open: true, category: child })}
+                      />
+                    </li>
+                  ))}
+                </ul>
+              )}
+            </li>
+          );
+        })}
+      </ul>
+    );
+  };
 
   return (
-    <section className={cn('flex flex-col gap-4', PAGE_BOTTOM_SPACE)}>
+    <section className={cn('flex flex-1 flex-col gap-4', PAGE_BOTTOM_SPACE)}>
       <PageHeader
         title={t('categories.title')}
         action={canCreate ? { label: t('categories.new'), icon: PlusIcon, onClick: () => setDialog({ open: true }) } : undefined}
@@ -99,61 +178,25 @@ export function CategoriesPage() {
         <Spinner className="mx-auto size-6 text-muted-foreground" />
       ) : categories.isError ? (
         <QueryError onRetry={() => void categories.refetch()} />
-      ) : tree.length === 0 ? (
-        <Empty className="border">
-          <EmptyHeader>
-            <EmptyMedia variant="icon">
-              <ShapesIcon />
-            </EmptyMedia>
-            <EmptyTitle>{t('categories.empty.title')}</EmptyTitle>
-            <EmptyDescription>{t('categories.empty.description')}</EmptyDescription>
-          </EmptyHeader>
-        </Empty>
       ) : (
-        <ul className="divide-y rounded-xl border">
-          {tree.map(({ category, children }) => {
-            const isExpanded = children.length > 0 && expanded.has(category.id);
-            const listId = `subcategories-${category.id}`;
-            return (
-              <li key={category.id}>
-                <div className="flex">
-                  <CategoryRow
-                    category={category}
-                    detail={children.length > 0 ? t('categories.subcategoryCount', { count: children.length }) : undefined}
-                    onSelect={() => setSheet({ open: true, category })}
-                    className="flex-1"
-                  />
-                  {/* Its own button: the row itself opens the category's actions, as every row does. */}
-                  {children.length > 0 && (
-                    <button
-                      type="button"
-                      aria-expanded={isExpanded}
-                      aria-controls={listId}
-                      aria-label={t('categories.subcategoriesOf', { name: category.name })}
-                      className="flex w-12 shrink-0 items-center justify-center text-muted-foreground hover:bg-muted/50"
-                      onClick={() => toggle(category.id)}
-                    >
-                      <ChevronDownIcon className={cn('size-4 transition-transform', isExpanded && 'rotate-180')} />
-                    </button>
-                  )}
-                </div>
-                {isExpanded && (
-                  <ul id={listId} className="divide-y border-t">
-                    {children.map((child) => (
-                      <li key={child.id}>
-                        <CategoryRow
-                          category={child}
-                          nested
-                          onSelect={() => setSheet({ open: true, category: child })}
-                        />
-                      </li>
-                    ))}
-                  </ul>
-                )}
-              </li>
-            );
-          })}
-        </ul>
+        /*
+          The two lists side by side, clipped to the one on screen. The negative margin pays for
+          the padding inside each, so the rows stay as wide as the page while a gutter opens
+          between them as the strip is dragged across, and the strip takes what is left of the
+          screen so a short list can still be swiped off. Only the list on screen is rendered while
+          the strip is still, so the shorter of the two doesn't scroll the page to the length of
+          the longer.
+        */
+        <div {...strip.viewport} className="-mx-2 flex-1 overflow-hidden">
+          <div style={strip.track} className="flex w-full items-start">
+            {TYPE_ORDER.map((option) => (
+              // A list waiting off to the side is to be seen, not read out or tabbed into.
+              <div key={option} inert={option !== type} className="w-full shrink-0 px-2">
+                {(option === type || strip.active) && tabContent(option)}
+              </div>
+            ))}
+          </div>
+        </div>
       )}
 
       <CategoryActionsSheet

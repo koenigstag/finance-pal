@@ -95,8 +95,11 @@ const SETTLE_MS = 240;
 // Slow at the end rather than the start: the track carries on from the finger, it doesn't start.
 const SETTLE_EASING = 'cubic-bezier(0.22, 0.61, 0.36, 1)';
 // If the panels never move under a strip that has arrived — the caller ignored the move, or is
-// slow — it goes back to its middle panel anyway rather than sitting off to one side.
+// slow — it goes back to resting on its panel anyway rather than sitting off to one side.
 const RECENTRE_FALLBACK_MS = 400;
+// How far a drag with nothing to reveal still gives: enough to feel the end of the strip, not
+// enough to look like it might go somewhere.
+const EDGE_GIVE = 0.25;
 
 function clamp(value: number, limit: number): number {
   return Math.min(Math.max(value, -limit), limit);
@@ -115,54 +118,74 @@ export interface SwipeTrackProps {
     onTouchEnd: (event: TouchEvent) => void;
     onTouchCancel: () => void;
   };
-  /** For the track inside the viewport: three panels wide, resting on the middle one. */
+  /** For the track of panels inside the viewport, resting on the one that is on screen. */
   track: CSSProperties;
-  /** Which panel is nearest the middle right now — the one the user would call "on screen". */
+  /** Which panel is nearest the front right now, counted from the one on screen: -1, 0 or 1. */
   showing: -1 | 0 | 1;
+  /**
+   * Whether the strip is being moved, and so whether a panel off to the side might be seen. A
+   * caller with nothing to gain from keeping its other panels ready can render them only while
+   * this is true, and keep the strip as tall as the one panel on screen the rest of the time.
+   */
+  active: boolean;
   /** Steps straight to a neighbour, for buttons that do what a drag does. */
   step: (delta: -1 | 1) => void;
 }
 
-// Where the strip is: resting on its middle panel, easing towards a neighbour, or arrived at one
-// and waiting for the caller to move the panels under it.
+interface SwipeTrackOptions {
+  /** How many panels are on the strip. */
+  count: number;
+  /** Which of them is on screen, counted from 0. */
+  index: number;
+  /**
+   * What the panel on screen is showing — a month, a tab name. The strip stays where it landed
+   * until this changes, which is how it knows the caller has caught up with the move it asked
+   * for. Where a move changes `index`, that value will do.
+   */
+  position: string;
+  onCommit: (delta: -1 | 1) => void;
+}
+
+// Where the strip is: resting on the panel it shows, easing towards a neighbour, or arrived at
+// one and waiting for the caller to catch up with it.
 type Phase =
   | { kind: 'rest' }
   | { kind: 'sliding'; timer: ReturnType<typeof setTimeout> }
   | { kind: 'landing'; from: string; timer: ReturnType<typeof setTimeout> };
 
 /**
- * Three panels on a strip that follows a finger, for stepping through something a panel at a
- * time while seeing what is on either side of it:
+ * A strip of panels that follows a finger, for stepping through something a panel at a time while
+ * seeing what is on either side of it:
  *
- *     const strip = useSwipeTrack(monthKey, (delta) => goToMonth(delta));
+ *     const strip = useSwipeTrack({ count: tabs.length, index, position: tab, onCommit: goBy });
  *     <div {...strip.viewport} className="overflow-hidden">
- *       <div style={strip.track} className="flex h-full w-full">…three panels, each w-full…</div>
+ *       <div style={strip.track} className="flex w-full">…a panel per tab, each w-full shrink-0…</div>
  *     </div>
  *
- * `delta` is which neighbour was moved to: -1 the panel to the left, 1 the one to the right. It
- * arrives once the strip has finished easing there, so the caller re-centres its three panels on
- * a month the strip is already showing.
+ * `onCommit` is given which neighbour was moved to: -1 the panel to the left, 1 the one to the
+ * right. It is called once the strip has finished easing there, so the caller catches up with a
+ * panel the strip is already showing. A drag towards an end of the strip, with no panel that way,
+ * gives a little and springs back.
  *
- * `position` says what the middle panel is currently showing — the month key, here. The strip
- * stays where it landed until that changes, and only then goes back to its middle panel, so the
- * swap happens in the same frame as the panels move and nothing flickers. (React Router renders a
- * navigation as a transition, a frame or more after the state change that asked for it: re-centring
- * on a timer instead would put the month that was just left back on screen in between.)
+ * The strip stays where it landed until `position` changes, and only then goes back to resting on
+ * its panel, so the swap happens in the same frame as the caller's own change and nothing
+ * flickers. (React Router renders a navigation as a transition, a frame or more after the state
+ * change that asked for it: going back on a timer instead would put the panel just left back on
+ * screen in between.)
  *
  * Dragging follows the finger and goes nowhere by itself: the move only happens if the finger
  * crossed most of a panel, or flicked it. A drag that starts by going up or down is a scroll and
  * stays one, and a second finger is a pinch, which is the browser's.
  *
  * `step` is for buttons, and doesn't slide: a press is a discrete thing, and pressing again and
- * again has to keep up rather than queue behind an animation it can't interrupt. With the
- * neighbouring panels already on the strip there is nothing to wait for anyway — what a slide
- * would reveal is what a press shows at once.
+ * again has to keep up rather than queue behind an animation it can't interrupt.
  */
-export function useSwipeTrack(position: string, onCommit: (delta: -1 | 1) => void): SwipeTrackProps {
-  const [state, setState] = useState<{ offset: number; settling: boolean; showing: -1 | 0 | 1 }>({
+export function useSwipeTrack({ count, index, position, onCommit }: SwipeTrackOptions): SwipeTrackProps {
+  const [state, setState] = useState<{ offset: number; settling: boolean; showing: -1 | 0 | 1; active: boolean }>({
     offset: 0,
     settling: false,
     showing: 0,
+    active: false,
   });
   const viewport = useRef<HTMLElement | null>(null);
   const drag = useRef<{ x: number; y: number; at: number; width: number; axis: 'x' | 'y' | null } | null>(null);
@@ -171,17 +194,24 @@ export function useSwipeTrack(position: string, onCommit: (delta: -1 | 1) => voi
   onCommitRef.current = onCommit;
   const positionRef = useRef(position);
   positionRef.current = position;
+  // Read inside the handlers, which have to know where the ends of the strip are right now.
+  const ends = useRef({ count, index });
+  ends.current = { count, index };
+
+  // Whether there is a panel that way to move to at all.
+  const canGo = (delta: -1 | 0 | 1) =>
+    delta === 0 || (delta < 0 ? ends.current.index > 0 : ends.current.index < ends.current.count - 1);
 
   const rest = useCallback(() => {
     if (phase.current.kind !== 'rest') {
       clearTimeout(phase.current.timer);
     }
     phase.current = { kind: 'rest' };
-    setState({ offset: 0, settling: false, showing: 0 });
+    setState({ offset: 0, settling: false, showing: 0, active: false });
   }, []);
 
-  // Hands the move over and waits, still showing the panel it arrived at, for the caller to put
-  // that panel in the middle. The fallback covers a caller that never does.
+  // Hands the move over and waits, still showing the panel it arrived at, for the caller to bring
+  // that panel to the front. The fallback covers a caller that never does.
   const land = useCallback(
     (delta: -1 | 1) => {
       phase.current = { kind: 'landing', from: positionRef.current, timer: setTimeout(rest, RECENTRE_FALLBACK_MS) };
@@ -191,13 +221,14 @@ export function useSwipeTrack(position: string, onCommit: (delta: -1 | 1) => voi
   );
 
   const slide = useCallback(
-    (delta: -1 | 0 | 1, width: number) => {
+    (towards: -1 | 0 | 1, width: number) => {
       // One move at a time: the strip is either following a finger or playing that out.
       if (phase.current.kind !== 'rest') {
         return;
       }
+      const delta = canGo(towards) ? towards : 0;
       if (delta === 0) {
-        setState({ offset: 0, settling: true, showing: 0 });
+        setState({ offset: 0, settling: true, showing: 0, active: true });
         phase.current = { kind: 'sliding', timer: setTimeout(rest, SETTLE_MS) };
         return;
       }
@@ -205,7 +236,7 @@ export function useSwipeTrack(position: string, onCommit: (delta: -1 | 1) => voi
         land(delta);
         return;
       }
-      setState({ offset: -delta * width, settling: true, showing: delta });
+      setState({ offset: -delta * width, settling: true, showing: delta, active: true });
       phase.current = { kind: 'sliding', timer: setTimeout(() => land(delta), SETTLE_MS) };
     },
     [land, rest],
@@ -263,9 +294,17 @@ export function useSwipeTrack(position: string, onCommit: (delta: -1 | 1) => voi
           from.at = Date.now();
           return;
         }
-        const offset = clamp(touch.clientX - from.x, from.width);
+        // Dragging left reveals the panel to the right, and the other way about; with no panel
+        // that way the strip only gives a little, so the end of it can be felt.
+        const travelled = clamp(touch.clientX - from.x, from.width);
+        const offset = canGo(travelled < 0 ? 1 : -1) ? travelled : travelled * EDGE_GIVE;
         const half = from.width / 2;
-        setState({ offset, settling: false, showing: offset <= -half ? 1 : offset >= half ? -1 : 0 });
+        setState({
+          offset,
+          settling: false,
+          showing: offset <= -half ? 1 : offset >= half ? -1 : 0,
+          active: true,
+        });
       },
       onTouchEnd: (event) => {
         const from = drag.current;
@@ -288,14 +327,15 @@ export function useSwipeTrack(position: string, onCommit: (delta: -1 | 1) => voi
       },
     },
     track: {
-      // The middle panel of three, plus however far the finger has taken it.
-      transform: `translateX(calc(-100% + ${state.offset}px))`,
+      // The panel on screen, plus however far the finger has taken the strip off it.
+      transform: `translateX(calc(${-index * 100}% + ${state.offset}px))`,
       transition: state.settling ? `transform ${SETTLE_MS}ms ${SETTLE_EASING}` : 'none',
     },
     showing: state.showing,
+    active: state.active,
     step: (delta) => {
       // Never on top of a drag that is still playing out: that one is about to move the panels.
-      if (phase.current.kind === 'rest') {
+      if (phase.current.kind === 'rest' && canGo(delta)) {
         onCommitRef.current(delta);
       }
     },

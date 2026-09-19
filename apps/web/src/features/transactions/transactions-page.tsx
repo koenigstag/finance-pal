@@ -89,7 +89,9 @@ export function TransactionsPage() {
   // the month before — the same way round as the chevrons either side of the month's name, which
   // step to a neighbour already on the strip and so have nothing to wait for.
   const goToMonth = (delta: number) => setParam('month', toMonthParam(shiftMonth(month, delta)));
-  const strip = useSwipeTrack(monthKey, goToMonth);
+  // Always resting on the middle of three: a move shifts which months those are, rather than
+  // running off the end of a strip, so there is no first or last month to stop at.
+  const strip = useSwipeTrack({ count: 3, index: 1, position: monthKey, onCommit: goToMonth });
 
   const filterValues: TransactionFilterValues = { search, accountId, type, categoryId };
   const onFiltersChange = (patch: Partial<TransactionFilterValues>) =>
@@ -197,9 +199,12 @@ export function TransactionsPage() {
       */}
       <div {...strip.viewport} className="-mx-2 min-h-0 flex-1 overflow-hidden">
         <div style={strip.track} className="flex h-full w-full">
-          {months.map((panelMonth) => (
+          {months.map((panelMonth, panel) => (
             <MonthTransactions
               key={toMonthParam(panelMonth)}
+              // The months waiting either side are to be seen, not read out or tabbed
+              // through: only the one on screen is part of the page.
+              inert={panel !== 1}
               groupId={group.id}
               month={panelMonth}
               accountId={accountId}
