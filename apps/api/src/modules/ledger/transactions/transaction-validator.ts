@@ -49,6 +49,13 @@ export function keptRoundBalanceTo(patch: AmountSourcePatch, existing: { roundBa
 // its own subcategories.
 export type CategoryPair = Pick<TransactionShape, 'categoryId' | 'subcategoryId'>;
 
+// A valid shape, as it's to be stored: its category pair, and the currencies of its accounts — the
+// transaction's own, which is its account's, and for a transfer the one it arrives in.
+export interface Validated extends CategoryPair {
+  currencyId: number;
+  toCurrencyId: number | null;
+}
+
 /**
  * The subcategory an update leaves in place when it doesn't name one: a subcategory belongs to its
  * category, so it stays while the category does and goes when the category changes.
@@ -146,13 +153,14 @@ export class TransactionValidator {
   ) {}
 
   /**
-   * Throws for a shape that can't be stored; otherwise returns its category pair to store.
+   * Throws for a shape that can't be stored; otherwise returns its category pair to store, and the
+   * currencies of its accounts.
    *
    * `estimate`: a planned transaction or a series, whose amount from the balance is only what it
    * comes to as things stand. That may be nothing for now — a balance on a round figure already, an
    * empty one — and it's worked out again until its date, so it may be zero.
    */
-  async validate(groupId: string, shape: TransactionShape, { estimate = false }: { estimate?: boolean } = {}): Promise<CategoryPair> {
+  async validate(groupId: string, shape: TransactionShape, { estimate = false }: { estimate?: boolean } = {}): Promise<Validated> {
     const nothingForNow = estimate && isFromBalance(shape) && Number(shape.amount) === 0;
     if (!isPositiveMoney(shape.amount) && !nothingForNow) {
       throw new BadRequestException('amount must be greater than zero');
@@ -195,13 +203,16 @@ export class TransactionValidator {
     if (!account) {
       throw new NotFoundException('Account not found');
     }
+    let toCurrencyId: number | null = null;
     if (shape.toAccountId) {
       const toAccount = await this.accounts.findOneBy({ id: shape.toAccountId, groupId });
       if (!toAccount) {
         throw new NotFoundException('Destination account not found');
       }
+      toCurrencyId = toAccount.currencyId;
     }
-    return this.categoryPair(groupId, shape.categoryId, shape.subcategoryId);
+    const pair = await this.categoryPair(groupId, shape.categoryId, shape.subcategoryId);
+    return { ...pair, currencyId: account.currencyId, toCurrencyId };
   }
 
   /**

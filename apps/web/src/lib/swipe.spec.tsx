@@ -90,16 +90,21 @@ describe('useSwipeTrack', () => {
   // jsdom lays nothing out, so every element measures 0 wide; the strip needs a width to
   // reckon the distance a drag has to cross against.
   const WIDTH = 400;
-  let clientWidth: PropertyDescriptor | undefined;
+  const measured: Record<string, PropertyDescriptor | undefined> = {};
 
   beforeAll(() => {
-    clientWidth = Object.getOwnPropertyDescriptor(HTMLElement.prototype, 'clientWidth');
-    Object.defineProperty(HTMLElement.prototype, 'clientWidth', { configurable: true, value: WIDTH });
+    // Nothing overflows sideways by default; the one thing that should says so for itself.
+    for (const property of ['clientWidth', 'scrollWidth'] as const) {
+      measured[property] = Object.getOwnPropertyDescriptor(HTMLElement.prototype, property);
+      Object.defineProperty(HTMLElement.prototype, property, { configurable: true, value: WIDTH });
+    }
   });
 
   afterAll(() => {
-    if (clientWidth) {
-      Object.defineProperty(HTMLElement.prototype, 'clientWidth', clientWidth);
+    for (const [property, descriptor] of Object.entries(measured)) {
+      if (descriptor) {
+        Object.defineProperty(HTMLElement.prototype, property, descriptor);
+      }
     }
   });
 
@@ -138,6 +143,8 @@ describe('useSwipeTrack', () => {
     return (
       <div data-testid="viewport" {...strip.viewport}>
         <div data-testid="track" style={strip.track} />
+        {/* Something on a panel that is wider than its box and scrolls itself, like a table. */}
+        <div data-testid="wide" style={{ overflowX: 'auto' }} />
         <span data-testid="showing">{strip.showing}</span>
         <span data-testid="active">{String(strip.active)}</span>
         <span data-testid="at">{at}</span>
@@ -151,9 +158,11 @@ describe('useSwipeTrack', () => {
     const onCommit = vi.fn<(delta: -1 | 1) => void>();
     render(<Strip onCommit={onCommit} fixedIndex={1} {...props} />);
     const track = screen.getByTestId('track');
+    Object.defineProperty(screen.getByTestId('wide'), 'scrollWidth', { configurable: true, value: WIDTH * 2 });
     return {
       onCommit,
       viewport: screen.getByTestId('viewport'),
+      wide: screen.getByTestId('wide'),
       // How far the strip sits from the panel it rests on, in pixels.
       offset: () => Number(/[+] (-?\d+)px/.exec(track.style.transform)?.[1] ?? NaN),
       // And which panel that is, as a share of the strip's width.
@@ -377,5 +386,30 @@ describe('useSwipeTrack', () => {
     // And now it is the last panel.
     fireEvent.click(screen.getByTestId('step-forward'));
     expect(first.onCommit).toHaveBeenCalledOnce();
+  });
+
+  it('leaves a drag that starts on something scrolling sideways to that thing', () => {
+    const strip = setup();
+
+    fireEvent.touchStart(strip.wide, { touches: at(360) });
+    fireEvent.touchMove(strip.wide, { touches: at(340) });
+    fireEvent.touchMove(strip.wide, { touches: at(60) });
+    fireEvent.touchEnd(strip.wide, { changedTouches: at(60) });
+    act(() => vi.runAllTimers());
+
+    expect(strip.offset()).toBe(0);
+    expect(strip.onCommit).not.toHaveBeenCalled();
+  });
+
+  it('still takes one that starts anywhere else on the panel', () => {
+    const strip = setup();
+
+    fireEvent.touchStart(strip.viewport, { touches: at(360) });
+    fireEvent.touchMove(strip.viewport, { touches: at(340) });
+    fireEvent.touchMove(strip.viewport, { touches: at(60) });
+    fireEvent.touchEnd(strip.viewport, { changedTouches: at(60) });
+    act(() => vi.runAllTimers());
+
+    expect(strip.onCommit).toHaveBeenCalledExactlyOnceWith(1);
   });
 });

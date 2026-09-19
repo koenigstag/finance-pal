@@ -1,6 +1,7 @@
 import { useMemo, type ReactNode } from 'react';
 import { useTranslation } from 'react-i18next';
-import { useCurrencyCodes } from '@/features/currencies/queries';
+import { useCurrencyCodes, useRates } from '@/features/currencies/queries';
+import { RatesNote } from '@/features/currencies/rates-note';
 import { useProfile } from '@/features/profile/queries';
 import { convertMoney, formatMoney, moneySign, sumMoney } from '@/lib/money';
 import { signColor } from '@/lib/money-colors';
@@ -10,8 +11,9 @@ import type { Account } from './queries';
 // After the main currency, the ones most likely to be held; anything else follows by code.
 const CURRENCY_ORDER = ['USD', 'EUR'];
 
-// Currencies are added together only through the rates the user keeps by hand (settings); without
-// one for every currency on show, the converted row is left out rather than guessed at.
+// Currencies are added together through the rates fetched from a provider, or the user's own for
+// the ones it doesn't quote; without one for every currency on show, the converted row is left
+// out rather than guessed at.
 interface CurrencyRow {
   currencyId: number;
   code: string | undefined;
@@ -64,9 +66,13 @@ export function AccountsSummary({ accounts }: { accounts: Account[] }) {
 
   // In the base currency: each column added up across the currencies, and the two against each
   // other. Missing a rate for any currency on show, there is no honest total to give.
-  const rates = profile.data?.exchangeRates ?? {};
-  const rateFor = (row: CurrencyRow) =>
-    row.currencyId === profile.data?.mainCurrencyId ? '1' : row.code ? rates[row.code] : undefined;
+  const { rates, fetched } = useRates();
+  // The base currency is in here too, at 1, so its own row needs no special case.
+  const rateFor = (row: CurrencyRow) => (row.code ? rates[row.code]?.rate : undefined);
+  // Whether any fetched rate went into the total, and so whether to say where they came from.
+  const usesFetched = rows.some(
+    (row) => row.currencyId !== profile.data?.mainCurrencyId && row.code && rates[row.code]?.source === 'provider',
+  );
   const converted = rows.every((row) => rateFor(row))
     ? {
         assets: sumMoney(rows.map((row) => convertMoney(row.assets, rateFor(row) ?? '1'))),
@@ -125,6 +131,7 @@ export function AccountsSummary({ accounts }: { accounts: Account[] }) {
           )
         }
       />
+      {converted && usesFetched && fetched.data && <RatesNote rates={fetched.data} />}
     </div>
   );
 }

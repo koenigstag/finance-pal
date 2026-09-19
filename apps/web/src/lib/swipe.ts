@@ -100,6 +100,30 @@ const RECENTRE_FALLBACK_MS = 400;
 // How far a drag with nothing to reveal still gives: enough to feel the end of the strip, not
 // enough to look like it might go somewhere.
 const EDGE_GIVE = 0.25;
+// Sub-pixel layout leaves a stray fraction of sideways overflow on all sorts of elements. Only
+// something wider than its box by more than that is a region worth scrolling.
+const OVERFLOW_SLACK_PX = 4;
+
+/**
+ * Whether the touch landed inside something that scrolls sideways under its own steam — a table
+ * too wide for the screen, say.
+ *
+ * That region owns sideways drags, and the strip leaves them alone: taking them would make the
+ * region unreadable, and taking only the ones it can't use would move the strip whenever the
+ * region sat at an edge — which is most of the time, and reads as the page changing under the
+ * finger. There is always somewhere else on the panel to swipe from.
+ */
+function scrollsSideways(target: EventTarget | null, within: HTMLElement | null): boolean {
+  for (let node = target instanceof Element ? target : null; node && node !== within; node = node.parentElement) {
+    if (node.scrollWidth - node.clientWidth > OVERFLOW_SLACK_PX) {
+      const { overflowX } = getComputedStyle(node);
+      if (overflowX === 'auto' || overflowX === 'scroll') {
+        return true;
+      }
+    }
+  }
+  return false;
+}
 
 function clamp(value: number, limit: number): number {
   return Math.min(Math.max(value, -limit), limit);
@@ -175,7 +199,8 @@ type Phase =
  *
  * Dragging follows the finger and goes nowhere by itself: the move only happens if the finger
  * crossed most of a panel, or flicked it. A drag that starts by going up or down is a scroll and
- * stays one, and a second finger is a pinch, which is the browser's.
+ * stays one, a second finger is a pinch, which is the browser's, and one that starts inside
+ * something that scrolls sideways itself is that region's to keep.
  *
  * `step` is for buttons, and doesn't slide: a press is a discrete thing, and pressing again and
  * again has to keep up rather than queue behind an animation it can't interrupt.
@@ -265,7 +290,9 @@ export function useSwipeTrack({ count, index, position, onCommit }: SwipeTrackOp
       // The browser keeps scrolling the panel up and down, and keeps pinch-zoom; sideways is ours.
       style: { touchAction: 'pan-y pinch-zoom' },
       onTouchStart: (event) => {
-        const touch = event.touches.length === 1 && phase.current.kind === 'rest' ? event.touches[0] : undefined;
+        const mine =
+          event.touches.length === 1 && phase.current.kind === 'rest' && !scrollsSideways(event.target, viewport.current);
+        const touch = mine ? event.touches[0] : undefined;
         drag.current = touch
           ? { x: touch.clientX, y: touch.clientY, at: Date.now(), width: event.currentTarget.clientWidth, axis: null }
           : null;

@@ -17,6 +17,7 @@ import {
   TransactionType,
 } from '@ft/api-database';
 import { AccountsService } from '../ledger/accounts/accounts.service';
+import { ExchangeRatesService } from '../ledger/exchange-rates/exchange-rates.service';
 import { materializeOccurrences } from '../recurring/occurrence-materializer';
 import type { ParsedBackup } from './one-money-parser';
 
@@ -57,6 +58,7 @@ export class ImportService {
     @InjectRepository(Transaction) private readonly transactions: Repository<Transaction>,
     @InjectRepository(RecurringRule) private readonly rules: Repository<RecurringRule>,
     private readonly accountsService: AccountsService,
+    private readonly rates: ExchangeRatesService,
   ) {}
 
   /**
@@ -212,7 +214,7 @@ export class ImportService {
     }
     const now = new Date();
     for (const rule of await this.rules.save(rules)) {
-      await materializeOccurrences(this.rules.manager, rule, now);
+      await materializeOccurrences(this.rules.manager, rule, now, this.rates.lookup);
     }
 
     return {

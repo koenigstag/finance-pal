@@ -36,6 +36,7 @@ export const en = {
     back: 'Back',
     delete: 'Delete',
     edit: 'Edit',
+    ratesPublished: 'Rates published {{date}}',
     comingSoon: {
       title: 'Coming soon',
       description: 'This section is being built.',
@@ -111,7 +112,7 @@ export const en = {
       assets: 'Assets',
       debts: 'Debts',
       total: 'Total',
-      ratesMissing: 'Set exchange rates in settings to total these together.',
+      ratesMissing: 'Add the missing exchange rates in settings to total these together.',
     },
     groups: {
       regular: 'Regular',
@@ -222,6 +223,11 @@ export const en = {
     percentageBaseHintWithout: 'Leave empty to use the balance of {{account}}, without this transaction',
     // Lines under the amount on the form's Amount card, and in a transaction's actions sheet.
     receivedAmount: 'Received {{amount}}',
+    receivedAtRate: 'Received ≈ {{amount}}',
+    atTodaysRate: "At today's rate",
+    atYourRate: 'At your own rate',
+    convertsOnTheDay: "Converted on the day, at that day's rate",
+    convertsEachTime: "Each one converted on its day, at that day's rate",
     percentageOfBalance: '{{percentage}} of the balance of {{account}}',
     percentageOfBase: '{{percentage}} of {{base}}',
     // A list row's, under the name of the account whose balance it is.
@@ -277,7 +283,7 @@ export const en = {
     },
     errors: {
       sameAccount: 'Choose a different account',
-      repeatCurrency: 'Only a transfer within one currency can repeat',
+      repeatCurrency: "A transfer between these currencies can't repeat: there's no fetched exchange rate for both",
       pastNextDate: "The next date can't be in the past",
       percentageAmount: 'This percentage comes to zero',
       roundBalanceAmount: 'The balance is round already',
@@ -393,24 +399,52 @@ export const en = {
       },
     },
   },
+  about: {
+    title: 'About',
+    description: 'Accounts, categories and transactions, on your own or shared with the people you budget with. Installs like an app and keeps working offline.',
+    version: 'Version',
+    commit: 'Commit',
+    noCommit: 'Not recorded',
+    source: 'Source on GitHub',
+    reportIssue: 'Report an issue',
+  },
   settings: {
     title: 'Settings',
     saved: 'Saved',
+    tabs: {
+      profile: 'Profile',
+      appearance: 'Appearance',
+      rates: 'Rates',
+      account: 'Account',
+    },
     account: {
       title: 'Account',
     },
+    password: {
+      title: 'Password',
+      description: 'Changing it signs every other device out.',
+      current: 'Current password',
+      new: 'New password',
+      confirm: 'Repeat new password',
+      submit: 'Change password',
+      changed: 'Password changed. Every other device has been signed out.',
+      errors: {
+        incorrect: 'Wrong current password.',
+        sameAsCurrent: 'Choose a password different from the current one.',
+        mismatch: "The passwords don't match.",
+      },
+    },
     rates: {
       title: 'Exchange rates',
-      description: 'Kept by hand, and used only where a total spans currencies. One unit of each currency, valued in {{code}}.',
+      description: "Fetched daily for the currencies the rate provider quotes; add your own only for the ones it doesn't. One unit of each currency, valued in {{code}}.",
       empty: 'No rates yet.',
       rate: '1 {{code}} in {{base}}',
+      fetchedRate: '1 {{code}} in {{base}}, from the rate provider',
       remove: 'Remove {{code}}',
       add: 'Add a currency',
       addAction: 'Add',
-      note: 'Nothing updates these on its own yet; fetching them daily is for later.',
+      unavailable: "The rate provider can't be reached right now, so these are only your own rates.",
     },
-
-
     notifications: {
       title: 'Notifications',
       // The line under the link on the settings page.

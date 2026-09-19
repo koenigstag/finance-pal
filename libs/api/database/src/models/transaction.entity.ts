@@ -46,6 +46,10 @@ import { TransactionType } from './enums.js';
 )
 // Only amounts from a balance that are still estimates, for the scheduler to find.
 @Index('idx_transactions_percentage_pending', ['date'], { where: 'percentage_as_of < date AND deleted_at IS NULL' })
+// Only a transfer converts between currencies.
+@Check('chk_transaction_dest_amount_as_of', `dest_amount_as_of IS NULL OR to_account_id IS NOT NULL`)
+// Only received amounts converted at a rate that are still estimates, for the scheduler to find.
+@Index('idx_transactions_dest_rate_pending', ['date'], { where: 'dest_amount_as_of < date AND deleted_at IS NULL' })
 // Soft-deleted rows included: a deleted transaction keeps its key, so a repeat can't bring it back.
 @Index('uq_transactions_idempotency_key', ['groupId', 'idempotencyKey'], {
   unique: true,
@@ -114,6 +118,13 @@ export class Transaction {
   // transfer with currency conversion only
   @Column({ type: 'numeric', precision: 14, scale: 2, name: 'dest_amount', nullable: true })
   destAmount!: string | null;
+
+  // Set when destAmount was worked out from an exchange rate rather than typed: when it last was.
+  // Before `date`, it's an estimate at the latest rate, worked out again until the date comes and
+  // then a last time, at that day's rate, when it stays. Null for an amount the user typed, which
+  // no rate ever overrides. Null destAmount beside it means the amount came to nothing for now.
+  @Column({ type: 'timestamptz', name: 'dest_amount_as_of', nullable: true })
+  destAmountAsOf!: Date | null;
 
   // the percentage the amount was worked out as, when it was one: of percentage_base if set,
   // otherwise of the account's balance

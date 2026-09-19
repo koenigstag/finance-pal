@@ -2,10 +2,12 @@ import { Injectable, Logger, OnApplicationBootstrap, OnModuleDestroy, OnModuleIn
 import { Cron, CronExpression } from '@nestjs/schedule';
 import { DataSource } from 'typeorm';
 import { RecurringRule, createMigrationDataSource } from '@ft/api-database';
+import { ExchangeRatesService } from '../ledger/exchange-rates/exchange-rates.service';
 import { PushNotificationsService } from '../push/push-notifications.service';
 import { RealtimeEmitterService } from '../realtime/realtime-emitter.service';
 import { reworkEstimates } from './balance-estimates';
 import { materializeOccurrences, plannedOccurrence } from './occurrence-materializer';
+import { ratesToWarm, reworkRateEstimates } from './rate-estimates';
 
 // Session-level advisory lock serializing ticks across every instance of the API. hashtext()
 // turns a readable name into the lock key, so nothing else has to agree on a magic number.
@@ -49,6 +51,9 @@ const BYPASSES_RLS_SQL = `
  * Around that, it brings the amounts that come from a balance (a percentage of it, or rounding it)
  * and are still estimates in line with it (see reworkEstimates): one that has landed is worked out a
  * last time, from the balance on its date, and a planned one follows what its account now holds.
+ * The same for received amounts converted at an exchange rate (see reworkRateEstimates): a planned
+ * one follows the latest rate, one that lands is fixed at the rate of its day. The rates it may need
+ * are refreshed first, before it locks anything, so no provider is ever waited on under a lock.
  * Requests do the same for the accounts they touch; this catches whatever changed otherwise, a
  * planned transaction landing among them.
  *
@@ -68,6 +73,7 @@ export class RecurringProcessorService implements OnModuleInit, OnApplicationBoo
 
   constructor(
     private readonly realtime: RealtimeEmitterService,
+    private readonly rates: ExchangeRatesService,
     private readonly push: PushNotificationsService,
   ) {}
 
@@ -113,6 +119,7 @@ export class RecurringProcessorService implements OnModuleInit, OnApplicationBoo
         return;
       }
       try {
+        await this.warmRates();
         const now = new Date();
         // Estimates first, so the occurrences a series catches up on are worked out from a balance
         // that holds what the one that just landed came to; and again after, for the planned
@@ -138,13 +145,23 @@ export class RecurringProcessorService implements OnModuleInit, OnApplicationBoo
     await runner.startTransaction();
     try {
       const reworked = await reworkEstimates(runner.manager, null, now);
+      // After the amounts: a received amount converted at a rate follows what's sent, too.
+      const reconverted = await reworkRateEstimates(runner.manager, this.rates.lookup, null, now);
       await runner.commitTransaction();
 
       for (const { id, groupId, action } of reworked) {
         this.realtime.emitToGroupNow(groupId, { resourceType: 'Transaction', resourceId: id, action, groupId });
       }
+      for (const { id, groupId } of reconverted) {
+        if (!reworked.some((row) => row.id === id)) {
+          this.realtime.emitToGroupNow(groupId, { resourceType: 'Transaction', resourceId: id, action: 'updated', groupId });
+        }
+      }
       if (reworked.length > 0) {
         this.logger.log(`Worked out ${reworked.length} amount(s) from their balance again`);
+      }
+      if (reconverted.length > 0) {
+        this.logger.log(`Converted ${reconverted.length} received amount(s) at the latest rate`);
       }
     } catch (error) {
       if (runner.isTransactionActive) {
@@ -153,6 +170,15 @@ export class RecurringProcessorService implements OnModuleInit, OnApplicationBoo
       this.logger.error('Working out amounts from their balance failed', error instanceof Error ? error.stack : error);
     } finally {
       await runner.release();
+    }
+  }
+
+  // Never fails a tick: without fresh rates, conversions fall back on the cache as it is.
+  private async warmRates(): Promise<void> {
+    try {
+      await this.rates.warm(await ratesToWarm(this.dataSource.manager));
+    } catch (error) {
+      this.logger.warn(`Couldn't find which rates to warm: ${error instanceof Error ? error.message : error}`);
     }
   }
 
@@ -222,7 +248,7 @@ export class RecurringProcessorService implements OnModuleInit, OnApplicationBoo
         .andWhere('r.active = true')
         .getOne();
 
-      const inserted = rule ? await materializeOccurrences(runner.manager, rule, now) : 0;
+      const inserted = rule ? await materializeOccurrences(runner.manager, rule, now, this.rates.lookup) : 0;
       await runner.commitTransaction();
 
       if (!rule || inserted === 0) {

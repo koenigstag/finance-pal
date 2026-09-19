@@ -25,6 +25,7 @@ interface Row {
   id: string;
   groupId: string;
   parentId?: string | null;
+  currencyId?: number;
 }
 
 // Just what the validator reads: one row by id within a group.
@@ -34,7 +35,10 @@ function repository<T extends ObjectLiteral>(rows: Row[]): Repository<T> {
 }
 
 const validator = new TransactionValidator(
-  repository<Account>([{ id: 'cash', groupId: GROUP }]),
+  repository<Account>([
+    { id: 'cash', groupId: GROUP, currencyId: 1 },
+    { id: 'dollars', groupId: GROUP, currencyId: 2 },
+  ]),
   repository<Category>([
     { id: 'transport', groupId: GROUP, parentId: null },
     { id: 'taxi', groupId: GROUP, parentId: 'transport' },
@@ -57,17 +61,38 @@ const expense = (categoryId: string | null, subcategoryId: string | null = null)
 });
 
 describe('TransactionValidator', () => {
+  it('reports the currency of each account, the one it arrives in for a transfer', async () => {
+    const shape = (overrides: Partial<TransactionShape>): TransactionShape => ({
+      type: TransactionType.EXPENSE,
+      accountId: 'cash',
+      categoryId: null,
+      subcategoryId: null,
+      toAccountId: null,
+      amount: '10.00',
+      destAmount: null,
+      percentage: null,
+      percentageBase: null,
+      roundBalanceTo: null,
+      ...overrides,
+    });
+
+    await expect(validator.validate(GROUP, shape({}))).resolves.toMatchObject({ currencyId: 1, toCurrencyId: null });
+    await expect(
+      validator.validate(GROUP, shape({ type: TransactionType.TRANSFER, toAccountId: 'dollars' })),
+    ).resolves.toMatchObject({ currencyId: 1, toCurrencyId: 2 });
+  });
+
   it('files a transaction under a category and one of its subcategories', async () => {
-    await expect(validator.validate(GROUP, expense('transport', 'taxi'))).resolves.toEqual({
+    await expect(validator.validate(GROUP, expense('transport', 'taxi'))).resolves.toMatchObject({
       categoryId: 'transport',
       subcategoryId: 'taxi',
     });
-    await expect(validator.validate(GROUP, expense('food'))).resolves.toEqual({ categoryId: 'food', subcategoryId: null });
+    await expect(validator.validate(GROUP, expense('food'))).resolves.toMatchObject({ categoryId: 'food', subcategoryId: null });
   });
 
   it('reads a subcategory sent as the category as that subcategory under its parent', async () => {
     // What a client from before subcategoryId sends when a subcategory is picked.
-    await expect(validator.validate(GROUP, expense('taxi'))).resolves.toEqual({
+    await expect(validator.validate(GROUP, expense('taxi'))).resolves.toMatchObject({
       categoryId: 'transport',
       subcategoryId: 'taxi',
     });
@@ -95,8 +120,8 @@ describe('TransactionValidator', () => {
 
   it('takes a percentage above 0 and up to 100', async () => {
     const withPercentage = (percentage: string) => validator.validate(GROUP, { ...expense('food'), percentage });
-    await expect(withPercentage('0.0125')).resolves.toEqual({ categoryId: 'food', subcategoryId: null });
-    await expect(withPercentage('100')).resolves.toEqual({ categoryId: 'food', subcategoryId: null });
+    await expect(withPercentage('0.0125')).resolves.toMatchObject({ categoryId: 'food', subcategoryId: null });
+    await expect(withPercentage('100')).resolves.toMatchObject({ categoryId: 'food', subcategoryId: null });
     await expect(withPercentage('0')).rejects.toThrow(BadRequestException);
     await expect(withPercentage('100.5')).rejects.toThrow(BadRequestException);
   });
@@ -104,7 +129,7 @@ describe('TransactionValidator', () => {
   it('takes a base amount above zero, and only beside a percentage', async () => {
     const withBase = (percentage: string | null, percentageBase: string) =>
       validator.validate(GROUP, { ...expense('food'), percentage, percentageBase });
-    await expect(withBase('5', '12000.00')).resolves.toEqual({ categoryId: 'food', subcategoryId: null });
+    await expect(withBase('5', '12000.00')).resolves.toMatchObject({ categoryId: 'food', subcategoryId: null });
     await expect(withBase('5', '0.00')).rejects.toThrow(BadRequestException);
     await expect(withBase(null, '12000.00')).rejects.toThrow(BadRequestException);
   });
@@ -112,8 +137,8 @@ describe('TransactionValidator', () => {
   it('takes nothing for an amount only for an estimate from the balance', async () => {
     const zero = (fields: Partial<TransactionShape>, estimate: boolean) =>
       validator.validate(GROUP, { ...expense('food'), amount: '0.00', ...fields }, { estimate });
-    await expect(zero({ roundBalanceTo: 100 }, true)).resolves.toEqual({ categoryId: 'food', subcategoryId: null });
-    await expect(zero({ percentage: '3' }, true)).resolves.toEqual({ categoryId: 'food', subcategoryId: null });
+    await expect(zero({ roundBalanceTo: 100 }, true)).resolves.toMatchObject({ categoryId: 'food', subcategoryId: null });
+    await expect(zero({ percentage: '3' }, true)).resolves.toMatchObject({ categoryId: 'food', subcategoryId: null });
     // Recorded, it moves no money; a base amount isn't a balance; a typed amount is no estimate.
     await expect(zero({ roundBalanceTo: 100 }, false)).rejects.toThrow(BadRequestException);
     await expect(zero({ percentage: '3', percentageBase: '1000.00' }, true)).rejects.toThrow(BadRequestException);
@@ -123,7 +148,7 @@ describe('TransactionValidator', () => {
   it('rounds the balance to one of the steps, and never beside a percentage', async () => {
     const rounding = (roundBalanceTo: number, percentage: string | null = null) =>
       validator.validate(GROUP, { ...expense('food'), roundBalanceTo, percentage });
-    await expect(rounding(100)).resolves.toEqual({ categoryId: 'food', subcategoryId: null });
+    await expect(rounding(100)).resolves.toMatchObject({ categoryId: 'food', subcategoryId: null });
     await expect(rounding(50)).rejects.toThrow(BadRequestException);
     await expect(rounding(10, '5')).rejects.toThrow(BadRequestException);
   });

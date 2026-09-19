@@ -1,4 +1,4 @@
-import { ConflictException, Injectable, UnauthorizedException } from '@nestjs/common';
+import { ConflictException, ForbiddenException, Injectable, UnauthorizedException } from '@nestjs/common';
 import { ConfigService } from '@nestjs/config';
 import { JwtService } from '@nestjs/jwt';
 import { InjectRepository } from '@nestjs/typeorm';
@@ -93,6 +93,33 @@ export class AuthService {
 
     await this.refreshTokens.update(token.id, { revokedAt: new Date() });
     const { accessToken, refreshToken } = await this.issueTokens(user, token.familyId);
+    return { accessToken, refreshToken };
+  }
+
+  /**
+   * Swaps the password for a new one, having checked the current one, and hands back a fresh
+   * token pair.
+   *
+   * Every refresh token the user had is revoked first — a password change is how someone locks
+   * an intruder (or a device they no longer have) out, so nothing issued under the old password
+   * may survive it. That includes the caller's own, hence the new pair: the device doing the
+   * changing stays signed in, every other one is sent back to the login screen the moment its
+   * access token expires.
+   */
+  @Transactional()
+  async changePassword(userId: string, currentPassword: string, newPassword: string): Promise<Omit<AuthResult, 'user'>> {
+    const user = await this.users.findOneBy({ id: userId });
+    if (!user?.passwordHash || !(await argon2.verify(user.passwordHash, currentPassword))) {
+      // The caller is authenticated and we know who they are, so there's no email to enumerate
+      // here; 403 keeps a wrong password apart from the 401 an expired access token gets.
+      throw new ForbiddenException('Current password is incorrect');
+    }
+
+    await this.users.update(user.id, { passwordHash: await argon2.hash(newPassword, ARGON2_OPTIONS) });
+    await this.refreshTokens.update({ userId: user.id, revokedAt: IsNull() }, { revokedAt: new Date() });
+
+    // Issued after the revocation above, so this pair isn't caught by it.
+    const { accessToken, refreshToken } = await this.issueTokens(user);
     return { accessToken, refreshToken };
   }
 

@@ -9,9 +9,13 @@ interface Occurrence {
   customized: boolean;
   amount?: string;
   percentageAsOf?: Date | null;
+  destAmount?: string | null;
+  destAmountAsOf?: Date | null;
 }
 
 const at = (iso: string) => new Date(iso);
+// A series in one currency never asks for a rate; one that does gets none.
+const noRate = async () => null;
 const days = (list: Occurrence[]) => list.map((row) => row.date.toISOString().slice(0, 10));
 
 /**
@@ -24,6 +28,8 @@ class FakeSeries {
   frontier: Date | null = null;
   // The account's balance as of a moment, which a percentage or a rounding is worked out from.
   balanceAt: (asOf: Date) => string = () => '0.00';
+  // The currencies of a transfer's two accounts, as the materializer looks them up.
+  pair = { from_code: 'UAH', to_code: 'UAH' };
   readonly manager = { query: (sql: string, params: unknown[]) => this.query(sql, params) } as unknown as EntityManager;
 
   live(): Occurrence[] {
@@ -37,6 +43,9 @@ class FakeSeries {
     if (sql.includes('SELECT 1 FROM transactions')) {
       const now = params[1] as Date;
       return this.occurrences.filter((row) => !row.deleted && row.date > now && row.recurrenceDate > now).map(() => ({}));
+    }
+    if (sql.includes('AS from_code')) {
+      return [this.pair];
     }
     if (sql.includes('AS balance')) {
       return [{ balance: this.balanceAt(params[1] as Date) }];
@@ -54,6 +63,8 @@ class FakeSeries {
         customized: false,
         amount: params[3] as string,
         percentageAsOf: params[14] as Date | null,
+        destAmount: params[16] as string | null,
+        destAmountAsOf: params[17] as Date | null,
       });
       return [{ id: String(this.occurrences.length) }];
     }
@@ -100,7 +111,7 @@ describe('materializeOccurrences', () => {
     const series = new FakeSeries();
     const rule = monthlyRule('2027-03-10T12:00:00Z');
 
-    await materializeOccurrences(series.manager, rule, at('2027-03-01T00:00:00Z'));
+    await materializeOccurrences(series.manager, rule, at('2027-03-01T00:00:00Z'), noRate);
 
     expect(days(series.live())).toEqual(['2027-03-10']);
     // The frontier is the one after it, written once this one lands.
@@ -111,7 +122,7 @@ describe('materializeOccurrences', () => {
     const series = new FakeSeries();
     const rule = monthlyRule('2027-01-10T12:00:00Z');
 
-    const inserted = await materializeOccurrences(series.manager, rule, at('2027-03-15T00:00:00Z'));
+    const inserted = await materializeOccurrences(series.manager, rule, at('2027-03-15T00:00:00Z'), noRate);
 
     expect(inserted).toBe(4);
     expect(days(series.live())).toEqual(['2027-01-10', '2027-02-10', '2027-03-10', '2027-04-10']);
@@ -120,9 +131,9 @@ describe('materializeOccurrences', () => {
   it('writes nothing while the planned occurrence is still ahead', async () => {
     const series = new FakeSeries();
     const rule = monthlyRule('2027-03-10T12:00:00Z');
-    await materializeOccurrences(series.manager, rule, at('2027-03-01T00:00:00Z'));
+    await materializeOccurrences(series.manager, rule, at('2027-03-01T00:00:00Z'), noRate);
 
-    const inserted = await materializeOccurrences(series.manager, rule, at('2027-03-09T00:00:00Z'));
+    const inserted = await materializeOccurrences(series.manager, rule, at('2027-03-09T00:00:00Z'), noRate);
 
     expect(inserted).toBe(0);
     expect(days(series.live())).toEqual(['2027-03-10']);
@@ -131,9 +142,9 @@ describe('materializeOccurrences', () => {
   it('writes the next occurrence once the planned one lands', async () => {
     const series = new FakeSeries();
     const rule = monthlyRule('2027-03-10T12:00:00Z');
-    await materializeOccurrences(series.manager, rule, at('2027-03-01T00:00:00Z'));
+    await materializeOccurrences(series.manager, rule, at('2027-03-01T00:00:00Z'), noRate);
 
-    await materializeOccurrences(series.manager, rule, at('2027-03-10T12:05:00Z'));
+    await materializeOccurrences(series.manager, rule, at('2027-03-10T12:05:00Z'), noRate);
 
     expect(days(series.live())).toEqual(['2027-03-10', '2027-04-10']);
   });
@@ -141,9 +152,9 @@ describe('materializeOccurrences', () => {
   it('catches up on every date that fell due while nothing ran', async () => {
     const series = new FakeSeries();
     const rule = monthlyRule('2027-03-10T12:00:00Z');
-    await materializeOccurrences(series.manager, rule, at('2027-03-01T00:00:00Z'));
+    await materializeOccurrences(series.manager, rule, at('2027-03-01T00:00:00Z'), noRate);
 
-    await materializeOccurrences(series.manager, rule, at('2027-05-20T00:00:00Z'));
+    await materializeOccurrences(series.manager, rule, at('2027-05-20T00:00:00Z'), noRate);
 
     expect(days(series.live())).toEqual(['2027-03-10', '2027-04-10', '2027-05-10', '2027-06-10']);
   });
@@ -151,10 +162,10 @@ describe('materializeOccurrences', () => {
   it('moves on to the next occurrence when the planned one is deleted', async () => {
     const series = new FakeSeries();
     const rule = monthlyRule('2027-03-10T12:00:00Z');
-    await materializeOccurrences(series.manager, rule, at('2027-03-01T00:00:00Z'));
+    await materializeOccurrences(series.manager, rule, at('2027-03-01T00:00:00Z'), noRate);
     series.occurrences[0].deleted = true;
 
-    await materializeOccurrences(series.manager, rule, at('2027-03-02T00:00:00Z'));
+    await materializeOccurrences(series.manager, rule, at('2027-03-02T00:00:00Z'), noRate);
 
     expect(days(series.live())).toEqual(['2027-04-10']);
   });
@@ -162,30 +173,87 @@ describe('materializeOccurrences', () => {
   it("isn't held back by an occurrence moved past its scheduled date once that date passes", async () => {
     const series = new FakeSeries();
     const rule = monthlyRule('2027-03-10T12:00:00Z');
-    await materializeOccurrences(series.manager, rule, at('2027-03-01T00:00:00Z'));
+    await materializeOccurrences(series.manager, rule, at('2027-03-01T00:00:00Z'), noRate);
     Object.assign(series.occurrences[0], { date: at('2027-04-20T12:00:00Z'), customized: true });
 
     // Before its scheduled date, the moved one is still the planned occurrence.
-    await materializeOccurrences(series.manager, rule, at('2027-03-05T00:00:00Z'));
+    await materializeOccurrences(series.manager, rule, at('2027-03-05T00:00:00Z'), noRate);
     expect(days(series.live())).toEqual(['2027-04-20']);
 
     // Once it's passed, April's occurrence comes on time, not after the moved one lands.
-    await materializeOccurrences(series.manager, rule, at('2027-03-11T00:00:00Z'));
+    await materializeOccurrences(series.manager, rule, at('2027-03-11T00:00:00Z'), noRate);
     expect(days(series.live())).toEqual(['2027-04-20', '2027-04-10']);
   });
 
   it('moves on at once when the planned occurrence is moved to a date that has passed', async () => {
     const series = new FakeSeries();
     const rule = monthlyRule('2027-03-10T12:00:00Z');
-    await materializeOccurrences(series.manager, rule, at('2027-03-01T00:00:00Z'));
+    await materializeOccurrences(series.manager, rule, at('2027-03-01T00:00:00Z'), noRate);
     Object.assign(series.occurrences[0], { date: at('2027-02-28T12:00:00Z'), customized: true });
 
-    await materializeOccurrences(series.manager, rule, at('2027-03-01T00:00:00Z'));
+    await materializeOccurrences(series.manager, rule, at('2027-03-01T00:00:00Z'), noRate);
 
     expect(days(series.live())).toEqual(['2027-02-28', '2027-04-10']);
   });
 });
 
+
+describe('materializeOccurrences, between two currencies', () => {
+  function transferRule(startsAt: string): RecurringRule {
+    return { ...monthlyRule(startsAt), type: 'transfer', toAccountId: 'dollars' } as unknown as RecurringRule;
+  }
+
+  it('converts what each occurrence sends at the rate: final for one past, an estimate for the planned', async () => {
+    const series = new FakeSeries();
+    series.pair = { from_code: 'UAH', to_code: 'USD' };
+    const now = at('2027-03-15T00:00:00Z');
+    const asked: string[] = [];
+    const rate = async (from: string, to: string) => {
+      asked.push(`${from}>${to}`);
+      return '0.02238925';
+    };
+
+    await materializeOccurrences(series.manager, transferRule('2027-03-10T12:00:00Z'), now, rate);
+
+    const [past, planned] = series.live();
+    // 100 UAH at 0.02238925 is 2.24 USD, for both.
+    expect([past.destAmount, planned.destAmount]).toEqual(['2.24', '2.24']);
+    // Both as of now: for the one already past that's after its date, and so final; for the planned
+    // one it's before, and so an estimate that follows the rate until its day.
+    expect(past.destAmountAsOf).toEqual(now);
+    expect(planned.destAmountAsOf).toEqual(now);
+    expect(past.date.getTime()).toBeLessThan(now.getTime());
+    expect(planned.date.getTime()).toBeGreaterThan(now.getTime());
+    expect(asked).toEqual(['UAH>USD']);
+  });
+
+  it('writes nothing and keeps its frontier while there is no rate for the pair', async () => {
+    const series = new FakeSeries();
+    series.pair = { from_code: 'UAH', to_code: 'XTS' };
+    const rule = transferRule('2027-03-10T12:00:00Z');
+
+    const inserted = await materializeOccurrences(series.manager, rule, at('2027-03-01T00:00:00Z'), noRate);
+
+    // Better late than crediting 100 in the wrong currency.
+    expect(inserted).toBe(0);
+    expect(series.live()).toEqual([]);
+    expect(rule.nextRunDate.toISOString()).toBe('2027-03-10T12:00:00.000Z');
+  });
+
+  it('receives nothing of its own for a transfer within one currency, and asks for no rate', async () => {
+    const series = new FakeSeries();
+    const asked: string[] = [];
+    const rate = async (from: string, to: string) => {
+      asked.push(`${from}>${to}`);
+      return '1';
+    };
+
+    await materializeOccurrences(series.manager, transferRule('2027-03-10T12:00:00Z'), at('2027-03-01T00:00:00Z'), rate);
+
+    expect(series.live().map((row) => [row.destAmount, row.destAmountAsOf])).toEqual([[null, null]]);
+    expect(asked).toEqual([]);
+  });
+});
 describe('materializeOccurrences, for an amount from the balance', () => {
   const amounts = (list: Occurrence[]) => list.map((row) => [row.amount, row.percentageAsOf?.toISOString() ?? null]);
 
@@ -196,7 +264,7 @@ describe('materializeOccurrences, for an amount from the balance', () => {
     const rule = { ...monthlyRule('2027-01-10T12:00:00Z'), percentage: '3', amount: '1.00' } as RecurringRule;
     const now = at('2027-03-15T00:00:00Z');
 
-    await materializeOccurrences(series.manager, rule, now);
+    await materializeOccurrences(series.manager, rule, now, noRate);
 
     expect(amounts(series.live())).toEqual([
       ['30.00', '2027-01-10T12:00:00.000Z'],
@@ -214,7 +282,7 @@ describe('materializeOccurrences, for an amount from the balance', () => {
 
     const out = new FakeSeries();
     out.balanceAt = balanceAt;
-    await materializeOccurrences(out.manager, { ...monthlyRule('2027-02-10T12:00:00Z'), roundBalanceTo: 100 } as RecurringRule, now);
+    await materializeOccurrences(out.manager, { ...monthlyRule('2027-02-10T12:00:00Z'), roundBalanceTo: 100 } as RecurringRule, now, noRate);
     expect(amounts(out.live())).toEqual([
       ['34.56', '2027-02-10T12:00:00.000Z'],
       ['34.56', '2027-03-10T12:00:00.000Z'],
@@ -224,7 +292,7 @@ describe('materializeOccurrences, for an amount from the balance', () => {
     const incoming = new FakeSeries();
     incoming.balanceAt = balanceAt;
     const income = { ...monthlyRule('2027-02-10T12:00:00Z'), type: 'income', roundBalanceTo: 1000 } as RecurringRule;
-    await materializeOccurrences(incoming.manager, income, now);
+    await materializeOccurrences(incoming.manager, income, now, noRate);
     expect(amounts(incoming.live()).map(([amount]) => amount)).toEqual(['765.44', '765.44', '765.44']);
   });
 
@@ -232,7 +300,7 @@ describe('materializeOccurrences, for an amount from the balance', () => {
     const series = new FakeSeries();
     const rule = { ...monthlyRule('2027-02-10T12:00:00Z'), percentage: '3', amount: '45.00' } as RecurringRule;
 
-    await materializeOccurrences(series.manager, rule, at('2027-03-15T00:00:00Z'));
+    await materializeOccurrences(series.manager, rule, at('2027-03-15T00:00:00Z'), noRate);
 
     expect(days(series.live())).toEqual(['2027-04-10']);
     // An estimate: it follows the account until April, and goes then if it's still nothing.
@@ -246,7 +314,7 @@ describe('materializeOccurrences, for an amount from the balance', () => {
     };
     const rule = { ...monthlyRule('2027-02-10T12:00:00Z'), percentage: '5', percentageBase: '12000.50' } as RecurringRule;
 
-    await materializeOccurrences(series.manager, rule, at('2027-03-15T00:00:00Z'));
+    await materializeOccurrences(series.manager, rule, at('2027-03-15T00:00:00Z'), noRate);
 
     expect(amounts(series.live())).toEqual([
       ['600.03', null],
@@ -260,11 +328,11 @@ describe('regenerateOccurrences', () => {
   it('rewrites the planned occurrence from today on, leaving what happened alone', async () => {
     const series = new FakeSeries();
     const rule = monthlyRule('2027-01-10T12:00:00Z');
-    await materializeOccurrences(series.manager, rule, at('2027-03-15T00:00:00Z'));
+    await materializeOccurrences(series.manager, rule, at('2027-03-15T00:00:00Z'), noRate);
 
     rule.amount = '150.00';
     rule.startsAt = at('2027-03-20T12:00:00Z');
-    await regenerateOccurrences(series.manager, rule, at('2027-03-15T00:00:00Z'));
+    await regenerateOccurrences(series.manager, rule, at('2027-03-15T00:00:00Z'), noRate);
 
     expect(days(series.live())).toEqual(['2027-01-10', '2027-02-10', '2027-03-10', '2027-03-20']);
   });
@@ -272,15 +340,15 @@ describe('regenerateOccurrences', () => {
   it('keeps a planned occurrence the user edited, and carries on from the new schedule after it', async () => {
     const series = new FakeSeries();
     const rule = monthlyRule('2027-03-10T12:00:00Z');
-    await materializeOccurrences(series.manager, rule, at('2027-03-01T00:00:00Z'));
+    await materializeOccurrences(series.manager, rule, at('2027-03-01T00:00:00Z'), noRate);
     series.occurrences[0].customized = true;
 
     rule.startsAt = at('2027-03-25T12:00:00Z');
-    await regenerateOccurrences(series.manager, rule, at('2027-03-01T00:00:00Z'));
+    await regenerateOccurrences(series.manager, rule, at('2027-03-01T00:00:00Z'), noRate);
     expect(days(series.live())).toEqual(['2027-03-10']);
     expect(series.frontier?.toISOString()).toBe('2027-03-01T00:00:00.000Z');
 
-    await materializeOccurrences(series.manager, rule, at('2027-03-11T00:00:00Z'));
+    await materializeOccurrences(series.manager, rule, at('2027-03-11T00:00:00Z'), noRate);
     expect(days(series.live())).toEqual(['2027-03-10', '2027-03-25']);
   });
 });

@@ -1,6 +1,8 @@
 import type { EntityManager } from 'typeorm';
 import type { RecurringRule } from '@ft/api-database';
 import { isPositiveMoney } from '@ft/shared-contracts';
+import type { RateLookup } from '../ledger/exchange-rates/exchange-rates.service';
+import { convertedDest } from '../ledger/transactions/dest-amount';
 import { derivedAmount, isFromBalance } from './derived-amount';
 import { firstIndexAtOrAfter, firstOccurrenceAtOrAfter, occurrenceAt, startOfLocalDay, type Schedule } from './recurrence-dates';
 
@@ -45,14 +47,24 @@ const INSERT_OCCURRENCE_SQL = `
   INSERT INTO transactions (
     group_id, type, date, amount, currency_id, account_id, category_id, subcategory_id, to_account_id,
     note, recurring_rule_id, recurrence_date, is_customized, created_by,
-    percentage, percentage_base, percentage_as_of, round_balance_to
+    percentage, percentage_base, percentage_as_of, round_balance_to, dest_amount, dest_amount_as_of
   )
-  VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $3, false, $12, $13, $14, $15, $16)
+  VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $3, false, $12, $13, $14, $15, $16, $17, $18)
   ON CONFLICT (recurring_rule_id, recurrence_date) WHERE recurring_rule_id IS NOT NULL DO NOTHING
   RETURNING id
 `;
 
 const MOVE_FRONTIER_SQL = `UPDATE recurring_rules SET next_run_date = $2 WHERE id = $1`;
+
+// The currencies of a transfer's two accounts, for converting what it sends into what arrives.
+const PAIR_SQL = `
+  SELECT fc.code AS from_code, tc.code AS to_code
+  FROM accounts fa
+  JOIN currencies fc ON fc.id = fa.currency_id
+  JOIN accounts ta ON ta.id = $2
+  JOIN currencies tc ON tc.id = ta.currency_id
+  WHERE fa.id = $1
+`;
 
 // Only rows the series still owns: not yet happened, never edited, not skipped by the user.
 // A hard delete, not a soft one — these were generated, never occurred and hold no user input,
@@ -110,6 +122,27 @@ async function occurrenceAmount(manager: EntityManager, rule: RecurringRule, dat
   return { amount, asOf: now };
 }
 
+/**
+ * How a series' occurrences convert what they send into what arrives: not at all (null) when
+ * nothing crosses currencies — one currency, or not a transfer — and otherwise at the rate for its
+ * pair as it stands now, itself null when there's none to be had, which the series waits out (see
+ * materializeOccurrences).
+ */
+async function seriesConversion(
+  manager: EntityManager,
+  rule: RecurringRule,
+  rateBetween: RateLookup,
+): Promise<{ rate: string | null } | null> {
+  if (!rule.toAccountId) {
+    return null;
+  }
+  const [pair]: { from_code: string; to_code: string }[] = await manager.query(PAIR_SQL, [rule.accountId, rule.toAccountId]);
+  if (!pair || pair.from_code === pair.to_code) {
+    return null;
+  }
+  return { rate: await rateBetween(pair.from_code, pair.to_code) };
+}
+
 function scheduleOf(rule: RecurringRule): Schedule {
   return {
     startsAt: rule.startsAt,
@@ -130,15 +163,34 @@ function scheduleOf(rule: RecurringRule): Schedule {
  * percentage or a rounding of a balance that came to nothing then (see occurrenceAmount). A date
  * the user deleted, or an occurrence they moved, keeps its row and is stepped over.
  *
+ * A transfer between currencies receives what it sends converted at the rate as it stands now:
+ * final for an occurrence already past, and for the planned one an estimate that follows the rate
+ * until its date (see reworkRateEstimates), when it's fixed at that day's rate. With no rate to be
+ * had for the pair, the series writes nothing and keeps its frontier, and carries on once there is
+ * one: an occurrence that credited what it sent in the wrong currency would be worse than a late one.
+ * Setting such a series up is refused in the first place, so this only covers a provider that stops
+ * quoting a currency afterwards.
+ *
  * Must run inside the caller's transaction so the inserts and the frontier move commit or fail
  * together. Returns the number of rows inserted.
  */
-export async function materializeOccurrences(manager: EntityManager, rule: RecurringRule, now: Date): Promise<number> {
+export async function materializeOccurrences(
+  manager: EntityManager,
+  rule: RecurringRule,
+  now: Date,
+  rateBetween: RateLookup,
+): Promise<number> {
   await manager.query(LOCK_RULE_SQL, [rule.id]);
   const planned: unknown[] = await manager.query(HAS_PLANNED_SQL, [rule.id, now]);
   if (planned.length > 0) {
     return 0;
   }
+  const conversion = await seriesConversion(manager, rule, rateBetween);
+  if (conversion?.rate === null) {
+    return 0;
+  }
+  // Only set for a series that converts, and then never null past the return above.
+  const rate = conversion?.rate ?? null;
 
   const schedule = scheduleOf(rule);
   let k = firstIndexAtOrAfter(schedule, rule.nextRunDate);
@@ -164,6 +216,8 @@ export async function materializeOccurrences(manager: EntityManager, rule: Recur
           rule.percentageBase,
           worked.asOf,
           rule.roundBalanceTo,
+          rate !== null ? convertedDest(worked.amount, rate) : null,
+          rate !== null ? now : null,
         ])
       : [];
     inserted += rows.length;
@@ -198,12 +252,17 @@ export async function detachFutureOccurrences(manager: EntityManager, ruleId: st
  * back to the start of today and no further, so a new schedule is never written into the past — and
  * rows the user edited or deleted survive, the unique index making the refill step over their dates.
  */
-export async function regenerateOccurrences(manager: EntityManager, rule: RecurringRule, now: Date): Promise<number> {
+export async function regenerateOccurrences(
+  manager: EntityManager,
+  rule: RecurringRule,
+  now: Date,
+  rateBetween: RateLookup,
+): Promise<number> {
   await removeFutureOccurrences(manager, rule.id, now);
   // Saved even if nothing gets written now (an occurrence the user edited is still the planned
   // one): the series must carry on from the new schedule once that one lands, not from the old.
   await moveFrontier(manager, rule, startOfLocalDay(now, rule.timezone));
-  return materializeOccurrences(manager, rule, now);
+  return materializeOccurrences(manager, rule, now, rateBetween);
 }
 
 /** The scheduled date of each series' planned occurrence, for the series that have one. */

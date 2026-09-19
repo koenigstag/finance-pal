@@ -18,6 +18,8 @@ import { addTransactionPercentageBase } from './20260918190000-add-transaction-p
 import { addPercentageToSeries } from './20260918210000-add-percentage-to-series.js';
 import { addBalanceRounding } from './20260919120000-add-balance-rounding.js';
 import { allowZeroEstimates } from './20260919150000-allow-zero-estimates.js';
+import { addExchangeRatesCache } from './20260919160000-add-exchange-rates-cache.js';
+import { addTransactionDestAmountAsOf } from './20260919170000-add-transaction-dest-amount-as-of.js';
 import { createPushSubscriptions } from './20260919160000-create-push-subscriptions.js';
 import { createScheduledNotifications } from './20260919170000-create-scheduled-notifications.js';
 
@@ -44,6 +46,10 @@ export const migrations: readonly Migration[] = [
   addPercentageToSeries,
   addBalanceRounding,
   allowZeroEstimates,
+  addExchangeRatesCache,
+  addTransactionDestAmountAsOf,
+  // Written on another branch and stamped among the two above, as the note further up describes:
+  // they come last, so on a database that already has those, these are the ones still pending.
   createPushSubscriptions,
   createScheduledNotifications,
 ];

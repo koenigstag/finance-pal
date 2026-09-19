@@ -2,14 +2,17 @@ import { BadRequestException, ForbiddenException, Injectable, NotFoundException 
 import { InjectRepository } from '@nestjs/typeorm';
 import { In, Repository } from 'typeorm';
 import { Transactional } from 'typeorm-transactional';
-import { RecurringRule, Tag, Transaction, TransactionTag, TransactionType } from '@ft/api-database';
+import { Account, Currency, RecurringRule, Tag, Transaction, TransactionTag, TransactionType } from '@ft/api-database';
 import { TRANSACTION_TYPES, type Action, type AppAbility, type Subject } from '@ft/shared-contracts';
 import { AbilityFactory, type GroupAuthzContext } from '../../_core/authz/ability.factory';
 import { PushNotificationsService } from '../../push/push-notifications.service';
 import { RealtimeEmitterService } from '../../realtime/realtime-emitter.service';
 import { reworkEstimates } from '../../recurring/balance-estimates';
 import { materializeOccurrences } from '../../recurring/occurrence-materializer';
+import { reworkRateEstimates } from '../../recurring/rate-estimates';
+import { ExchangeRatesService } from '../exchange-rates/exchange-rates.service';
 import { decodeCursor, encodeCursor } from './cursor.util';
+import { convertedDest, planDestAmount, type StoredDest } from './dest-amount';
 import {
   TransactionValidator,
   keptPercentage,
@@ -17,6 +20,7 @@ import {
   keptPercentageBase,
   keptRoundBalanceTo,
   keptSubcategory,
+  type Validated,
 } from './transaction-validator';
 
 // The shared string union, not api-database's TypeORM enum — see the identical comment on
@@ -80,10 +84,13 @@ export class TransactionsService {
     @InjectRepository(TransactionTag) private readonly transactionTags: Repository<TransactionTag>,
     @InjectRepository(Tag) private readonly tags: Repository<Tag>,
     @InjectRepository(RecurringRule) private readonly rules: Repository<RecurringRule>,
+    @InjectRepository(Account) private readonly accounts: Repository<Account>,
+    @InjectRepository(Currency) private readonly currencies: Repository<Currency>,
     private readonly abilities: AbilityFactory,
     private readonly realtime: RealtimeEmitterService,
     private readonly push: PushNotificationsService,
     private readonly validator: TransactionValidator,
+    private readonly rates: ExchangeRatesService,
   ) {}
 
   async list(userId: string, groupId: string, filter: ListTransactionsFilter): Promise<TransactionPage> {
@@ -169,6 +176,7 @@ export class TransactionsService {
     const now = new Date();
     const asOf = keptPercentageAsOf(null, merged, date, now);
     const filed = await this.validator.validate(groupId, merged, { estimate: isEstimate(asOf, date) });
+    const dest = await this.settleDest(merged, filed, input.destAmount, null, date, now);
     const tagIds = await this.assertTagsValid(groupId, input.tagIds);
 
     const created = await this.transactions.save(
@@ -177,12 +185,15 @@ export class TransactionsService {
         type: merged.type,
         date,
         amount: input.amount,
-        currencyId: input.currencyId,
+        // Its account's, whatever the request says: an amount is only ever in the currency of the
+        // account it moves, and that's what the balances read it as.
+        currencyId: filed.currencyId,
         accountId: input.accountId,
         categoryId: filed.categoryId,
         subcategoryId: filed.subcategoryId,
         toAccountId: merged.toAccountId,
-        destAmount: merged.destAmount,
+        destAmount: dest.destAmount,
+        destAmountAsOf: dest.destAmountAsOf,
         percentage: merged.percentage,
         percentageBase: merged.percentageBase,
         roundBalanceTo: merged.roundBalanceTo,
@@ -265,6 +276,12 @@ export class TransactionsService {
     // too, which lands it below and drops it if it still does.
     const asOf = keptPercentageAsOf(existing, merged, date, now);
     const filed = await this.validator.validate(groupId, merged, { estimate: isEstimate(asOf, date) });
+    const stored: StoredDest = {
+      destAmount: existing.destAmount,
+      destAmountAsOf: existing.destAmountAsOf,
+      sameCurrencies: await this.sameCurrencies(existing, filed),
+    };
+    const dest = await this.settleDest(merged, filed, patch.destAmount, stored, date, now);
 
     const patchedTagIds = patch.tagIds !== undefined ? await this.assertTagsValid(groupId, patch.tagIds) : undefined;
 
@@ -277,12 +294,14 @@ export class TransactionsService {
         type: merged.type,
         date,
         amount: merged.amount,
-        currencyId: patch.currencyId ?? existing.currencyId,
+        // Its account's, as on create - which also puts right a row recorded in another currency.
+        currencyId: filed.currencyId,
         accountId: merged.accountId,
         categoryId: filed.categoryId,
         subcategoryId: filed.subcategoryId,
         toAccountId: merged.toAccountId,
-        destAmount: merged.destAmount,
+        destAmount: dest.destAmount,
+        destAmountAsOf: dest.destAmountAsOf,
         percentage: merged.percentage,
         percentageBase: merged.percentageBase,
         roundBalanceTo: merged.roundBalanceTo,
@@ -352,7 +371,7 @@ export class TransactionsService {
     }
     const rule = await this.rules.findOneBy({ id: ruleId, active: true });
     if (rule) {
-      await materializeOccurrences(this.rules.manager, rule, new Date());
+      await materializeOccurrences(this.rules.manager, rule, new Date(), this.rates.lookup);
     }
   }
 
@@ -368,12 +387,79 @@ export class TransactionsService {
   ): Promise<Map<string, 'updated' | 'deleted'>> {
     const ids = [...new Set(accountIds.filter((id): id is string => id !== null))];
     const reworked = await reworkEstimates(this.transactions.manager, ids, now);
-    for (const { id, groupId, action } of reworked) {
+    // After the amounts: a received amount converted at a rate follows what's sent, too.
+    const reconverted = await reworkRateEstimates(this.transactions.manager, this.rates.lookup, ids, now);
+
+    const actions = new Map(reworked.map(({ id, action }) => [id, action]));
+    const groups = new Map(reworked.map(({ id, groupId }) => [id, groupId]));
+    for (const { id, groupId } of reconverted) {
+      if (!actions.has(id)) {
+        actions.set(id, 'updated');
+        groups.set(id, groupId);
+      }
+    }
+    for (const [id, action] of actions) {
       if (id !== own) {
+        const groupId = groups.get(id) as string;
         this.realtime.emitToGroup(groupId, { resourceType: 'Transaction', resourceId: id, action, groupId });
       }
     }
-    return new Map(reworked.map(({ id, action }) => [id, action]));
+    return actions;
+  }
+
+  /**
+   * The received amount a transfer is stored with, and when it was last converted at a rate (see
+   * planDestAmount). Anything but a transfer between two currencies keeps what it was given, as it
+   * always has.
+   */
+  private async settleDest(
+    merged: { type: TransactionType; amount: string; destAmount: string | null },
+    validated: Validated,
+    requested: string | null | undefined,
+    stored: StoredDest | null,
+    date: Date,
+    now: Date,
+  ): Promise<{ destAmount: string | null; destAmountAsOf: Date | null }> {
+    const { currencyId, toCurrencyId } = validated;
+    if (merged.type !== TransactionType.TRANSFER || toCurrencyId === null || toCurrencyId === currencyId) {
+      return { destAmount: merged.destAmount, destAmountAsOf: null };
+    }
+
+    const plan = planDestAmount(requested, stored, date);
+    if (plan.kind === 'typed') {
+      return { destAmount: plan.destAmount, destAmountAsOf: null };
+    }
+    if (plan.kind === 'keep' && stored) {
+      return { destAmount: stored.destAmount, destAmountAsOf: stored.destAmountAsOf };
+    }
+
+    const [from, to] = await this.codesOf(currencyId, toCurrencyId);
+    const rate = await this.rates.rateBetween(from, to);
+    if (rate === null) {
+      throw new BadRequestException(
+        `There's no exchange rate from ${from} to ${to} right now: send destAmount, the amount that arrived`,
+      );
+    }
+    return { destAmount: convertedDest(merged.amount, rate), destAmountAsOf: now };
+  }
+
+  /**
+   * Whether an edited transfer still goes between the same two currencies. Read off the accounts'
+   * currencies as they are now, the ones balances read amounts in: an account's currency can itself
+   * be changed, so the currency recorded on the row isn't to be trusted for this.
+   */
+  private async sameCurrencies(existing: Transaction, validated: Validated): Promise<boolean> {
+    if (!existing.toAccountId) {
+      return false;
+    }
+    const before = await this.accounts.findBy({ id: In([existing.accountId, existing.toAccountId]) });
+    const currencyOf = (id: string) => before.find((account) => account.id === id)?.currencyId;
+    return currencyOf(existing.accountId) === validated.currencyId && currencyOf(existing.toAccountId) === validated.toCurrencyId;
+  }
+
+  private async codesOf(...ids: number[]): Promise<string[]> {
+    const found = await this.currencies.findBy({ id: In(ids) });
+    return ids.map((id) => found.find((currency) => currency.id === id)?.code ?? '');
   }
 
 
