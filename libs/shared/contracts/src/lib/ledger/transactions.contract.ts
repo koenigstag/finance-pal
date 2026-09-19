@@ -41,6 +41,9 @@ export const transactionSchema = z.object({
   // changes, and a last time once that date comes, when it stays. Named before rounding came along.
   // Set by the API; bodies don't take it.
   percentageAsOf: z.string().datetime().nullable(),
+  // When destAmount was last converted at an exchange rate; null when the user typed it. Before
+  // `date` it's an estimate at the latest rate, fixed on the day at that day's rate.
+  destAmountAsOf: z.string().datetime().nullable(),
   note: z.string().nullable(),
   tagIds: z.array(z.string().uuid()),
   // Set on occurrences a recurring rule materialized; null for hand-entered transactions.

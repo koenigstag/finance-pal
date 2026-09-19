@@ -1,11 +1,11 @@
-import { useMemo } from 'react';
+import { useCallback, useMemo } from 'react';
 import { useQuery } from '@tanstack/react-query';
 import type { ClientInferResponseBody } from '@ts-rest/core';
 import type { exchangeRatesContract } from '@ft/shared-contracts';
 import { api, unwrap } from '@/lib/api/client';
 import { queryKeys } from '@/lib/query-keys';
 import { useProfile } from '@/features/profile/queries';
-import { effectiveRates } from './rates';
+import { conversionBetween, effectiveRates, type Conversion } from './rates';
 
 export type ExchangeRates = ClientInferResponseBody<typeof exchangeRatesContract.get, 200>;
 
@@ -55,4 +55,24 @@ export function useRates() {
     [baseCode, fetched.data, manual],
   );
   return { rates, fetched, baseCode };
+}
+
+/**
+ * How the app converts from one currency to another, by their ids (see conversionBetween), or null
+ * without a rate for the pair. The same function while the rates and currencies are unchanged, so a
+ * form schema built on it isn't rebuilt on every render.
+ */
+export function useConversionLookup(): (fromCurrencyId: number, toCurrencyId: number) => Conversion | null {
+  const { rates } = useRates();
+  const currencies = useCurrencies();
+
+  return useCallback(
+    (fromCurrencyId: number, toCurrencyId: number) => {
+      const codeOf = (id: number) => currencies.data?.find((currency) => currency.id === id)?.code;
+      const from = codeOf(fromCurrencyId);
+      const to = codeOf(toCurrencyId);
+      return from && to ? conversionBetween(rates, from, to) : null;
+    },
+    [rates, currencies.data],
+  );
 }

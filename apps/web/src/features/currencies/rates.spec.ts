@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest';
-import { effectiveRates, manualRatesToKeep } from './rates';
+import { conversionBetween, effectiveRates, manualRatesToKeep } from './rates';
 
 const fetched = { base: 'UAH', rates: { UAH: '1', USD: '44.68', EUR: '51.34' } };
 
@@ -38,5 +38,26 @@ describe('manualRatesToKeep', () => {
 
   it('keeps every rate when the provider quotes nothing', () => {
     expect(manualRatesToKeep({ USD: '41.5' }, {})).toEqual({ USD: '41.5' });
+  });
+});
+
+describe('conversionBetween', () => {
+  const rates = effectiveRates('UAH', { base: 'UAH', rates: { UAH: '1', USD: '44.66806868', EUR: '51.34516634' } }, { XTS: '12.5' });
+
+  it('converts from the main currency by the rate of the one received', () => {
+    // A hryvnia is worth 1 / 44.668 dollars.
+    expect(conversionBetween(rates, 'UAH', 'USD')).toEqual({ rate: '0.02238736', fetched: true });
+  });
+
+  it('converts between two other currencies through their rates against the main one', () => {
+    expect(conversionBetween(rates, 'EUR', 'USD')).toEqual({ rate: '1.14948257', fetched: true });
+  });
+
+  it('says when a rate typed by hand is involved, which only the app knows of', () => {
+    expect(conversionBetween(rates, 'USD', 'XTS')?.fetched).toBe(false);
+  });
+
+  it('has nothing to convert by when a rate is missing', () => {
+    expect(conversionBetween(rates, 'USD', 'ISK')).toBeNull();
   });
 });

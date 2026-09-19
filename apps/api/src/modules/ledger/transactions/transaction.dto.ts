@@ -20,6 +20,7 @@ export function toTransactionDto(transaction: Transaction, tagIds: string[]) {
     percentageBase: transaction.percentageBase,
     roundBalanceTo: roundBalanceStepOf(transaction.roundBalanceTo),
     percentageAsOf: transaction.percentageAsOf?.toISOString() ?? null,
+    destAmountAsOf: transaction.destAmountAsOf?.toISOString() ?? null,
     note: transaction.note,
     tagIds,
     recurringRuleId: transaction.recurringRuleId,

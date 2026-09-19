@@ -223,6 +223,11 @@ export const en = {
     percentageBaseHintWithout: 'Leave empty to use the balance of {{account}}, without this transaction',
     // Lines under the amount on the form's Amount card, and in a transaction's actions sheet.
     receivedAmount: 'Received {{amount}}',
+    receivedAtRate: 'Received ≈ {{amount}}',
+    atTodaysRate: "At today's rate",
+    atYourRate: 'At your own rate',
+    convertsOnTheDay: "Converted on the day, at that day's rate",
+    convertsEachTime: "Each one converted on its day, at that day's rate",
     percentageOfBalance: '{{percentage}} of the balance of {{account}}',
     percentageOfBase: '{{percentage}} of {{base}}',
     // A list row's, under the name of the account whose balance it is.
@@ -278,7 +283,7 @@ export const en = {
     },
     errors: {
       sameAccount: 'Choose a different account',
-      repeatCurrency: 'Only a transfer within one currency can repeat',
+      repeatCurrency: "A transfer between these currencies can't repeat: there's no fetched exchange rate for both",
       pastNextDate: "The next date can't be in the past",
       percentageAmount: 'This percentage comes to zero',
       roundBalanceAmount: 'The balance is round already',

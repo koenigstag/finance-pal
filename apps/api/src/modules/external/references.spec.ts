@@ -85,14 +85,12 @@ describe('transferDestAmount', () => {
     expect(() => transferDestAmount(uah, uah2, '10')).toThrow(BadRequestException);
   });
 
-  it('is required across currencies', () => {
+  it('takes a figure named across currencies as it is', () => {
     expect(transferDestAmount(uah, usd, '25')).toBe('25');
-    expect(() => transferDestAmount(uah, usd, undefined)).toThrow(/needs destAmount/);
   });
 
-  it('keeps an update’s stored value unless replaced', () => {
-    expect(transferDestAmount(uah, usd, undefined, '24.50')).toBe('24.50');
-    expect(transferDestAmount(uah, usd, '30', '24.50')).toBe('30');
+  it('leaves an unnamed one across currencies to be converted at the rate', () => {
+    expect(transferDestAmount(uah, usd, undefined)).toBeNull();
   });
 });
 

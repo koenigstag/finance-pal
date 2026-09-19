@@ -12,10 +12,17 @@ import { Textarea } from '@/components/ui/textarea';
 import { ToggleGroup, ToggleGroupItem } from '@/components/ui/toggle-group';
 import { useAccounts } from '@/features/accounts/queries';
 import { categoriesUnder, useCategories } from '@/features/categories/queries';
-import { useCurrencyCodes } from '@/features/currencies/queries';
+import { useConversionLookup, useCurrencyCodes } from '@/features/currencies/queries';
 import { useGroupScope } from '@/features/groups/group-context';
 import { toDayInput, todayInput } from '@/lib/dates';
-import { formatMoney, formatPercentage, isValidAmountInput, parseMoneyInput, parsePercentageInput } from '@/lib/money';
+import {
+  convertMoney,
+  formatMoney,
+  formatPercentage,
+  isValidAmountInput,
+  parseMoneyInput,
+  parsePercentageInput,
+} from '@/lib/money';
 import { transactionTypeColor } from '@/lib/money-colors';
 import { capitalizeFirst } from '@/lib/text';
 import { cn } from '@/lib/utils';
@@ -37,6 +44,7 @@ import {
   nextDateOf,
   pickDefaultAccountId,
   needsDestAmount,
+  transferConversion,
   parseRoundBalanceTo,
   ruleToFormValues,
   toRecurringRuleBody,
@@ -105,6 +113,7 @@ export function TransactionDialog({
   const accounts = useAccounts(groupId);
   const categories = useCategories(groupId);
   const currencyCodes = useCurrencyCodes();
+  const conversionOf = useConversionLookup();
   const saveTransaction = useSaveTransaction(groupId);
   const saveRule = useSaveRecurringRule(groupId);
   const deleteRule = useDeleteRecurringRule(groupId);
@@ -134,9 +143,9 @@ export function TransactionDialog({
           percentageAmount: t('transactions.errors.percentageAmount'),
           roundBalanceAmount: t('transactions.errors.roundBalanceAmount'),
         },
-        { seriesNextDay },
+        { seriesNextDay, conversionOf },
       ),
-    [accountList, t, seriesNextDay],
+    [accountList, t, seriesNextDay, conversionOf],
   );
   // The schema depends on the accounts (for cross-currency checks), which can load after the form
   // is created; the resolver reads the current one rather than the one from the first render.
@@ -226,6 +235,7 @@ export function TransactionDialog({
     (mode === 'planned' && mayStartSeries && ability.can('delete', 'Transaction') && !transaction?.recurringRuleId);
 
   const showDestAmount = needsDestAmount({ type, accountId, toAccountId }, accountList);
+  const conversion = transferConversion({ type, accountId, toAccountId }, accountList, conversionOf);
   const currencyOf = (id: string) => currencyCodes.get(accountOf(id)?.currencyId ?? -1);
   const category = categoryList.find((candidate) => candidate.id === categoryId);
   // The chosen category's own subcategories, offered as chips under the cards.
@@ -273,9 +283,12 @@ export function TransactionDialog({
           body: toRecurringRuleBody(values, accountList, undefined, undefined, mode === 'planned' ? transaction : undefined),
         });
       } else if (transaction) {
-        await saveTransaction.mutateAsync({ transactionId: transaction.id, body: toTransactionBody(values, accountList, transaction) });
+        await saveTransaction.mutateAsync({
+          transactionId: transaction.id,
+          body: toTransactionBody(values, accountList, transaction, undefined, conversionOf),
+        });
       } else {
-        await saveTransaction.mutateAsync({ body: toTransactionBody(values, accountList) });
+        await saveTransaction.mutateAsync({ body: toTransactionBody(values, accountList, undefined, undefined, conversionOf) });
       }
       onOpenChange(false);
     } catch {
@@ -332,8 +345,12 @@ export function TransactionDialog({
   // Under the amount on its card, a line each: what arrives across currencies, and what the
   // amount was worked out from.
   const amountLines: string[] = [];
-  if (showDestAmount) {
+  const sent = parseMoneyInput(amount);
+  if (showDestAmount && isValidAmountInput(destAmount)) {
     amountLines.push(t('transactions.receivedAmount', { amount: moneyIn(destAmount, toAccountId) }));
+  } else if (showDestAmount && conversion && sent !== null && isValidAmountInput(amount)) {
+    // Not typed, it's what the amount comes to at the rate: roughly, until it's converted for good.
+    amountLines.push(t('transactions.receivedAtRate', { amount: moneyIn(convertMoney(sent, conversion.rate), toAccountId) }));
   }
   const validPercentage = parsePercentageInput(percentage);
   const step = validPercentage ? null : parseRoundBalanceTo(roundBalanceTo);
@@ -528,6 +545,8 @@ export function TransactionDialog({
         accounts={accountList}
         editing={transaction}
         scheduled={!!repeat || day > todayInput()}
+        repeats={!!repeat}
+        conversion={conversion}
         values={{ amount, destAmount, percentage, percentageBase, roundBalanceTo }}
         onDone={(values) => {
           for (const name of ['amount', 'destAmount', 'percentage', 'percentageBase', 'roundBalanceTo'] as const) {

@@ -2,7 +2,7 @@ import { BadRequestException, ForbiddenException, Injectable, NotFoundException 
 import { InjectRepository } from '@nestjs/typeorm';
 import { In, Repository } from 'typeorm';
 import { Transactional } from 'typeorm-transactional';
-import { Account, RecurrenceUnit, RecurringRule, Transaction, TransactionType } from '@ft/api-database';
+import { Currency, RecurrenceUnit, RecurringRule, Transaction, TransactionType } from '@ft/api-database';
 import {
   RECURRENCE_UNITS,
   TRANSACTION_TYPES,
@@ -19,6 +19,7 @@ import {
   keptRoundBalanceTo,
   keptSubcategory,
   type TransactionShape,
+  type Validated,
 } from '../ledger/transactions/transaction-validator';
 import { reworkEstimates } from './balance-estimates';
 import {
@@ -29,6 +30,8 @@ import {
   regenerateOccurrences,
   removeFutureOccurrences,
 } from './occurrence-materializer';
+import { reworkRateEstimates } from './rate-estimates';
+import { ExchangeRatesService } from '../ledger/exchange-rates/exchange-rates.service';
 
 // The shared string unions, not api-database's TypeORM enums — see the identical comment on
 // GroupWithRole.role in GroupsService for why (assignable one way, not the other).
@@ -105,10 +108,11 @@ export class RecurringRulesService {
   constructor(
     @InjectRepository(RecurringRule) private readonly rules: Repository<RecurringRule>,
     @InjectRepository(Transaction) private readonly transactions: Repository<Transaction>,
-    @InjectRepository(Account) private readonly accounts: Repository<Account>,
+    @InjectRepository(Currency) private readonly currencies: Repository<Currency>,
     private readonly abilities: AbilityFactory,
     private readonly validator: TransactionValidator,
     private readonly realtime: RealtimeEmitterService,
+    private readonly rates: ExchangeRatesService,
   ) {}
 
   async list(userId: string, groupId: string, includeInactive: boolean): Promise<RecurringRuleView[]> {
@@ -172,15 +176,14 @@ export class RecurringRulesService {
     // input too, but as a bare 500 instead of a 400/404. The category pair is stored the way the
     // validator settles it (a subcategory sent as the category lands under its parent).
     // A series' own amount is what it came to when saved; from the balance, that may be nothing.
-    Object.assign(rule, await this.validator.validate(groupId, shapeOf(rule), { estimate: true }));
-    await this.assertOneCurrency(groupId, rule);
+    await this.settle(rule, await this.validator.validate(groupId, shapeOf(rule), { estimate: true }));
     if (input.replacesTransactionId) {
       await this.replacePlanned(userId, groupId, input.replacesTransactionId);
     }
 
     const saved = await this.rules.save(rule);
     const now = new Date();
-    await materializeOccurrences(this.rules.manager, saved, now);
+    await materializeOccurrences(this.rules.manager, saved, now, this.rates.lookup);
     await this.reworkBalanceAmounts(saved, now);
 
     this.realtime.emitToGroup(groupId, { resourceType: 'RecurringRule', resourceId: saved.id, action: 'created', groupId });
@@ -214,8 +217,7 @@ export class RecurringRulesService {
       timezone: patch.timezone ?? before.timezone,
       active: patch.active ?? before.active,
     });
-    Object.assign(after, await this.validator.validate(groupId, shapeOf(after), { estimate: true }));
-    await this.assertOneCurrency(groupId, after);
+    await this.settle(after, await this.validator.validate(groupId, shapeOf(after), { estimate: true }));
     await this.rules.save(after);
 
     const manager = this.rules.manager;
@@ -227,7 +229,7 @@ export class RecurringRulesService {
         await removeFutureOccurrences(manager, ruleId, now);
       }
     } else if (!before.active || occurrencesAffected(before, after)) {
-      await regenerateOccurrences(manager, after, now);
+      await regenerateOccurrences(manager, after, now, this.rates.lookup);
     }
     await this.reworkBalanceAmounts(after, now, before);
 
@@ -274,29 +276,48 @@ export class RecurringRulesService {
   }
 
   /**
-   * A transfer series carries one amount, sent and received alike: between accounts in different
-   * currencies every occurrence would credit the target with the source's figure in the wrong
-   * currency, since the balance trigger reads a missing received amount as "the same".
-   */
-  /**
    * After the series' occurrences changed: the amounts that come from the balances of the accounts
    * it's on, and was on, and are still estimates follow (see reworkEstimates).
    */
   private async reworkBalanceAmounts(rule: RecurringRule, now: Date, before?: RecurringRule): Promise<void> {
     const accountIds = [rule.accountId, rule.toAccountId, before?.accountId, before?.toAccountId];
     const ids = [...new Set(accountIds.filter((id): id is string => !!id))];
-    for (const { id, groupId, action } of await reworkEstimates(this.rules.manager, ids, now)) {
+    const reworked = await reworkEstimates(this.rules.manager, ids, now);
+    for (const { id, groupId, action } of reworked) {
       this.realtime.emitToGroup(groupId, { resourceType: 'Transaction', resourceId: id, action, groupId });
+    }
+    // After the amounts: a received amount converted at a rate follows what's sent, too.
+    for (const { id, groupId } of await reworkRateEstimates(this.rules.manager, this.rates.lookup, ids, now)) {
+      if (!reworked.some((row) => row.id === id)) {
+        this.realtime.emitToGroup(groupId, { resourceType: 'Transaction', resourceId: id, action: 'updated', groupId });
+      }
     }
   }
 
-  private async assertOneCurrency(groupId: string, rule: RecurringRule): Promise<void> {
-    if (rule.type !== TransactionType.TRANSFER || !rule.toAccountId) {
+  /**
+   * Puts what validation settled onto the series: its category pair as stored, and its currency,
+   * which is its account's whatever the request said.
+   *
+   * A transfer series between two currencies converts each occurrence at the rate of its day, so it
+   * needs a rate for the pair to be had at all. That's checked here rather than left to the first
+   * occurrence, which would otherwise wait for a rate that never comes.
+   */
+  private async settle(rule: RecurringRule, validated: Validated): Promise<void> {
+    rule.categoryId = validated.categoryId;
+    rule.subcategoryId = validated.subcategoryId;
+    rule.currencyId = validated.currencyId;
+
+    const { currencyId, toCurrencyId } = validated;
+    if (rule.type !== TransactionType.TRANSFER || toCurrencyId === null || toCurrencyId === currencyId) {
       return;
     }
-    const sides = await this.accounts.findBy({ id: In([rule.accountId, rule.toAccountId]), groupId });
-    if (new Set(sides.map((account) => account.currencyId)).size > 1) {
-      throw new BadRequestException('A recurring transfer needs both accounts in the same currency');
+    const found = await this.currencies.findBy({ id: In([currencyId, toCurrencyId]) });
+    const codeOf = (id: number) => found.find((currency) => currency.id === id)?.code ?? '';
+    const [from, to] = [codeOf(currencyId), codeOf(toCurrencyId)];
+    if ((await this.rates.rateBetween(from, to)) === null) {
+      throw new BadRequestException(
+        `There's no exchange rate from ${from} to ${to}, so a repeating transfer between them can't be converted`,
+      );
     }
   }
 
