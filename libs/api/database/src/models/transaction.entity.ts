@@ -32,7 +32,11 @@ import { TransactionType } from './enums.js';
   `(type = 'transfer' AND to_account_id IS NOT NULL AND category_id IS NULL) OR (type IN ('expense', 'income') AND to_account_id IS NULL)`,
 )
 @Check('chk_transaction_subcategory', `subcategory_id IS NULL OR category_id IS NOT NULL`)
-@Check('chk_transaction_amount_positive', `amount > 0 AND (dest_amount IS NULL OR dest_amount > 0)`)
+// An estimate from the balance (worked out before its date) may come to nothing for now.
+@Check(
+  'chk_transaction_amount_positive',
+  `(amount > 0 OR (amount = 0 AND percentage_as_of IS NOT NULL AND percentage_as_of < date)) AND (dest_amount IS NULL OR dest_amount > 0)`,
+)
 @Check('chk_transaction_percentage', `percentage IS NULL OR (percentage > 0 AND percentage <= 100)`)
 @Check('chk_transaction_percentage_base', `percentage_base IS NULL OR (percentage IS NOT NULL AND percentage_base > 0)`)
 @Check('chk_transaction_round_balance_to', `round_balance_to IS NULL OR (round_balance_to IN (1, 10, 100, 1000) AND percentage IS NULL)`)

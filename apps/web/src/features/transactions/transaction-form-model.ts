@@ -104,18 +104,25 @@ export function needsDestAmount(values: TransactionSides, accounts: AccountLike[
 // percentage or by rounding the balance, the amount isn't typed: what can be wrong then is the
 // percentage, the base amount it's of, or else what they came to. A base amount without a
 // percentage isn't used, so it isn't checked either.
-function checkAmounts(values: AmountValues & TransactionSides, accounts: AccountLike[], messages: AmountMessages, ctx: z.RefinementCtx) {
+//
+// `scheduled`: dated ahead or repeating. Then an amount from the balance is only what it comes to
+// as things stand, worked out again until its date, so nothing for now is no mistake.
+function checkAmounts(
+  values: AmountValues & TransactionSides,
+  accounts: AccountLike[],
+  messages: AmountMessages,
+  scheduled: boolean,
+  ctx: z.RefinementCtx,
+) {
   const percentage = values.percentage.trim() ? parsePercentageInput(values.percentage) : undefined;
+  const step = percentage ? null : parseRoundBalanceTo(values.roundBalanceTo);
+  const fromBalance = (percentage && !values.percentageBase.trim()) || step;
   if (percentage === null) {
     ctx.addIssue({ code: z.ZodIssueCode.custom, path: ['percentage'], message: messages.percentage });
   } else if (percentage && values.percentageBase.trim() && !isValidAmountInput(values.percentageBase)) {
     ctx.addIssue({ code: z.ZodIssueCode.custom, path: ['percentageBase'], message: messages.amount });
-  } else if (!isValidAmountInput(values.amount)) {
-    const message = percentage
-      ? messages.percentageAmount
-      : parseRoundBalanceTo(values.roundBalanceTo)
-        ? messages.roundBalanceAmount
-        : messages.amount;
+  } else if (!isValidAmountInput(values.amount) && !(scheduled && fromBalance && parseMoneyInput(values.amount) !== null)) {
+    const message = percentage ? messages.percentageAmount : step ? messages.roundBalanceAmount : messages.amount;
     ctx.addIssue({ code: z.ZodIssueCode.custom, path: ['amount'], message });
   }
   if (needsDestAmount(values, accounts) && !isValidAmountInput(values.destAmount)) {
@@ -147,7 +154,9 @@ export function transactionFormSchema(
       repeat: z.string(),
     })
     .superRefine((values, ctx) => {
-      checkAmounts(values, accounts, messages, ctx);
+      const { seriesNextDay, today = todayInput() } = context;
+      // Dates as yyyy-MM-dd compare as text.
+      checkAmounts(values, accounts, messages, !!values.repeat || values.day > today, ctx);
       if (values.type === 'transfer') {
         if (!values.toAccountId) {
           ctx.addIssue({ code: z.ZodIssueCode.custom, path: ['toAccountId'], message: messages.required });
@@ -159,16 +168,17 @@ export function transactionFormSchema(
           ctx.addIssue({ code: z.ZodIssueCode.custom, path: ['repeat'], message: messages.repeatCurrency });
         }
       }
-      const { seriesNextDay, today = todayInput() } = context;
-      // Dates as yyyy-MM-dd compare as text.
       if (seriesNextDay !== undefined && values.day !== seriesNextDay && values.day < today) {
         ctx.addIssue({ code: z.ZodIssueCode.custom, path: ['day'], message: messages.pastNextDate });
       }
     });
 }
 
-/** The Amount sheet's figures, checked for a transaction with these sides. */
-export function amountFormSchema(sides: TransactionSides, accounts: AccountLike[], messages: AmountMessages) {
+/**
+ * The Amount sheet's figures, checked for a transaction with these sides — and, `scheduled`, dated
+ * ahead or repeating (see checkAmounts).
+ */
+export function amountFormSchema(sides: TransactionSides, accounts: AccountLike[], messages: AmountMessages, scheduled = false) {
   return z
     .object({
       amount: z.string(),
@@ -177,7 +187,7 @@ export function amountFormSchema(sides: TransactionSides, accounts: AccountLike[
       percentageBase: z.string(),
       roundBalanceTo: z.string(),
     })
-    .superRefine((values, ctx) => checkAmounts({ ...values, ...sides }, accounts, messages, ctx));
+    .superRefine((values, ctx) => checkAmounts({ ...values, ...sides }, accounts, messages, scheduled, ctx));
 }
 
 // Amounts start at "0" rather than empty, so the field always shows a number; the inputs select

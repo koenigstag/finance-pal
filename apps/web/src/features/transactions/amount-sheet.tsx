@@ -44,6 +44,9 @@ interface AmountSheetProps {
   accounts: Account[];
   // The saved transaction being edited, if any: its own share stays out of that balance.
   editing?: Transaction;
+  // Dated ahead or repeating: an amount from the balance may then be nothing for now, being worked
+  // out again until its date.
+  scheduled: boolean;
   // The figures the sheet starts from. Read once, when it mounts: the form gives it a new key
   // for each opening.
   values: AmountValues;
@@ -57,7 +60,7 @@ interface AmountSheetProps {
  * behind a checkbox and one at a time: as a percentage, of an optional base amount or else of the
  * account's balance, or as whatever leaves that balance on a round figure.
  */
-export function AmountSheet({ open, onOpenChange, sides, accounts, editing, values, onDone }: AmountSheetProps) {
+export function AmountSheet({ open, onOpenChange, sides, accounts, editing, scheduled, values, onDone }: AmountSheetProps) {
   const { t, i18n } = useTranslation();
   const currencyCodes = useCurrencyCodes();
   // Open when it holds what the amount comes from.
@@ -68,13 +71,18 @@ export function AmountSheet({ open, onOpenChange, sides, accounts, editing, valu
 
   const schema = useMemo(
     () =>
-      amountFormSchema(sides, accounts, {
-        amount: t('validation.amount'),
-        percentage: t('validation.percentage'),
-        percentageAmount: t('transactions.errors.percentageAmount'),
-        roundBalanceAmount: t('transactions.errors.roundBalanceAmount'),
-      }),
-    [sides, accounts, t],
+      amountFormSchema(
+        sides,
+        accounts,
+        {
+          amount: t('validation.amount'),
+          percentage: t('validation.percentage'),
+          percentageAmount: t('transactions.errors.percentageAmount'),
+          roundBalanceAmount: t('transactions.errors.roundBalanceAmount'),
+        },
+        scheduled,
+      ),
+    [sides, accounts, t, scheduled],
   );
   // As in the form: accounts can refetch while the sheet is open, and the resolver should check
   // against the current ones rather than those of the first render.

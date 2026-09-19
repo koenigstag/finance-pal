@@ -171,7 +171,8 @@ export class RecurringRulesService {
     // Before the insert: the table's own check constraints and group trigger would reject bad
     // input too, but as a bare 500 instead of a 400/404. The category pair is stored the way the
     // validator settles it (a subcategory sent as the category lands under its parent).
-    Object.assign(rule, await this.validator.validate(groupId, shapeOf(rule)));
+    // A series' own amount is what it came to when saved; from the balance, that may be nothing.
+    Object.assign(rule, await this.validator.validate(groupId, shapeOf(rule), { estimate: true }));
     await this.assertOneCurrency(groupId, rule);
     if (input.replacesTransactionId) {
       await this.replacePlanned(userId, groupId, input.replacesTransactionId);
@@ -213,7 +214,7 @@ export class RecurringRulesService {
       timezone: patch.timezone ?? before.timezone,
       active: patch.active ?? before.active,
     });
-    Object.assign(after, await this.validator.validate(groupId, shapeOf(after)));
+    Object.assign(after, await this.validator.validate(groupId, shapeOf(after), { estimate: true }));
     await this.assertOneCurrency(groupId, after);
     await this.rules.save(after);
 

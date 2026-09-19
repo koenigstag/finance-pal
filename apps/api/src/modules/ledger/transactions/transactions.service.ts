@@ -67,6 +67,11 @@ export interface TransactionPage {
 
 const DEFAULT_LIMIT = 50;
 
+// An amount from the balance worked out before its date: a planned one, still to follow its account.
+function isEstimate(asOf: Date | null, date: Date): boolean {
+  return asOf !== null && asOf.getTime() < date.getTime();
+}
+
 @Injectable()
 export class TransactionsService {
   constructor(
@@ -158,11 +163,12 @@ export class TransactionsService {
       percentageBase: input.percentageBase ?? null,
       roundBalanceTo: input.roundBalanceTo ?? null,
     };
-    const filed = await this.validator.validate(groupId, merged);
-    const tagIds = await this.assertTagsValid(groupId, input.tagIds);
-
     const date = new Date(input.date);
     const now = new Date();
+    const asOf = keptPercentageAsOf(null, merged, date, now);
+    const filed = await this.validator.validate(groupId, merged, { estimate: isEstimate(asOf, date) });
+    const tagIds = await this.assertTagsValid(groupId, input.tagIds);
+
     const created = await this.transactions.save(
       this.transactions.create({
         groupId,
@@ -178,7 +184,7 @@ export class TransactionsService {
         percentage: merged.percentage,
         percentageBase: merged.percentageBase,
         roundBalanceTo: merged.roundBalanceTo,
-        percentageAsOf: keptPercentageAsOf(null, merged, date, now),
+        percentageAsOf: asOf,
         note: input.note ?? null,
         // Explicit, not left to column defaults: save() returns this object, and an omitted
         // nullable column comes back undefined, which the contract's .nullable() rejects.
@@ -237,12 +243,15 @@ export class TransactionsService {
       percentageBase: keptPercentageBase(patch, existing, percentage),
       roundBalanceTo: keptRoundBalanceTo(patch, existing),
     };
-    const filed = await this.validator.validate(groupId, merged);
+    const date = patch.date !== undefined ? new Date(patch.date) : existing.date;
+    const now = new Date();
+    // Still an estimate after this, it may come to nothing for now — brought to today by Add now
+    // too, which lands it below and drops it if it still does.
+    const asOf = keptPercentageAsOf(existing, merged, date, now);
+    const filed = await this.validator.validate(groupId, merged, { estimate: isEstimate(asOf, date) });
 
     const patchedTagIds = patch.tagIds !== undefined ? await this.assertTagsValid(groupId, patch.tagIds) : undefined;
 
-    const date = patch.date !== undefined ? new Date(patch.date) : existing.date;
-    const now = new Date();
     // Every field below is fully resolved (existing value or patch override), never `undefined`
     // — passing `undefined` into a TypeORM partial update is unreliable to reason about, so the
     // safe rule here is: always write a concrete value.
@@ -261,7 +270,7 @@ export class TransactionsService {
         percentage: merged.percentage,
         percentageBase: merged.percentageBase,
         roundBalanceTo: merged.roundBalanceTo,
-        percentageAsOf: keptPercentageAsOf(existing, merged, date, now),
+        percentageAsOf: asOf,
         note: patch.note !== undefined ? patch.note : existing.note,
         // Editing one occurrence of a series directly pins it: regenerating the series after a
         // rule change replaces only occurrences nobody has touched.

@@ -109,6 +109,17 @@ describe('TransactionValidator', () => {
     await expect(withBase(null, '12000.00')).rejects.toThrow(BadRequestException);
   });
 
+  it('takes nothing for an amount only for an estimate from the balance', async () => {
+    const zero = (fields: Partial<TransactionShape>, estimate: boolean) =>
+      validator.validate(GROUP, { ...expense('food'), amount: '0.00', ...fields }, { estimate });
+    await expect(zero({ roundBalanceTo: 100 }, true)).resolves.toEqual({ categoryId: 'food', subcategoryId: null });
+    await expect(zero({ percentage: '3' }, true)).resolves.toEqual({ categoryId: 'food', subcategoryId: null });
+    // Recorded, it moves no money; a base amount isn't a balance; a typed amount is no estimate.
+    await expect(zero({ roundBalanceTo: 100 }, false)).rejects.toThrow(BadRequestException);
+    await expect(zero({ percentage: '3', percentageBase: '1000.00' }, true)).rejects.toThrow(BadRequestException);
+    await expect(zero({}, true)).rejects.toThrow(BadRequestException);
+  });
+
   it('rounds the balance to one of the steps, and never beside a percentage', async () => {
     const rounding = (roundBalanceTo: number, percentage: string | null = null) =>
       validator.validate(GROUP, { ...expense('food'), roundBalanceTo, percentage });
