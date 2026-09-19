@@ -238,13 +238,11 @@ export const ru: Catalog<typeof en> = {
       },
       backfill: 'Все даты с {{date}} по сегодня тоже будут записаны.',
     },
-    customized: 'Изменено',
     plannedSeparator_one: '{{count}} запланированная операция',
     plannedSeparator_few: '{{count}} запланированные операции',
     plannedSeparator_many: '{{count}} запланированных операций',
     plannedSeparator_other: '{{count}} запланированной операции',
     loadMore: 'Загрузить ещё',
-    occurrenceNotice: 'Часть повторяющейся серии. Изменения затронут только эту дату.',
     seriesNotice: 'Изменения затронут эту и следующие операции. Уже записанные останутся как есть.',
     types: {
       expense: 'Расход',

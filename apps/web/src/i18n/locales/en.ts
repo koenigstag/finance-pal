@@ -238,14 +238,12 @@ export const en = {
       },
       backfill: 'Every date from {{date}} until today is recorded as well.',
     },
-    customized: 'Changed',
     // few/many are unused in English; they exist so the Russian catalog can match this shape.
     plannedSeparator_one: '{{count}} planned transaction',
     plannedSeparator_few: '{{count}} planned transactions',
     plannedSeparator_many: '{{count}} planned transactions',
     plannedSeparator_other: '{{count}} planned transactions',
     loadMore: 'Load more',
-    occurrenceNotice: 'Part of a recurring series. Changes here apply to this date only.',
     seriesNotice: 'Changes apply to this transaction and the ones after it. Those already recorded stay as they are.',
     types: {
       expense: 'Expense',

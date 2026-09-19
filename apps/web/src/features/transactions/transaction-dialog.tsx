@@ -324,18 +324,11 @@ export function TransactionDialog({
                   <AlertDescription>{errors.root.message}</AlertDescription>
                 </Alert>
               )}
-              {rule ? (
+              {rule && (
                 <Alert>
                   <RepeatIcon />
                   <AlertDescription>{t('transactions.seriesNotice')}</AlertDescription>
                 </Alert>
-              ) : (
-                transaction?.recurringRuleId && (
-                  <Alert>
-                    <RepeatIcon />
-                    <AlertDescription>{t('transactions.occurrenceNotice')}</AlertDescription>
-                  </Alert>
-                )
               )}
 
               <div className="flex flex-col gap-1">

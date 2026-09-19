@@ -3,7 +3,6 @@ import { ChevronUpIcon, RepeatIcon } from 'lucide-react';
 import { useMemo } from 'react';
 import { useTranslation } from 'react-i18next';
 import { AppearanceIcon } from '@/components/appearance/appearance-icon';
-import { Badge } from '@/components/ui/badge';
 import type { Account } from '@/features/accounts/queries';
 import type { Category } from '@/features/categories/queries';
 import { useCurrencyCodes } from '@/features/currencies/queries';
@@ -156,11 +155,6 @@ function TransactionRow({ transaction, planned, accountsById, categoriesById, ru
             <RepeatIcon aria-hidden className="size-3.5 shrink-0" />
             <span className="truncate">{repeats}</span>
           </p>
-        )}
-        {transaction.isCustomized && (
-          <div className="mt-1 flex gap-1">
-            <Badge variant="secondary">{t('transactions.customized')}</Badge>
-          </div>
         )}
       </div>
       <div className="text-right">
