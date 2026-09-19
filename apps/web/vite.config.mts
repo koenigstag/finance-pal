@@ -1,4 +1,6 @@
 /// <reference types='vitest' />
+import { execFileSync } from 'node:child_process';
+import { readFileSync } from 'node:fs';
 import { fileURLToPath } from 'node:url';
 import { defineConfig, defaultClientConditions } from 'vite';
 import react from '@vitejs/plugin-react';
@@ -10,12 +12,40 @@ import { iconSetsPlugin } from '../../tools/icon-sets.mjs';
 // server, so the browser only ever talks to its own origin and the API needs no CORS setup.
 const API_TARGET = process.env.VITE_API_PROXY_TARGET ?? 'http://localhost:3000';
 
+const { version } = JSON.parse(readFileSync(new URL('./package.json', import.meta.url), 'utf8')) as { version: string };
+
+// The commit this bundle is built from, for the About dialog: the CI variable where there is one
+// (the deploy checkout is shallow, but it still sets it), the checkout's own HEAD otherwise, and
+// nothing at all where there is no git to ask — a source tarball, a container without the history.
+function headCommit() {
+  if (process.env.GITHUB_SHA) {
+    return process.env.GITHUB_SHA;
+  }
+  try {
+    return execFileSync('git', ['rev-parse', 'HEAD'], {
+      cwd: import.meta.dirname,
+      encoding: 'utf8',
+      stdio: ['ignore', 'pipe', 'ignore'],
+    }).trim();
+  } catch {
+    return '';
+  }
+}
+
 export default defineConfig(() => ({
   root: import.meta.dirname,
   // The path the app is served under: "/" by default, the repository path on a GitHub Pages
   // project site (set by the deploy workflow).
   base: process.env.VITE_BASE_PATH ?? '/',
   cacheDir: '../../node_modules/.vite/apps/web',
+  // Frozen into the bundle, because a built app can't read package.json or run git: see
+  // lib/build-info.ts, which is the only place that reads them. The commit is not a file, so the
+  // build target names GITHUB_SHA among its cache inputs (apps/web/package.json) — without that,
+  // a cached build could ship a bundle claiming a hash from some other commit.
+  define: {
+    __APP_VERSION__: JSON.stringify(version),
+    __APP_COMMIT__: JSON.stringify(headCommit()),
+  },
   resolve: {
     // '@ft/source' makes workspace libraries (@ft/shared-contracts) resolve to their TypeScript
     // source instead of a built dist, so a contract change is picked up without rebuilding the

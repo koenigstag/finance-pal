@@ -393,6 +393,14 @@ export const en = {
       },
     },
   },
+  about: {
+    title: 'About',
+    description: 'Accounts, categories and transactions, on your own or shared with the people you budget with. Installs like an app and keeps working offline.',
+    version: 'Version',
+    commit: 'Commit',
+    noCommit: 'Not recorded',
+    source: 'Source on GitHub',
+  },
   settings: {
     title: 'Settings',
     saved: 'Saved',
