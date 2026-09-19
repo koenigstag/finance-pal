@@ -1,10 +1,13 @@
 {
   "extends": "../../tsconfig.base.json",
   "compilerOptions": {
-    "outDir": "dist",
+    // Declarations and build info go to out-tsc, not dist: dist is webpack's output and is cleaned
+    // on every build, so a typecheck running beside it lost its .d.ts files (TS6305) or made the
+    // clean itself fail (ENOTEMPTY).
+    "outDir": "out-tsc/app",
     "types": ["node"],
     "rootDir": "src",
-    "tsBuildInfoFile": "dist/tsconfig.app.tsbuildinfo",
+    "tsBuildInfoFile": "out-tsc/app/tsconfig.app.tsbuildinfo",
     "experimentalDecorators": true,
     "emitDecoratorMetadata": true,
     "target": "es2021"
