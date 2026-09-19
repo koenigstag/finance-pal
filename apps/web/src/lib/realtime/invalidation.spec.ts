@@ -81,7 +81,7 @@ describe('invalidationFor', () => {
     expect(refetched(event('AccountTarget', 'updated'))).toEqual(balances);
   });
 
-  it.each(['created', 'archived', 'restored'] as const)('refetches the categories for a category %s', (action) => {
+  it.each(['created', 'archived', 'restored', 'reordered'] as const)('refetches the categories for a category %s', (action) => {
     expect(refetched(event('Category', action))).toEqual(categoryList);
   });
 

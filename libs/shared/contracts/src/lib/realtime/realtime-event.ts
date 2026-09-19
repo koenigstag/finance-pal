@@ -20,7 +20,10 @@ export const REALTIME_RESOURCE_TYPES = [
 ] as const;
 export type RealtimeResourceType = (typeof REALTIME_RESOURCE_TYPES)[number];
 
-export const REALTIME_ACTIONS = ['created', 'updated', 'deleted', 'archived', 'restored'] as const;
+// 'reordered' is its own action rather than an update: it only changes where things sit in a
+// list, so a client refreshes that list and nothing else. One event stands for the whole reorder,
+// naming any one of the categories that moved.
+export const REALTIME_ACTIONS = ['created', 'updated', 'deleted', 'archived', 'restored', 'reordered'] as const;
 export type RealtimeAction = (typeof REALTIME_ACTIONS)[number];
 
 // Deliberately a minimal invalidation signal, not the changed row itself: the client refetches
