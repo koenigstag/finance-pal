@@ -3,6 +3,7 @@ import { z } from 'zod';
 import { moneySchema } from '../common/money.schema.js';
 import { errorSchema } from '../common/error.schema.js';
 import { percentageSchema } from '../common/percentage.schema.js';
+import { roundBalanceToSchema } from '../common/round-balance.schema.js';
 
 const c = initContract();
 
@@ -30,9 +31,15 @@ export const transactionSchema = z.object({
   percentage: percentageSchema.nullable(),
   // Only ever beside a percentage.
   percentageBase: moneySchema.nullable(),
-  // For a percentage of the balance: when that balance was. Earlier than `date`, the amount is an
-  // estimate (a planned transaction, or a series' next occurrence) that the API works out again
-  // from the balance on its date once that comes. Set by the API; bodies don't take it.
+  // Set, instead of a percentage, when the amount was worked out as whatever leaves the account's
+  // balance on a multiple of this once the transaction goes through ("Round the balance"): down for
+  // an expense or a transfer, up for an income.
+  roundBalanceTo: roundBalanceToSchema.nullable(),
+  // For an amount from the balance (a percentage of it with no base amount, or a rounding of it):
+  // when it was last worked out. Earlier than `date`, it's an estimate (a planned transaction, or a
+  // series' next occurrence) that the API works out again whenever the balance its date will have
+  // changes, and a last time once that date comes, when it stays. Named before rounding came along.
+  // Set by the API; bodies don't take it.
   percentageAsOf: z.string().datetime().nullable(),
   note: z.string().nullable(),
   tagIds: z.array(z.string().uuid()),
@@ -66,6 +73,8 @@ const createTransactionBodySchema = z.object({
   // Above 0, and only with a percentage. Left out of an update, it stays while the percentage does
   // and is cleared along with it.
   percentageBase: moneySchema.nullable().optional(),
+  // Instead of a percentage, never beside one. An update naming either leaves the other out.
+  roundBalanceTo: roundBalanceToSchema.nullable().optional(),
   note: z.string().optional(),
   tagIds: z.array(z.string().uuid()).optional(),
 });

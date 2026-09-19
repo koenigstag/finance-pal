@@ -2,10 +2,11 @@ import { BadRequestException, Injectable, NotFoundException } from '@nestjs/comm
 import { InjectRepository } from '@nestjs/typeorm';
 import { Repository } from 'typeorm';
 import { Account, Category, TransactionType } from '@ft/api-database';
-import { isPercentageInRange, isPositiveMoney } from '@ft/shared-contracts';
+import { isPercentageInRange, isPositiveMoney, isRoundBalanceStep } from '@ft/shared-contracts';
+import { isFromBalance } from '../../recurring/derived-amount';
 
 // The money-movement part of a transaction — shared by transactions and recurring rules, which
-// carry the same fields (a rule has no destAmount or percentage, so it passes null for those).
+// carry the same fields (a rule has no destAmount, so it passes null for that).
 export interface TransactionShape {
   type: TransactionType;
   accountId: string;
@@ -16,6 +17,32 @@ export interface TransactionShape {
   destAmount: string | null;
   percentage: string | null;
   percentageBase: string | null;
+  roundBalanceTo: number | null;
+}
+
+// What an update may name of where the amount comes from.
+interface AmountSourcePatch {
+  percentage?: string | null;
+  roundBalanceTo?: number | null;
+}
+
+/**
+ * The percentage an update leaves in place when it doesn't name one: it goes when the update rounds
+ * the balance instead, the two being different ways to work the amount out.
+ */
+export function keptPercentage(patch: AmountSourcePatch, existing: { percentage: string | null }): string | null {
+  if (patch.percentage !== undefined) {
+    return patch.percentage;
+  }
+  return patch.roundBalanceTo != null ? null : existing.percentage;
+}
+
+/** The step an update leaves in place when it doesn't name one: it goes for a new percentage. */
+export function keptRoundBalanceTo(patch: AmountSourcePatch, existing: { roundBalanceTo: number | null }): number | null {
+  if (patch.roundBalanceTo !== undefined) {
+    return patch.roundBalanceTo;
+  }
+  return patch.percentage != null ? null : existing.roundBalanceTo;
 }
 
 // What a transaction is filed under, as it's stored: a top-level category and, optionally, one of
@@ -52,43 +79,62 @@ export function keptPercentageBase(
   return percentage === null ? null : existing.percentageBase;
 }
 
+type AmountSourceFields = { percentage: string | null; percentageBase: string | null; roundBalanceTo: number | null };
+
+// The same way of working the amount out: the same step, or the same percentage — compared as
+// numbers, since numeric(7,4) reads back padded ("3.5000") and a patch has it as typed ("3.5").
+function sameSource(a: Omit<AmountSourceFields, 'percentageBase'>, b: Omit<AmountSourceFields, 'percentageBase'>): boolean {
+  if (a.roundBalanceTo !== null || b.roundBalanceTo !== null) {
+    return a.roundBalanceTo === b.roundBalanceTo;
+  }
+  return a.percentage !== null && b.percentage !== null && Number(a.percentage) === Number(b.percentage);
+}
+
 /**
- * When a transaction's percentage of the balance (no base amount) was taken: now, whenever what it
- * comes from — the percentage or the account — is new or changed, since the client has just worked
- * it out afresh; otherwise the moment it already had. Taken before the transaction's `date`, the
- * amount is an estimate, worked out again once that date comes — which only a date still ahead
- * can be: saved with a date already past, the amount stands as the user saw it. A planned
- * transaction moved to another future day, or with only its note changed, so stays an estimate.
- * Null when the amount isn't a percentage of the balance.
+ * When a transaction's amount was last worked out from its account's balance (a percentage of it
+ * with no base amount, or a rounding of it). Earlier than its `date`, the amount is an estimate:
+ * the API works it out again as the balance changes, and a last time once the date comes, when it
+ * stays (see reworkEstimates).
+ *
+ * Now, whenever what it comes from (the percentage or the step, or the account) is new or changed:
+ * the client has just worked it out afresh. Otherwise it keeps what it had. An estimate so stays
+ * one, moved to another day ahead or to now alike ("Add now" lands it, and landing works it out a
+ * last time), while a recorded amount moved to another day already past isn't made an estimate.
+ * Null when the amount doesn't come from the balance.
  */
 export function keptPercentageAsOf(
-  existing: { percentage: string | null; accountId: string; percentageAsOf: Date | null } | null,
-  merged: { percentage: string | null; percentageBase: string | null; accountId: string },
+  existing:
+    | ({ date: Date; accountId: string; percentageAsOf: Date | null } & Omit<AmountSourceFields, 'percentageBase'>)
+    | null,
+  merged: AmountSourceFields & { accountId: string },
   date: Date,
   now: Date,
 ): Date | null {
-  if (merged.percentage === null || merged.percentageBase !== null) {
+  if (!isFromBalance(merged)) {
     return null;
   }
-  let asOf = now;
   if (
-    existing !== null &&
-    existing.percentageAsOf !== null &&
-    existing.percentage !== null &&
-    // numeric(7,4) reads back padded ("3.5000"): the same percentage may not be the same text.
-    Number(existing.percentage) === Number(merged.percentage) &&
-    existing.accountId === merged.accountId
+    existing === null ||
+    existing.percentageAsOf === null ||
+    existing.accountId !== merged.accountId ||
+    !sameSource(existing, merged)
   ) {
-    asOf = existing.percentageAsOf;
+    return now;
   }
-  return asOf.getTime() < date.getTime() && date.getTime() <= now.getTime() ? now : asOf;
+  const asOf = existing.percentageAsOf;
+  const recorded = asOf.getTime() >= existing.date.getTime();
+  if (recorded && asOf.getTime() < date.getTime() && date.getTime() <= now.getTime()) {
+    return now;
+  }
+  return asOf;
 }
 
 /**
  * Checks, in application code, what the database would otherwise reject with a raw error: the
  * check constraints (chk_transaction_sides / chk_transaction_amount_positive /
  * chk_transaction_subcategory and their recurring twins, chk_transaction_percentage /
- * chk_transaction_percentage_base) and the check_group_consistency trigger.
+ * chk_transaction_percentage_base / chk_transaction_round_balance_to) and the
+ * check_group_consistency trigger.
  * GlobalExceptionFilter turns any non-HTTP error into a bare 500, so without this a bad request
  * would look like a server fault.
  */
@@ -116,6 +162,14 @@ export class TransactionValidator {
       }
       if (!isPositiveMoney(shape.percentageBase)) {
         throw new BadRequestException('percentageBase must be greater than zero');
+      }
+    }
+    if (shape.roundBalanceTo !== null) {
+      if (!isRoundBalanceStep(shape.roundBalanceTo)) {
+        throw new BadRequestException('roundBalanceTo must be 1, 10, 100 or 1000');
+      }
+      if (shape.percentage !== null) {
+        throw new BadRequestException('An amount comes from a percentage or from rounding the balance, not both');
       }
     }
 

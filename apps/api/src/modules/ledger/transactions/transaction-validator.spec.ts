@@ -3,8 +3,10 @@ import type { ObjectLiteral, Repository } from 'typeorm';
 import { TransactionType, type Account, type Category } from '@ft/api-database';
 import {
   TransactionValidator,
+  keptPercentage,
   keptPercentageAsOf,
   keptPercentageBase,
+  keptRoundBalanceTo,
   keptSubcategory,
   type TransactionShape,
 } from './transaction-validator';
@@ -51,6 +53,7 @@ const expense = (categoryId: string | null, subcategoryId: string | null = null)
   destAmount: null,
   percentage: null,
   percentageBase: null,
+  roundBalanceTo: null,
 });
 
 describe('TransactionValidator', () => {
@@ -105,6 +108,31 @@ describe('TransactionValidator', () => {
     await expect(withBase('5', '0.00')).rejects.toThrow(BadRequestException);
     await expect(withBase(null, '12000.00')).rejects.toThrow(BadRequestException);
   });
+
+  it('rounds the balance to one of the steps, and never beside a percentage', async () => {
+    const rounding = (roundBalanceTo: number, percentage: string | null = null) =>
+      validator.validate(GROUP, { ...expense('food'), roundBalanceTo, percentage });
+    await expect(rounding(100)).resolves.toEqual({ categoryId: 'food', subcategoryId: null });
+    await expect(rounding(50)).rejects.toThrow(BadRequestException);
+    await expect(rounding(10, '5')).rejects.toThrow(BadRequestException);
+  });
+});
+
+describe('keptPercentage and keptRoundBalanceTo', () => {
+  const percentage = { percentage: '5', roundBalanceTo: null };
+  const rounding = { percentage: null, roundBalanceTo: 100 };
+
+  it('keep what an update leaves out', () => {
+    expect(keptPercentage({}, percentage)).toBe('5');
+    expect(keptRoundBalanceTo({}, rounding)).toBe(100);
+  });
+
+  it('drop one when an update names the other', () => {
+    expect(keptPercentage({ roundBalanceTo: 10 }, percentage)).toBeNull();
+    expect(keptRoundBalanceTo({ percentage: '3' }, rounding)).toBeNull();
+    // Clearing one leaves the other as it was.
+    expect(keptRoundBalanceTo({ percentage: null }, rounding)).toBe(100);
+  });
 });
 
 describe('keptPercentageBase', () => {
@@ -128,30 +156,46 @@ describe('keptPercentageAsOf', () => {
   const now = new Date('2026-09-18T12:00:00Z');
   const taken = new Date('2026-09-10T09:00:00Z');
   const planned = new Date('2026-10-01T12:00:00Z');
-  const existing = { percentage: '3.5000', accountId: 'card', percentageAsOf: taken };
-  const merged = { percentage: '3.5', percentageBase: null, accountId: 'card' };
+  // Worked out on its date: recorded, no estimate.
+  const recorded = { date: taken, percentage: '3.5000', roundBalanceTo: null, accountId: 'card', percentageAsOf: taken };
+  // Worked out on the 10th for October: an estimate.
+  const estimate = { ...recorded, date: planned };
+  const merged = { percentage: '3.5', percentageBase: null, roundBalanceTo: null, accountId: 'card' };
 
-  it('takes a new percentage of the balance as of now', () => {
+  it('is now for a new or changed way of working the amount out, or another account', () => {
     expect(keptPercentageAsOf(null, merged, planned, now)).toBe(now);
     expect(keptPercentageAsOf(null, merged, now, now)).toBe(now);
-    expect(keptPercentageAsOf(existing, { ...merged, percentage: '4' }, planned, now)).toBe(now);
-    expect(keptPercentageAsOf(existing, { ...merged, accountId: 'wallet' }, planned, now)).toBe(now);
+    expect(keptPercentageAsOf(estimate, { ...merged, percentage: '4' }, planned, now)).toBe(now);
+    expect(keptPercentageAsOf(estimate, { ...merged, percentage: null, roundBalanceTo: 100 }, planned, now)).toBe(now);
+    expect(keptPercentageAsOf(estimate, { ...merged, accountId: 'wallet' }, planned, now)).toBe(now);
   });
 
-  it('keeps the moment it had while neither the percentage nor the account changed', () => {
-    expect(keptPercentageAsOf(existing, merged, planned, now)).toBe(taken);
-    expect(keptPercentageAsOf(existing, merged, new Date('2026-09-05T12:00:00Z'), now)).toBe(taken);
+  it('keeps an estimate one, moved to another day ahead or brought to today', () => {
+    expect(keptPercentageAsOf(estimate, merged, planned, now)).toBe(taken);
+    expect(keptPercentageAsOf(estimate, merged, new Date('2026-11-01T12:00:00Z'), now)).toBe(taken);
+    // "Add now": still worked out before its date, so it lands and is worked out a last time.
+    expect(keptPercentageAsOf(estimate, merged, now, now)).toBe(taken);
   });
 
-  it('lets an amount dated in the past stand, rather than work it out again', () => {
-    // Moved to a later day that has passed already: the balance was taken before it, but that
-    // makes it no estimate.
-    expect(keptPercentageAsOf(existing, merged, new Date('2026-09-15T12:00:00Z'), now)).toBe(now);
+  it('lets a recorded amount stand, moved to another day already past', () => {
+    expect(keptPercentageAsOf(recorded, merged, taken, now)).toBe(taken);
+    expect(keptPercentageAsOf(recorded, merged, new Date('2026-09-05T12:00:00Z'), now)).toBe(taken);
+    // Later than when it was worked out, but past: that makes it no estimate.
+    expect(keptPercentageAsOf(recorded, merged, new Date('2026-09-15T12:00:00Z'), now)).toBe(now);
+    // Moved ahead, it becomes one.
+    expect(keptPercentageAsOf(recorded, merged, planned, now)).toBe(taken);
+  });
+
+  it('works the same for a rounding of the balance', () => {
+    const rounded = { ...estimate, percentage: null, roundBalanceTo: 100 };
+    const roundedMerged = { ...merged, percentage: null, roundBalanceTo: 100 };
+    expect(keptPercentageAsOf(rounded, roundedMerged, planned, now)).toBe(taken);
+    expect(keptPercentageAsOf(rounded, { ...roundedMerged, roundBalanceTo: 10 }, planned, now)).toBe(now);
   });
 
   it('has none for a fixed amount or a percentage of a base amount', () => {
-    expect(keptPercentageAsOf(existing, { ...merged, percentage: null }, planned, now)).toBeNull();
-    expect(keptPercentageAsOf(existing, { ...merged, percentageBase: '1000.00' }, planned, now)).toBeNull();
+    expect(keptPercentageAsOf(estimate, { ...merged, percentage: null }, planned, now)).toBeNull();
+    expect(keptPercentageAsOf(estimate, { ...merged, percentageBase: '1000.00' }, planned, now)).toBeNull();
   });
 });
 
