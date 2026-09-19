@@ -108,8 +108,8 @@ export const ru: Catalog<typeof en> = {
     summary: {
       byType: 'Итоги по видам счетов',
       byKind: 'Активы и долги',
-      owed: 'Мои долги',
-      lent: 'Долги мне',
+      owed: 'Я должен',
+      lent: 'Мне должны',
       assets: 'Активы',
       debts: 'Долги',
       total: 'Итого',
