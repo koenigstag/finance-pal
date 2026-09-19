@@ -212,6 +212,36 @@ export function isPlannedDay(iso: string, now = new Date()): boolean {
   return toDayInput(iso) > todayInput(now);
 }
 
+/**
+ * Whether a transaction hasn't happened yet, by the clock rather than the calendar: dated later
+ * today counts as still to come, as it does for the API and for the list's planned half. What
+ * came from a series is only marked as such while it's still ahead; once it's recorded it's a
+ * transaction like any other.
+ */
+export function isAhead(iso: string | null, now = new Date()): boolean {
+  return iso !== null && new Date(iso).getTime() > now.getTime();
+}
+
+/**
+ * Whether a transaction is the occurrence its series is waiting on: one of a series still running,
+ * with its date and the date it was scheduled for both still ahead — by the clock rather than the
+ * calendar, as the API reads it too (see its plannedOccurrence). That one stands for the series'
+ * next date, so it alone can be recorded early or skipped, and either way the series carries on
+ * with the date after it.
+ */
+export function isPlannedOccurrence(
+  transaction: Pick<Transaction, 'date' | 'recurringRuleId' | 'recurrenceDate'>,
+  rule: Pick<RecurringRule, 'id'> | undefined,
+  now = new Date(),
+): boolean {
+  return (
+    !!rule &&
+    transaction.recurringRuleId === rule.id &&
+    isAhead(transaction.date, now) &&
+    isAhead(transaction.recurrenceDate, now)
+  );
+}
+
 // The date a series' form shows: when it next produces a transaction.
 export function nextDateOf(rule: RecurringRule): string {
   return rule.nextOccurrence ?? rule.startsAt;

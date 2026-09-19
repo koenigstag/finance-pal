@@ -1,10 +1,12 @@
 import {
   ArrowRightIcon,
   CalendarDaysIcon,
+  CheckIcon,
   ChevronRightIcon,
   CopyIcon,
   PencilIcon,
   RepeatIcon,
+  SkipForwardIcon,
   Trash2Icon,
   type LucideIcon,
 } from 'lucide-react';
@@ -20,8 +22,9 @@ import { cn } from '@/lib/utils';
 import { filedUnder } from './filed-under';
 import type { RecurringRule, Transaction } from './queries';
 import { repeatOf, useRepeatLabel } from './repeat';
+import { isAhead, isPlannedOccurrence } from './transaction-form-model';
 
-export type TransactionAction = 'edit' | 'date' | 'duplicate' | 'delete';
+export type TransactionAction = 'edit' | 'date' | 'add-now' | 'skip' | 'duplicate' | 'delete';
 
 interface TransactionActionsSheetProps {
   transaction?: Transaction;
@@ -35,6 +38,8 @@ interface TransactionActionsSheetProps {
   canUpdate: boolean;
   canCreate: boolean;
   canDelete: boolean;
+  // Deleting a planned occurrence deletes its series, which is a right of its own.
+  canDeleteSeries: boolean;
   onAction: (action: TransactionAction, transaction: Transaction) => void;
 }
 
@@ -49,6 +54,11 @@ interface ActionItem {
  * What can be done with a transaction, opened by tapping its row: a bottom sheet on phones (the
  * dialog's small-screen layout), a dialog from sm up. The same actions serve every transaction:
  * what editing or moving one reaches follows from its date (see TransactionDialog).
+ *
+ * The occurrence a running series is waiting on leads with two of its own: Add now records it
+ * ahead of its date, Skip passes that date over, and either settles it so the series can plan the
+ * one after (see PlannedOccurrenceDialog). Since Skip is what removing that one date means, Delete
+ * there is the series': it ends the repetition and takes the planned transaction with it.
  */
 export function TransactionActionsSheet({
   transaction,
@@ -60,13 +70,27 @@ export function TransactionActionsSheet({
   canUpdate,
   canCreate,
   canDelete,
+  canDeleteSeries,
   onAction,
 }: TransactionActionsSheetProps) {
   const { t, i18n } = useTranslation();
   const currencyCodes = useCurrencyCodes();
   const repeatLabel = useRepeatLabel();
 
+  // While a transaction is still to come, where it came from is part of what it is, so a series
+  // shows; once it's recorded it stands on its own, whatever wrote it.
+  const ahead = !!transaction && isAhead(transaction.date);
+  // Only the occurrence a running series waits on: the date it stands for is the one that can be
+  // brought forward or passed over.
+  const plannedOccurrence = !!transaction && isPlannedOccurrence(transaction, rule);
+
   const actions: ActionItem[] = [];
+  if (plannedOccurrence && canUpdate) {
+    actions.push({ action: 'add-now', label: t('transactions.actions.addNow'), icon: CheckIcon });
+  }
+  if (plannedOccurrence && canDelete) {
+    actions.push({ action: 'skip', label: t('transactions.actions.skip'), icon: SkipForwardIcon });
+  }
   if (canUpdate) {
     actions.push({ action: 'edit', label: t('common.edit'), icon: PencilIcon });
     actions.push({ action: 'date', label: t('transactions.actions.date'), icon: CalendarDaysIcon });
@@ -78,10 +102,11 @@ export function TransactionActionsSheet({
       icon: CopyIcon,
     });
   }
-  if (canDelete) {
+  if (plannedOccurrence ? canDeleteSeries : canDelete) {
     actions.push({
       action: 'delete',
-      label: t('common.delete'),
+      // Named for what it reaches, so a series is never ended by a button reading "Delete".
+      label: t(plannedOccurrence ? 'transactions.actions.deleteSeries' : 'common.delete'),
       icon: Trash2Icon,
       tone: 'text-destructive',
     });
@@ -110,7 +135,7 @@ export function TransactionActionsSheet({
                     <span className="truncate">
                       {isTransfer ? t('transactions.types.transfer') : (filed?.name ?? t('transactions.noCategory'))}
                     </span>
-                    {transaction.recurringRuleId && !rule && (
+                    {ahead && transaction.recurringRuleId && !rule && (
                       <RepeatIcon className="size-4 shrink-0 text-muted-foreground" aria-label={t('transactions.recurring')} />
                     )}
                   </DialogTitle>
@@ -125,7 +150,7 @@ export function TransactionActionsSheet({
                           year: 'numeric',
                         }).format(new Date(transaction.date))}
                       </p>
-                      {rule && (
+                      {ahead && rule && (
                         <p className="flex min-w-0 items-center gap-1">
                           <RepeatIcon aria-hidden className="size-3.5 shrink-0" />
                           <span className="truncate">{repeatLabel(repeatOf(rule))}</span>
@@ -151,7 +176,10 @@ export function TransactionActionsSheet({
                   currencyDisplay: 'narrowSymbol',
                 })}
               </p>
-              {transaction.note && <p className="text-left text-sm break-words whitespace-pre-line">{transaction.note}</p>}
+              {/* Italic, as a note reads everywhere: in the list, and in the field it's typed in. */}
+              {transaction.note && (
+                <p className="text-left text-sm break-words whitespace-pre-line italic">{transaction.note}</p>
+              )}
             </DialogHeader>
             <ul className="-mx-2 flex flex-col">
               {actions.map(({ action, label, icon: Icon, tone }) => (

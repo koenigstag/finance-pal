@@ -252,14 +252,12 @@ export const en = {
       },
       backfill: 'Every date from {{date}} until today is recorded as well.',
     },
-    customized: 'Changed',
     // few/many are unused in English; they exist so the Russian catalog can match this shape.
     plannedSeparator_one: '{{count}} planned transaction',
     plannedSeparator_few: '{{count}} planned transactions',
     plannedSeparator_many: '{{count}} planned transactions',
     plannedSeparator_other: '{{count}} planned transactions',
     loadMore: 'Load more',
-    occurrenceNotice: 'Part of a recurring series. Changes here apply to this date only.',
     seriesNotice: 'Changes apply to this transaction and the ones after it. Those already recorded stay as they are.',
     types: {
       expense: 'Expense',
@@ -275,6 +273,11 @@ export const en = {
     actions: {
       duplicate: 'Duplicate',
       date: 'Date',
+      // Only on the occurrence a running series is waiting on.
+      addNow: 'Add now',
+      skip: 'Skip',
+      // Delete, on that same occurrence: it's the series that goes.
+      deleteSeries: 'Delete series',
     },
     dateSheet: {
       previousMonth: 'Previous month',
@@ -285,6 +288,16 @@ export const en = {
       title: 'Delete this transaction?',
       description: 'Account balances will be recalculated.',
       occurrence: 'Only this date is skipped; the rest of the series stays.',
+      seriesTitle: 'Delete this series?',
+      series: 'It stops repeating, and the transaction it has planned goes with it. What it already recorded stays.',
+    },
+    addNowConfirm: {
+      title: 'Add this transaction now?',
+      description: 'It counts from this moment on, and the series plans the date after it.',
+    },
+    skipConfirm: {
+      title: 'Skip this date?',
+      description: 'Nothing is recorded for it, and the series carries on with the date after it.',
     },
     filters: {
       title: 'Filters',

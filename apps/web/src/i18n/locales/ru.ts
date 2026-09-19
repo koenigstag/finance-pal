@@ -249,13 +249,11 @@ export const ru: Catalog<typeof en> = {
       },
       backfill: 'Все даты с {{date}} по сегодня тоже будут записаны.',
     },
-    customized: 'Изменено',
     plannedSeparator_one: '{{count}} запланированная операция',
     plannedSeparator_few: '{{count}} запланированные операции',
     plannedSeparator_many: '{{count}} запланированных операций',
     plannedSeparator_other: '{{count}} запланированной операции',
     loadMore: 'Загрузить ещё',
-    occurrenceNotice: 'Часть повторяющейся серии. Изменения затронут только эту дату.',
     seriesNotice: 'Изменения затронут эту и следующие операции. Уже записанные останутся как есть.',
     types: {
       expense: 'Расход',
@@ -271,6 +269,9 @@ export const ru: Catalog<typeof en> = {
     actions: {
       duplicate: 'Дублировать',
       date: 'Дата',
+      addNow: 'Добавить сейчас',
+      skip: 'Пропустить',
+      deleteSeries: 'Удалить серию',
     },
     dateSheet: {
       previousMonth: 'Предыдущий месяц',
@@ -281,6 +282,16 @@ export const ru: Catalog<typeof en> = {
       title: 'Удалить операцию?',
       description: 'Балансы счетов будут пересчитаны.',
       occurrence: 'Будет пропущена только эта дата, остальная серия сохранится.',
+      seriesTitle: 'Удалить серию?',
+      series: 'Повторы прекратятся, запланированная операция будет удалена вместе с серией. Уже записанные останутся.',
+    },
+    addNowConfirm: {
+      title: 'Добавить операцию сейчас?',
+      description: 'Она будет записана текущим моментом, а серия запланирует следующую за ней дату.',
+    },
+    skipConfirm: {
+      title: 'Пропустить эту дату?',
+      description: 'За неё ничего не будет записано, а серия продолжится со следующей даты.',
     },
     filters: {
       title: 'Фильтры',

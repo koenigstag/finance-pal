@@ -11,42 +11,47 @@ import {
   AlertDialogTitle,
 } from '@/components/ui/alert-dialog';
 import { Spinner } from '@/components/ui/spinner';
-import { useDeleteRecurringRule, useDeleteTransaction, type RecurringRule, type Transaction } from './queries';
-import { isPlannedOccurrence } from './transaction-form-model';
+import { useDeleteTransaction, useSaveTransaction, type Transaction } from './queries';
 
-interface DeleteTransactionDialogProps {
+/** What a series' planned occurrence can be told to do: happen now, or not at all. */
+export type PlannedOccurrenceAction = 'add-now' | 'skip';
+
+interface PlannedOccurrenceDialogProps {
   groupId: string;
+  // The planned occurrence the action is for.
   transaction?: Transaction;
-  // The series it's an occurrence of, while that one runs.
-  rule?: RecurringRule;
+  action: PlannedOccurrenceAction;
   open: boolean;
   onOpenChange: (open: boolean) => void;
 }
 
 /**
- * Confirms deleting a transaction, and what "deleting" reaches follows from the row, as it does
- * for editing one: anything already recorded goes on its own, an occurrence of a series included —
- * only that date is skipped. Delete on the occurrence a running series is waiting on is the
- * series': it stops repeating and the planned transaction goes with it, while what it has already
- * recorded stays. (Skip is there for the single date, and the Date sheet's "never" ends a series
- * with its planned transaction kept.)
+ * Confirms what happens to the occurrence a series is waiting on, and carries it out.
+ *
+ * Add now dates it this moment, so an early payment counts towards the balances at once; Skip
+ * removes it, and that date is passed over for good — the series never writes it again. Either way
+ * the series is left with nothing planned and writes its next occurrence, which takes this one's
+ * place in the list. The schedule itself stays as it is: moving a series on is the Date action.
  */
-export function DeleteTransactionDialog({ groupId, transaction, rule, open, onOpenChange }: DeleteTransactionDialogProps) {
+export function PlannedOccurrenceDialog({ groupId, transaction, action, open, onOpenChange }: PlannedOccurrenceDialogProps) {
   const { t } = useTranslation();
+  const saveTransaction = useSaveTransaction(groupId);
   const deleteTransaction = useDeleteTransaction(groupId);
-  const deleteRule = useDeleteRecurringRule(groupId);
-  const series = transaction && isPlannedOccurrence(transaction, rule) ? rule : undefined;
-  const mutation = series ? deleteRule : deleteTransaction;
+  const skipping = action === 'skip';
+  const mutation = skipping ? deleteTransaction : saveTransaction;
+  // The action's own label does for its button too, as Delete's does in the delete dialog.
+  const confirmLabel = t(skipping ? 'transactions.actions.skip' : 'transactions.actions.addNow');
 
   const run = () => {
     if (!transaction) {
       return;
     }
     const settled = { onSuccess: () => onOpenChange(false) };
-    if (series) {
-      deleteRule.mutate({ ruleId: series.id }, settled);
-    } else {
+    if (skipping) {
       deleteTransaction.mutate(transaction.id, settled);
+    } else {
+      // Dated now, which is what makes the API count it as having happened.
+      saveTransaction.mutate({ transactionId: transaction.id, body: { date: new Date().toISOString() } }, settled);
     }
   };
 
@@ -62,17 +67,9 @@ export function DeleteTransactionDialog({ groupId, transaction, rule, open, onOp
     >
       <AlertDialogContent>
         <AlertDialogHeader>
-          <AlertDialogTitle>
-            {t(series ? 'transactions.deleteConfirm.seriesTitle' : 'transactions.deleteConfirm.title')}
-          </AlertDialogTitle>
+          <AlertDialogTitle>{t(skipping ? 'transactions.skipConfirm.title' : 'transactions.addNowConfirm.title')}</AlertDialogTitle>
           <AlertDialogDescription>
-            {t(
-              series
-                ? 'transactions.deleteConfirm.series'
-                : transaction?.recurringRuleId
-                  ? 'transactions.deleteConfirm.occurrence'
-                  : 'transactions.deleteConfirm.description',
-            )}
+            {t(skipping ? 'transactions.skipConfirm.description' : 'transactions.addNowConfirm.description')}
           </AlertDialogDescription>
         </AlertDialogHeader>
         {mutation.isError && (
@@ -83,7 +80,6 @@ export function DeleteTransactionDialog({ groupId, transaction, rule, open, onOp
         <AlertDialogFooter>
           <AlertDialogCancel disabled={mutation.isPending}>{t('common.cancel')}</AlertDialogCancel>
           <AlertDialogAction
-            variant="destructive"
             disabled={!transaction || mutation.isPending}
             onClick={(event) => {
               // Stay open until the request settles, to show its failure here.
@@ -92,7 +88,7 @@ export function DeleteTransactionDialog({ groupId, transaction, rule, open, onOp
             }}
           >
             {mutation.isPending && <Spinner />}
-            {t(series ? 'transactions.actions.deleteSeries' : 'common.delete')}
+            {confirmLabel}
           </AlertDialogAction>
         </AlertDialogFooter>
       </AlertDialogContent>

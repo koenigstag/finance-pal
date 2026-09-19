@@ -5,7 +5,9 @@ import {
   amountFromPercentage,
   balanceBase,
   defaultTransactionFormValues,
+  isAhead,
   isPlannedDay,
+  isPlannedOccurrence,
   pickDefaultAccountId,
   plannedToRecurringRuleBody,
   ruleToFormValues,
@@ -264,6 +266,38 @@ describe('isPlannedDay', () => {
     expect(isPlannedDay(new Date(2026, 8, 17, 23, 59).toISOString(), now)).toBe(false);
     expect(isPlannedDay(new Date(2026, 8, 16, 12).toISOString(), now)).toBe(false);
     expect(isPlannedDay(new Date(2026, 8, 18, 0, 0).toISOString(), now)).toBe(true);
+  });
+});
+
+describe('isAhead', () => {
+  it('goes by the clock: what is dated later today has still to happen', () => {
+    expect(isAhead(new Date(2026, 8, 17, 23, 59).toISOString(), now)).toBe(true);
+    expect(isAhead(new Date(2026, 8, 17, 15, 0).toISOString(), now)).toBe(false);
+    expect(isAhead(null, now)).toBe(false);
+  });
+});
+
+describe('isPlannedOccurrence', () => {
+  const occurrence = (date: Date, overrides: { recurringRuleId?: string | null; scheduled?: Date } = {}) => ({
+    date: date.toISOString(),
+    recurringRuleId: overrides.recurringRuleId === undefined ? rule({}).id : overrides.recurringRuleId,
+    recurrenceDate: (overrides.scheduled ?? date).toISOString(),
+  });
+
+  it('goes by the clock, not by the calendar, so that the API agrees', () => {
+    expect(isPlannedOccurrence(occurrence(new Date(2026, 8, 17, 23, 59)), rule({}), now)).toBe(true);
+    expect(isPlannedOccurrence(occurrence(new Date(2026, 8, 17, 15, 0)), rule({}), now)).toBe(false);
+  });
+
+  it('leaves out what no running series is waiting on', () => {
+    // A one-off, and an occurrence whose series no longer runs — no rule is handed over for it.
+    expect(isPlannedOccurrence(occurrence(new Date(2026, 9, 5, 12), { recurringRuleId: null }), rule({}), now)).toBe(false);
+    expect(isPlannedOccurrence(occurrence(new Date(2026, 9, 5, 12)), undefined, now)).toBe(false);
+  });
+
+  it('leaves out one moved past its scheduled date: the series has written the next already', () => {
+    const moved = occurrence(new Date(2026, 9, 20, 12), { scheduled: new Date(2026, 8, 5, 12) });
+    expect(isPlannedOccurrence(moved, rule({}), now)).toBe(false);
   });
 });
 
