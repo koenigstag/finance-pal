@@ -10,7 +10,7 @@ import { detectLanguage, isSupportedLanguage } from '@/i18n';
 import { AppearanceCard } from '@/theme/appearance-card';
 import { LogoutCard } from '@/features/auth/logout-card';
 import { readLastGroupId } from '@/features/groups/last-group';
-import { NotificationsCard } from '@/features/push/notifications-card';
+import { NotificationsLink } from '@/features/push/notifications-link';
 import { ExchangeRatesCard } from './exchange-rates-card';
 import { ProfileForm } from './profile-form';
 import { useCurrencies } from '@/features/currencies/queries';
@@ -81,7 +81,7 @@ export function SettingsPage() {
         </div>
         <AppearanceCard />
         {content}
-        <NotificationsCard />
+        <NotificationsLink />
         <ExchangeRatesCard />
         <LogoutCard />
       </main>

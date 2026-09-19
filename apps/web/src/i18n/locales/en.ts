@@ -413,7 +413,11 @@ export const en = {
 
     notifications: {
       title: 'Notifications',
-      description: 'For this device. A phone and a laptop are set up separately.',
+      // The line under the link on the settings page.
+      summary: 'What this device is told about.',
+      unavailable: 'Notifications are not set up on this server.',
+      thisDevice: 'This device',
+      description: 'A phone and a laptop are set up separately, each with its own switches.',
       off: 'This device gets no notifications yet.',
       enable: 'Turn on notifications',
       disable: 'Turn off',
@@ -425,7 +429,9 @@ export const en = {
       tested_few: 'Sent to {{count}} devices.',
       tested_many: 'Sent to {{count}} devices.',
       tested_other: 'Sent to {{count}} devices.',
-      testedNone: 'No device is registered to send to.',
+      // Only reachable with a device registered — the button isn't there otherwise — so zero
+      // means every push service refused it, not that there was nowhere to send.
+      testedNone: "Nothing was sent. This device's registration may have lapsed — turn notifications off and on again.",
       topics: {
         transactions: {
           label: 'What others record',

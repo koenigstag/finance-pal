@@ -13,7 +13,6 @@ import {
   useDeviceRegistration,
   useDisablePush,
   useEnablePush,
-  usePushPublicKey,
   usePushSubscriptions,
   useSendTestPush,
   useSetPushTopics,
@@ -24,14 +23,15 @@ import {
  * separately and can be told about different things.
  *
  * What the API has registered is what the switch reflects, not what the browser holds — a browser
- * can keep a subscription the API has forgotten, and only the API's copy is ever sent to. The
- * card is hidden altogether where the deployment has no keys to sign with: there is nothing to
- * offer, and nothing the person reading it could do about it.
+ * can keep a subscription the API has forgotten, and only the API's copy is ever sent to.
+ *
+ * The key comes from the page rather than from a query of its own: whether this deployment does
+ * push at all is the page's question, and a card asked to draw itself without one would have
+ * nothing to say.
  */
-export function NotificationsCard() {
+export function NotificationsCard({ publicKey }: { publicKey: string }) {
   const { t } = useTranslation();
   const [permission, setPermission] = useState(notificationPermission());
-  const publicKey = usePushPublicKey();
   const device = useDeviceRegistration();
   const subscriptions = usePushSubscriptions();
   const enable = useEnablePush();
@@ -40,14 +40,9 @@ export function NotificationsCard() {
   const test = useSendTestPush();
 
   const supported = isPushSupported();
-  const key = publicKey.data?.publicKey;
   // This browser's own row, if the API has one: the switch, and where the topics come from.
   const registered = device.data ? subscriptions.data?.find((row) => row.endpoint === device.data?.endpoint) : undefined;
   const busy = enable.isPending || disable.isPending || setTopics.isPending;
-
-  if (publicKey.isPending || !key) {
-    return null;
-  }
 
   const toggleTopic = (topic: PushTopic, wanted: boolean) => {
     if (!device.data || !registered) {
@@ -78,10 +73,7 @@ export function NotificationsCard() {
         <Button
           disabled={busy}
           onClick={() =>
-            enable.mutate(
-              { publicKey: key },
-              { onSuccess: (result) => setPermission(result.permission) },
-            )
+            enable.mutate({ publicKey }, { onSuccess: (result) => setPermission(result.permission) })
           }
         >
           {enable.isPending ? <Spinner /> : <BellIcon />}
@@ -139,7 +131,7 @@ export function NotificationsCard() {
   return (
     <Card>
       <CardHeader>
-        <CardTitle>{t('settings.notifications.title')}</CardTitle>
+        <CardTitle>{t('settings.notifications.thisDevice')}</CardTitle>
         <CardDescription>{t('settings.notifications.description')}</CardDescription>
       </CardHeader>
       <CardContent className="flex flex-col gap-3">
