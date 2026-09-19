@@ -15,6 +15,14 @@ import { toBaseRates } from './rate-math';
 // one without ever approaching the rate limits the free tiers ask us to respect.
 const CACHE_TTL_MS = 12 * 60 * 60 * 1000;
 
+/**
+ * What one unit of `from` costs in `to`, as a decimal string, or null when no rate is to be had
+ * for the pair (see ExchangeRatesService.rateBetween). A function rather than the service, so the
+ * code that converts — the recurring engine, run by requests and the scheduler alike — can be
+ * handed one without depending on Nest.
+ */
+export type RateLookup = (from: string, to: string) => Promise<string | null>;
+
 @Injectable()
 export class ExchangeRatesService {
   private readonly logger = new Logger(ExchangeRatesService.name);
@@ -61,6 +69,50 @@ export class ExchangeRatesService {
       }
       this.logger.warn(`Serving ${base} rates published ${stored.publishedOn}: ${reasonFor(error)}`);
       return stored;
+    }
+  }
+
+  /**
+   * What one unit of `from` costs in `to`: read off the rates quoted against `to`, which are
+   * refreshed first when stale, as getRates does. One lookup, no pivot currency: the provider
+   * quotes the pair directly, so nothing inherits a second rounding.
+   *
+   * Null when there's no rate to be had — the provider doesn't quote one of the two, or nothing was
+   * ever fetched against `to` and no provider answers now — for the caller to decide what that
+   * means: a transfer can still take a typed amount, a series can't be set up at all.
+   */
+  async rateBetween(from: string, to: string): Promise<string | null> {
+    if (from === to) {
+      return '1';
+    }
+    try {
+      const snapshot = await this.getRates(to);
+      return snapshot.rates[normalizeCode(from)] ?? null;
+    } catch (error) {
+      if (error instanceof ServiceUnavailableException) {
+        return null;
+      }
+      throw error;
+    }
+  }
+
+  /** rateBetween, as the plain function the recurring engine takes. */
+  get lookup(): RateLookup {
+    return (from, to) => this.rateBetween(from, to);
+  }
+
+  /**
+   * Brings the cached rates for these bases up to date where they've gone stale, one at a time and
+   * never failing. The scheduler runs this before it locks anything, so the conversions it does
+   * under those locks read the cache instead of waiting on a provider that may take seconds.
+   */
+  async warm(bases: Iterable<string>): Promise<void> {
+    for (const base of new Set(bases)) {
+      try {
+        await this.getRates(base);
+      } catch (error) {
+        this.logger.warn(`Couldn't warm ${base} rates: ${reasonFor(error)}`);
+      }
     }
   }
 

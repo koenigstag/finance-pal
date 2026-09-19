@@ -133,11 +133,15 @@ export class ExternalTransactionsService {
       if (toAccount) {
         patch.toAccountId = toAccount.id;
       }
-      // The stored amount was entered for the stored pair of currencies, and only holds for it.
+      // Unnamed while the pair of currencies holds, the received amount is left to the service to
+      // keep, or to convert again if it's an estimate; sending the stored one back would make it
+      // look typed. For another pair, it's worked out afresh (or refused, in one currency).
       const sameCurrencies =
         from.currencyId === stored(existing.accountId).currencyId &&
         to.currencyId === stored(existing.toAccountId as string).currencyId;
-      patch.destAmount = transferDestAmount(from, to, body.destAmount, sameCurrencies ? existing.destAmount : null);
+      if (body.destAmount !== undefined || !sameCurrencies) {
+        patch.destAmount = transferDestAmount(from, to, body.destAmount);
+      }
     } else {
       assertNoTransferFields(body);
     }

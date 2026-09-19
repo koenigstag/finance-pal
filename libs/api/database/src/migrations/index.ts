@@ -19,6 +19,7 @@ import { addPercentageToSeries } from './20260918210000-add-percentage-to-series
 import { addBalanceRounding } from './20260919120000-add-balance-rounding.js';
 import { allowZeroEstimates } from './20260919150000-allow-zero-estimates.js';
 import { addExchangeRatesCache } from './20260919160000-add-exchange-rates-cache.js';
+import { addTransactionDestAmountAsOf } from './20260919170000-add-transaction-dest-amount-as-of.js';
 
 export const migrations: readonly Migration[] = [
   createAuthTables,
@@ -44,6 +45,7 @@ export const migrations: readonly Migration[] = [
   addBalanceRounding,
   allowZeroEstimates,
   addExchangeRatesCache,
+  addTransactionDestAmountAsOf,
 ];
 
 export * from './migration.interface.js';

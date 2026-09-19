@@ -79,30 +79,18 @@ export function favouriteAccount<T extends AccountLike>(accounts: readonly T[]):
 }
 
 /**
- * What a transfer records as arrived. It's needed exactly when the two accounts' currencies
- * differ: the receiving account is credited destAmount, or the amount itself when there's none,
- * which is only right in the same currency. `current` is an update's stored value, reused only
- * while the currencies it was entered for still apply.
+ * What a transfer records as arrived, as TransactionsService takes it. Only a transfer between two
+ * currencies has one: a figure the request names stands as typed, and without one it's null, which
+ * the service converts at the exchange rate (see planDestAmount).
  */
-export function transferDestAmount(
-  from: AccountLike,
-  to: AccountLike,
-  requested: string | undefined,
-  current: string | null = null,
-): string | null {
+export function transferDestAmount(from: AccountLike, to: AccountLike, requested: string | undefined): string | null {
   if (from.currencyId === to.currencyId) {
     if (requested !== undefined) {
       throw new BadRequestException('destAmount only applies to a transfer between accounts in different currencies');
     }
     return null;
   }
-  const destAmount = requested ?? current;
-  if (destAmount === null) {
-    throw new BadRequestException(
-      'A transfer between accounts in different currencies needs destAmount: the amount that arrived',
-    );
-  }
-  return destAmount;
+  return requested ?? null;
 }
 
 /**
