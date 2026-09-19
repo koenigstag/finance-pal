@@ -14,6 +14,7 @@ import { useAccounts } from '@/features/accounts/queries';
 import { useCategories } from '@/features/categories/queries';
 import { useGroupScope } from '@/features/groups/group-context';
 import { monthRange, parseMonthParam, shiftMonth, toMonthParam } from '@/lib/dates';
+import { useSwipe } from '@/lib/swipe';
 import { capitalizeFirst } from '@/lib/text';
 import { cn } from '@/lib/utils';
 import { useRecurringRules, useTransactionPages, type RecurringRule, type Transaction, type TransactionFilters } from './queries';
@@ -87,6 +88,12 @@ export function TransactionsPage() {
     );
   const setParam = (name: string, value: string | undefined) => updateParams({ [name]: value });
 
+  // A month at a time, back or forward: the chevrons beside the month's name, and — on a phone,
+  // where there is no chevron under a thumb — a swipe across the list, each way pointing at the
+  // chevron it stands for: left for the month before, right for the one after.
+  const goToMonth = (delta: number) => setParam('month', toMonthParam(shiftMonth(month, delta)));
+  const swipe = useSwipe((direction) => goToMonth(direction === 'left' ? -1 : 1));
+
   const filterValues: TransactionFilterValues = { search, accountId, type, categoryId };
   const onFiltersChange = (patch: Partial<TransactionFilterValues>) =>
     updateParams(
@@ -96,6 +103,12 @@ export function TransactionsPage() {
     );
 
   const monthKey = toMonthParam(month);
+  // The side the month on screen came in from, so it slides in from there however it was reached:
+  // swiped, tapped or stepped back to with the browser's own back button.
+  const [slide, setSlide] = useState<{ month: string; from: 'left' | 'right' | null }>({ month: monthKey, from: null });
+  if (slide.month !== monthKey) {
+    setSlide({ month: monthKey, from: monthKey < slide.month ? 'left' : 'right' });
+  }
   const filters = useMemo<TransactionFilters>(
     () => ({ ...monthRange(parseMonthParam(monthKey)), accountId, categoryId, type, search: search || undefined }),
     [monthKey, accountId, categoryId, type, search],
@@ -155,16 +168,18 @@ export function TransactionsPage() {
             variant="ghost"
             size="icon"
             aria-label={t('transactions.filters.previousMonth')}
-            onClick={() => setParam('month', toMonthParam(shiftMonth(month, -1)))}
+            onClick={() => goToMonth(-1)}
           >
             <ChevronLeftIcon />
           </Button>
-          <span className="min-w-40 flex-1 text-center font-medium md:flex-none">{monthLabel}</span>
+          <span aria-live="polite" className="min-w-40 flex-1 text-center font-medium md:flex-none">
+            {monthLabel}
+          </span>
           <Button
             variant="ghost"
             size="icon"
             aria-label={t('transactions.filters.nextMonth')}
-            onClick={() => setParam('month', toMonthParam(shiftMonth(month, 1)))}
+            onClick={() => goToMonth(1)}
           >
             <ChevronRightIcon />
           </Button>
@@ -192,36 +207,52 @@ export function TransactionsPage() {
         </Button>
       </HeaderTools>
 
-      <div ref={scrollerRef} className={cn('-mx-1 min-h-0 flex-1 overflow-y-auto px-1 scrollbar-none', PAGE_BOTTOM_SPACE)}>
-        {pages.isPending ? (
-          <Spinner className="mx-auto size-6 text-muted-foreground" />
-        ) : pages.isError ? (
-          <QueryError onRetry={() => void pages.refetch()} />
-        ) : transactions.length === 0 ? (
-          <Empty className="border">
-            <EmptyHeader>
-              <EmptyMedia variant="icon">
-                <ReceiptTextIcon />
-              </EmptyMedia>
-              <EmptyTitle>{t('transactions.empty.title')}</EmptyTitle>
-              <EmptyDescription>{t('transactions.empty.description')}</EmptyDescription>
-            </EmptyHeader>
-          </Empty>
-        ) : (
-          <div className="flex flex-col gap-4">
-            <TransactionList
-              transactions={transactions}
-              accounts={accounts.data ?? []}
-              categories={categories.data ?? []}
-              rules={rules.data ?? []}
-              onSelect={canUpdate || canCreate || canDelete ? (transaction) => setSheet({ open: true, transaction }) : undefined}
-            />
-            {pages.hasNextPage && (
-              <LoadMore loading={pages.isFetchingNextPage} onLoadMore={() => void pages.fetchNextPage()} />
-            )}
-            {anchorSpacer > 0 && <div aria-hidden style={{ height: anchorSpacer }} />}
-          </div>
-        )}
+      {/* Swipeable, and never scrolling sideways itself: a month sliding in must not be reachable
+          by dragging the list across. */}
+      <div
+        ref={scrollerRef}
+        {...swipe}
+        className={cn('-mx-1 min-h-0 flex-1 overflow-x-hidden overflow-y-auto px-1 scrollbar-none', PAGE_BOTTOM_SPACE)}
+      >
+        <div
+          // Remounted with the month, which is what starts the slide over again.
+          key={monthKey}
+          className={cn(
+            slide.from && 'duration-200 animate-in motion-reduce:animate-none',
+            slide.from === 'left' && 'slide-in-from-left-6',
+            slide.from === 'right' && 'slide-in-from-right-6',
+          )}
+        >
+          {pages.isPending ? (
+            <Spinner className="mx-auto size-6 text-muted-foreground" />
+          ) : pages.isError ? (
+            <QueryError onRetry={() => void pages.refetch()} />
+          ) : transactions.length === 0 ? (
+            <Empty className="border">
+              <EmptyHeader>
+                <EmptyMedia variant="icon">
+                  <ReceiptTextIcon />
+                </EmptyMedia>
+                <EmptyTitle>{t('transactions.empty.title')}</EmptyTitle>
+                <EmptyDescription>{t('transactions.empty.description')}</EmptyDescription>
+              </EmptyHeader>
+            </Empty>
+          ) : (
+            <div className="flex flex-col gap-4">
+              <TransactionList
+                transactions={transactions}
+                accounts={accounts.data ?? []}
+                categories={categories.data ?? []}
+                rules={rules.data ?? []}
+                onSelect={canUpdate || canCreate || canDelete ? (transaction) => setSheet({ open: true, transaction }) : undefined}
+              />
+              {pages.hasNextPage && (
+                <LoadMore loading={pages.isFetchingNextPage} onLoadMore={() => void pages.fetchNextPage()} />
+              )}
+              {anchorSpacer > 0 && <div aria-hidden style={{ height: anchorSpacer }} />}
+            </div>
+          )}
+        </div>
       </div>
 
       <TransactionFiltersSheet

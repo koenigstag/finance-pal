@@ -2,6 +2,7 @@ import { addDays, addMonths, format, isSameMonth, parse, startOfMonth, startOfWe
 import { ChevronLeftIcon, ChevronRightIcon } from 'lucide-react';
 import { useEffect, useMemo, useState } from 'react';
 import { Button } from '@/components/ui/button';
+import { useSwipe } from '@/lib/swipe';
 import { capitalizeFirst } from '@/lib/text';
 import { cn } from '@/lib/utils';
 
@@ -22,9 +23,13 @@ interface MonthCalendarProps {
   labels: { previousMonth: string; nextMonth: string };
 }
 
-/** A month of days to pick one from, with the months before and after a tap away. */
+/** A month of days to pick one from, with the months before and after a tap — or a swipe — away. */
 export function MonthCalendar({ value, onChange, weekStartsOn, min, locale, labels }: MonthCalendarProps) {
   const [month, setMonth] = useState(() => startOfMonth(parse(value, DAY_FORMAT, new Date())));
+  const goToMonth = (delta: number) => setMonth((current) => addMonths(current, delta));
+  // The same gesture as on the transactions list: left for the month before, right for the one
+  // after, the way the chevrons above the grid sit.
+  const swipe = useSwipe((direction) => goToMonth(direction === 'left' ? -1 : 1));
   // A value set from outside (the sheet opening on another transaction) brings its month along.
   useEffect(() => {
     setMonth(startOfMonth(parse(value, DAY_FORMAT, new Date())));
@@ -40,15 +45,15 @@ export function MonthCalendar({ value, onChange, weekStartsOn, min, locale, labe
   const title = capitalizeFirst(new Intl.DateTimeFormat(locale, { month: 'long', year: 'numeric' }).format(month), locale);
 
   return (
-    <div className="flex flex-col gap-1">
+    <div {...swipe} className="flex flex-col gap-1">
       <div className="flex items-center justify-between">
-        <Button variant="ghost" size="icon" aria-label={labels.previousMonth} onClick={() => setMonth((current) => addMonths(current, -1))}>
+        <Button variant="ghost" size="icon" aria-label={labels.previousMonth} onClick={() => goToMonth(-1)}>
           <ChevronLeftIcon />
         </Button>
         <span aria-live="polite" className="font-medium">
           {title}
         </span>
-        <Button variant="ghost" size="icon" aria-label={labels.nextMonth} onClick={() => setMonth((current) => addMonths(current, 1))}>
+        <Button variant="ghost" size="icon" aria-label={labels.nextMonth} onClick={() => goToMonth(1)}>
           <ChevronRightIcon />
         </Button>
       </div>
