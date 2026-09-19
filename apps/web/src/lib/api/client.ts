@@ -7,6 +7,7 @@ import {
   currenciesContract,
   groupsContract,
   onboardingContract,
+  pushContract,
   recurringRulesContract,
   transactionsContract,
 } from '@ft/shared-contracts';
@@ -55,6 +56,7 @@ export const api = {
   transactions: clientFor(transactionsContract),
   recurringRules: clientFor(recurringRulesContract),
   apiKeys: clientFor(apiKeysContract),
+  push: clientFor(pushContract),
 };
 
 type Response = { status: number; body: unknown };

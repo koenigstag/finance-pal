@@ -2,6 +2,7 @@ import { Injectable, Logger, OnApplicationBootstrap, OnModuleDestroy, OnModuleIn
 import { Cron, CronExpression } from '@nestjs/schedule';
 import { DataSource } from 'typeorm';
 import { RecurringRule, createMigrationDataSource } from '@ft/api-database';
+import { PushNotificationsService } from '../push/push-notifications.service';
 import { RealtimeEmitterService } from '../realtime/realtime-emitter.service';
 import { reworkEstimates } from './balance-estimates';
 import { materializeOccurrences, plannedOccurrence } from './occurrence-materializer';
@@ -18,6 +19,19 @@ const DUE_RULES_SQL = `
   WHERE r.active AND r.deleted_at IS NULL
     AND NOT EXISTS (SELECT 1 FROM transactions t WHERE t.recurring_rule_id = r.id AND ${plannedOccurrence('t', '$1')})
 `;
+
+// What a series' next occurrences were written for: the one before them has landed, which is the
+// moment the money moved. Its own amount, not the rule's — an amount worked out from a balance is
+// only known once it has been.
+const LANDED_OCCURRENCE_SQL = `
+  SELECT t.type, t.amount, t.currency_id AS "currencyId"
+  FROM transactions t
+  WHERE t.recurring_rule_id = $1 AND t.deleted_at IS NULL AND t.date <= $2
+  ORDER BY t.date DESC, t.created_at DESC
+  LIMIT 1
+`;
+
+const GROUP_NAME_SQL = `SELECT name FROM groups WHERE id = $1`;
 
 // Can this connection see and write every group's rules despite RLS? Only a table's owner, a
 // superuser or a BYPASSRLS role can.
@@ -52,7 +66,10 @@ export class RecurringProcessorService implements OnModuleInit, OnApplicationBoo
   private readonly logger = new Logger(RecurringProcessorService.name);
   private dataSource!: DataSource;
 
-  constructor(private readonly realtime: RealtimeEmitterService) {}
+  constructor(
+    private readonly realtime: RealtimeEmitterService,
+    private readonly push: PushNotificationsService,
+  ) {}
 
   async onModuleInit(): Promise<void> {
     // Two connections are enough: one holds the advisory lock, one processes rules in turn.
@@ -144,8 +161,12 @@ export class RecurringProcessorService implements OnModuleInit, OnApplicationBoo
 
     let processed = 0;
     for (const { id } of due) {
-      if (await this.processRule(id, now)) {
+      const materialized = await this.processRule(id, now);
+      if (materialized) {
         processed++;
+        // Only once the rule's own query runner is back in the pool: this connection is capped at
+        // two, one of which the advisory lock holds, and announcing needs one of its own.
+        await this.announceLanded(materialized, now);
       }
     }
     if (processed > 0) {
@@ -153,9 +174,41 @@ export class RecurringProcessorService implements OnModuleInit, OnApplicationBoo
     }
   }
 
+  /**
+   * The group hears that a planned transaction is part of the ledger now — the one whose landing
+   * is why the next occurrences were written. Nobody set this off, so unlike a transaction
+   * somebody recorded, every member is told, and it goes out here rather than on a commit hook:
+   * this job runs its own transactions, which have already committed by now.
+   *
+   * A series whose first occurrences are all still ahead has nothing that has landed, and says
+   * nothing. Failing to notify never fails the tick: the ledger is right either way.
+   */
+  private async announceLanded(rule: RecurringRule, now: Date): Promise<void> {
+    try {
+      const [landed] = await this.dataSource.query(LANDED_OCCURRENCE_SQL, [rule.id, now]);
+      if (!landed) {
+        return;
+      }
+      const [group] = await this.dataSource.query(GROUP_NAME_SQL, [rule.groupId]);
+      if (!group) {
+        return;
+      }
+      await this.push.plannedRecordedNow({
+        groupId: rule.groupId,
+        groupName: group.name,
+        type: landed.type,
+        amount: landed.amount,
+        currencyId: landed.currencyId,
+      });
+    } catch (error) {
+      this.logger.error('Announcing a planned transaction failed', error instanceof Error ? error.stack : error);
+    }
+  }
+
   // Each rule in its own transaction: one that fails (say, its account was deleted in the
   // meantime) is logged and skipped without rolling back the rules processed before it.
-  private async processRule(ruleId: string, now: Date): Promise<boolean> {
+  // Returns the rule when it moved on, so the caller can announce it once this runner is free.
+  private async processRule(ruleId: string, now: Date): Promise<RecurringRule | null> {
     const runner = this.dataSource.createQueryRunner();
     await runner.connect();
     await runner.startTransaction();
@@ -172,21 +225,22 @@ export class RecurringProcessorService implements OnModuleInit, OnApplicationBoo
       const inserted = rule ? await materializeOccurrences(runner.manager, rule, now) : 0;
       await runner.commitTransaction();
 
-      if (rule && inserted > 0) {
-        this.realtime.emitToGroupNow(rule.groupId, {
-          resourceType: 'RecurringRule',
-          resourceId: rule.id,
-          action: 'updated',
-          groupId: rule.groupId,
-        });
+      if (!rule || inserted === 0) {
+        return null;
       }
-      return inserted > 0;
+      this.realtime.emitToGroupNow(rule.groupId, {
+        resourceType: 'RecurringRule',
+        resourceId: rule.id,
+        action: 'updated',
+        groupId: rule.groupId,
+      });
+      return rule;
     } catch (error) {
       if (runner.isTransactionActive) {
         await runner.rollbackTransaction();
       }
       this.logger.error(`Recurring rule ${ruleId} failed`, error instanceof Error ? error.stack : error);
-      return false;
+      return null;
     } finally {
       await runner.release();
     }

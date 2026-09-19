@@ -6,6 +6,7 @@ import { ExternalModule } from './modules/external/external.module';
 import { GroupsModule } from './modules/groups/groups.module';
 import { ImportModule } from './modules/import/import.module';
 import { LedgerModule } from './modules/ledger/ledger.module';
+import { PushModule } from './modules/push/push.module';
 import { RealtimeModule } from './modules/realtime/realtime.module';
 import { RecurringModule } from './modules/recurring/recurring.module';
 
@@ -18,6 +19,7 @@ import { RecurringModule } from './modules/recurring/recurring.module';
     GroupsModule,
     ImportModule,
     LedgerModule,
+    PushModule,
     RealtimeModule,
     RecurringModule,
   ],

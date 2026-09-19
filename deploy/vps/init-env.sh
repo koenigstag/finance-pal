@@ -43,3 +43,21 @@ add_secret() {
 
 add_secret JWT_ACCESS_SECRET 'Signs access tokens.'
 add_secret JWT_REFRESH_SECRET 'Signs refresh tokens; must differ from JWT_ACCESS_SECRET.'
+
+# Push notifications, unlike the secrets above, are left commented out and filled in by hand.
+# A VAPID pair is not rotatable: every device is registered against the public key it subscribed
+# with, so a newly generated pair would stop reaching all of them, silently. A deploy must never
+# be able to do that, which is why nothing here generates one.
+if ! grep -q 'VAPID_PUBLIC_KEY' "$ENV_FILE"; then
+  cat >>"$ENV_FILE" <<'NOTE'
+
+# Push notifications (optional; the API runs without them and the app hides the switch).
+# Generate one pair, once: pnpm --filter @ft/api exec web-push generate-vapid-keys
+# Fill in all three — the API refuses to start with some of them — and restart it.
+# See docs/push-notifications.md.
+#VAPID_PUBLIC_KEY=
+#VAPID_PRIVATE_KEY=
+#VAPID_SUBJECT=mailto:you@example.com
+NOTE
+  echo "Added push notification placeholders to $ENV_FILE"
+fi

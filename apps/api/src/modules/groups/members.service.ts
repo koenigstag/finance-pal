@@ -5,6 +5,7 @@ import { Transactional } from 'typeorm-transactional';
 import { GroupMember, MemberRole, User } from '@ft/api-database';
 import type { AssignableMemberRole } from '@ft/shared-contracts';
 import { AbilityFactory, type GroupAuthzContext } from '../_core/authz/ability.factory';
+import { PushNotificationsService } from '../push/push-notifications.service';
 import { RealtimeEmitterService } from '../realtime/realtime-emitter.service';
 
 export interface MemberWithEmail {
@@ -21,6 +22,7 @@ export class MembersService {
     @InjectRepository(User) private readonly users: Repository<User>,
     private readonly abilities: AbilityFactory,
     private readonly realtime: RealtimeEmitterService,
+    private readonly push: PushNotificationsService,
   ) {}
 
   async list(userId: string, groupId: string): Promise<MemberWithEmail[]> {
@@ -57,6 +59,14 @@ export class MembersService {
       resourceId: invitee.id,
       action: 'created',
       groupId: ctx.groupId,
+    });
+    // The one member change worth a notification, and only to the person it happened to: being
+    // given a group is news, while the rest of the group can see the new member for themselves.
+    await this.push.addedToGroup({
+      groupId: ctx.groupId,
+      groupName: ctx.groupName,
+      actorUserId: userId,
+      userId: invitee.id,
     });
     return toDto({ ...created, user: invitee });
   }

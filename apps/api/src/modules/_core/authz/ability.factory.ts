@@ -6,6 +6,9 @@ import { defineAbilityFor, type AppAbility, type MemberRole } from '@ft/shared-c
 
 export interface GroupAuthzContext {
   groupId: string;
+  // The group is loaded here anyway, to check the caller belongs to it; callers that need to name
+  // it — a notification's title, say — take it from here rather than reading the row again.
+  groupName: string;
   role: MemberRole;
   archived: boolean;
   ability: AppAbility;
@@ -40,6 +43,7 @@ export class AbilityFactory {
     const archived = group.archivedAt !== null;
     return {
       groupId,
+      groupName: group.name,
       role: membership.role,
       archived,
       ability: defineAbilityFor({ role: membership.role, archived }),

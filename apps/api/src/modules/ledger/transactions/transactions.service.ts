@@ -4,7 +4,8 @@ import { In, Repository } from 'typeorm';
 import { Transactional } from 'typeorm-transactional';
 import { RecurringRule, Tag, Transaction, TransactionTag, TransactionType } from '@ft/api-database';
 import { TRANSACTION_TYPES, type Action, type AppAbility, type Subject } from '@ft/shared-contracts';
-import { AbilityFactory } from '../../_core/authz/ability.factory';
+import { AbilityFactory, type GroupAuthzContext } from '../../_core/authz/ability.factory';
+import { PushNotificationsService } from '../../push/push-notifications.service';
 import { RealtimeEmitterService } from '../../realtime/realtime-emitter.service';
 import { reworkEstimates } from '../../recurring/balance-estimates';
 import { materializeOccurrences } from '../../recurring/occurrence-materializer';
@@ -81,6 +82,7 @@ export class TransactionsService {
     @InjectRepository(RecurringRule) private readonly rules: Repository<RecurringRule>,
     private readonly abilities: AbilityFactory,
     private readonly realtime: RealtimeEmitterService,
+    private readonly push: PushNotificationsService,
     private readonly validator: TransactionValidator,
   ) {}
 
@@ -149,7 +151,7 @@ export class TransactionsService {
     input: CreateTransactionInput,
     idempotency?: TransactionIdempotency,
   ): Promise<{ transaction: Transaction; tagIds: string[] }> {
-    await this.authorize(userId, groupId, 'create', 'Transaction');
+    const { groupName } = await this.authorize(userId, groupId, 'create', 'Transaction');
 
     const merged = {
       type: input.type as TransactionType,
@@ -212,6 +214,20 @@ export class TransactionsService {
       action: 'created',
       groupId,
     });
+    // Everyone else in the group hears about money that has moved, on whatever device they have
+    // registered. Only when it's recorded: an edit or a deletion afterwards is the socket's to
+    // report, to whoever is looking. Only when it has happened, too — a transaction written for a
+    // date ahead is a plan, and a plan the scheduler follows is announced when it lands instead.
+    if (transaction.date.getTime() <= now.getTime()) {
+      await this.push.transactionRecorded({
+        groupId,
+        groupName,
+        actorUserId: userId,
+        type: transaction.type,
+        amount: transaction.amount,
+        currencyId: transaction.currencyId,
+      });
+    }
     return { transaction, tagIds };
   }
 
@@ -395,9 +411,10 @@ export class TransactionsService {
     return transaction;
   }
 
-  private async authorize(userId: string, groupId: string, action: Action, subject: Subject): Promise<void> {
+  private async authorize(userId: string, groupId: string, action: Action, subject: Subject): Promise<GroupAuthzContext> {
     const ctx = await this.abilities.forGroup(userId, groupId);
     assertCan(ctx.ability, action, subject);
+    return ctx;
   }
 }
 

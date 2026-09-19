@@ -71,6 +71,10 @@ export default defineConfig(() => ({
         ],
       },
       workbox: {
+        // Notifications are the app's own part of the worker; everything else in it is Workbox's.
+        // Copied from public/ to the site root, next to sw.js, so this relative path resolves
+        // under a project path on GitHub Pages as well as at a domain root.
+        importScripts: ['push-handler.js'],
         // The shell, and only the shell: the icon chunks and sets are thousands of files that
         // would otherwise all be downloaded on the first visit.
         globPatterns: ['index.html', 'assets/index-*.{js,css}', 'assets/*.woff2', '*.png', 'favicon.ico'],

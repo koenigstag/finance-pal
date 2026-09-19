@@ -411,6 +411,36 @@ export const en = {
     },
 
 
+    notifications: {
+      title: 'Notifications',
+      description: 'For this device. A phone and a laptop are set up separately.',
+      off: 'This device gets no notifications yet.',
+      enable: 'Turn on notifications',
+      disable: 'Turn off',
+      blocked: 'This browser is set to refuse notifications from the app. Allow them in its site settings, then come back.',
+      unsupported: 'This browser cannot show notifications. On an iPhone or iPad, add the app to the home screen first.',
+      noWorker: 'Notifications need the installed app. Reload the page, or install it, and try again.',
+      test: 'Send a test',
+      tested_one: 'Sent to {{count}} device.',
+      tested_few: 'Sent to {{count}} devices.',
+      tested_many: 'Sent to {{count}} devices.',
+      tested_other: 'Sent to {{count}} devices.',
+      testedNone: 'No device is registered to send to.',
+      topics: {
+        transactions: {
+          label: 'What others record',
+          description: 'When someone else in a group records a transaction. Never your own.',
+        },
+        members: {
+          label: 'Being added to a group',
+          description: 'When someone gives you access to their group.',
+        },
+        planned: {
+          label: 'Planned transactions',
+          description: 'When a repeating transaction comes round and joins the ledger.',
+        },
+      },
+    },
     appearance: {
       title: 'Appearance',
       description: 'Applies to this device only.',

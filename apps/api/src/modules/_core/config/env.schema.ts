@@ -33,10 +33,35 @@ export const envSchema = z.object({
     .int()
     .positive()
     .default(60 * 60 * 24 * 30),
+  // Web Push. Optional as a set: without them the push endpoints report that push isn't set up
+  // and the app hides the switch rather than offering one that could only fail. Generate a pair
+  // with `npx web-push generate-vapid-keys` — see docs/push-notifications.md.
+  //
+  // The public key is not a secret (every subscribing device gets it), but the private one is,
+  // and the pair can't be rotated freely: every device is registered against the public key it
+  // subscribed with, and a new pair silently stops reaching all of them until they re-subscribe.
+  VAPID_PUBLIC_KEY: z.string().min(1).optional(),
+  VAPID_PRIVATE_KEY: z.string().min(1).optional(),
+  // Where a push service can reach whoever runs this deployment if a notification misbehaves —
+  // required by the VAPID spec, and passed on unchanged.
+  VAPID_SUBJECT: z
+    .string()
+    .regex(/^(mailto:|https:\/\/)\S+$/, 'VAPID_SUBJECT must be a mailto: or https:// URL')
+    .optional(),
 })
   .refine((env) => env.JWT_ACCESS_SECRET !== env.JWT_REFRESH_SECRET, {
     message: 'JWT_ACCESS_SECRET and JWT_REFRESH_SECRET must differ',
     path: ['JWT_REFRESH_SECRET'],
+  })
+  // Half a set is a misconfiguration, not a deployment without push: failing here beats starting
+  // up with a switch that hands devices a key nothing can send to.
+  .refine((env) => !env.VAPID_PUBLIC_KEY === !env.VAPID_PRIVATE_KEY, {
+    message: 'VAPID_PUBLIC_KEY and VAPID_PRIVATE_KEY must be set together',
+    path: ['VAPID_PRIVATE_KEY'],
+  })
+  .refine((env) => !env.VAPID_PUBLIC_KEY || Boolean(env.VAPID_SUBJECT), {
+    message: 'VAPID_SUBJECT is required when push notifications are configured',
+    path: ['VAPID_SUBJECT'],
   });
 
 export type Env = z.infer<typeof envSchema>;

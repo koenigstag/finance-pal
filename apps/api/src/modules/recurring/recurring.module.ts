@@ -3,6 +3,7 @@ import { ScheduleModule } from '@nestjs/schedule';
 import { TypeOrmModule } from '@nestjs/typeorm';
 import { Account, RecurringRule, Transaction } from '@ft/api-database';
 import { AuthzModule } from '../_core/authz/authz.module';
+import { PushModule } from '../push/push.module';
 import { RealtimeModule } from '../realtime/realtime.module';
 import { TransactionsModule } from '../ledger/transactions/transactions.module';
 import { RecurringProcessorService } from './recurring-processor.service';
@@ -16,6 +17,7 @@ import { RecurringRulesService } from './recurring-rules.service';
     ScheduleModule.forRoot(),
     TypeOrmModule.forFeature([RecurringRule, Transaction, Account]),
     AuthzModule,
+    PushModule,
     RealtimeModule,
     TransactionsModule,
   ],
