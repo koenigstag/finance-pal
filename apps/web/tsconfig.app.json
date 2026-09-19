@@ -1,8 +1,11 @@
 {
   "extends": "../../tsconfig.base.json",
   "compilerOptions": {
-    "outDir": "dist",
-    "tsBuildInfoFile": "dist/tsconfig.app.tsbuildinfo",
+    // Not "dist": that is where Vite builds the app, and it empties it first. Typechecking and
+    // building run at the same time, so sharing the directory has tsc emitting declarations into
+    // one that vanishes under it — TS6305, on about one run in three.
+    "outDir": "out-tsc/app",
+    "tsBuildInfoFile": "out-tsc/app/tsconfig.app.tsbuildinfo",
     "jsx": "react-jsx",
     "lib": ["es2022", "dom", "dom.iterable"],
     "paths": {

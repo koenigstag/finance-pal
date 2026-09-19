@@ -8,6 +8,7 @@ import { Empty, EmptyDescription, EmptyHeader, EmptyMedia, EmptyTitle } from '@/
 import { Spinner } from '@/components/ui/spinner';
 import { ToggleGroup, ToggleGroupItem } from '@/components/ui/toggle-group';
 import { useGroupScope } from '@/features/groups/group-context';
+import { useSwipeTrack } from '@/lib/swipe';
 import type { TransactionFormValues } from '@/features/transactions/transaction-form-model';
 import { TransactionDialog } from '@/features/transactions/transaction-dialog';
 import { pickDefaultAccountId } from '@/features/transactions/transaction-form-model';
@@ -56,14 +57,26 @@ export function AccountsPage() {
   const canDelete = ability.can('delete', 'Account');
   const canAddTransactions = ability.can('create', 'Transaction');
 
-  const visible = useMemo(
-    () =>
-      (accounts.data ?? []).filter(
-        (account) => !account.archived && TAB_TYPES[tab].some((type) => type === account.type),
-      ),
-    [accounts.data, tab],
-  );
+  // A list per tab rather than just the one on screen: the tabs either side are rendered while
+  // the strip is being dragged, and they all come out of the accounts already fetched.
+  const byTab = useMemo(() => {
+    const live = (accounts.data ?? []).filter((account) => !account.archived);
+    return Object.fromEntries(
+      TAB_ORDER.map((option) => [option, live.filter((account) => TAB_TYPES[option].some((type) => type === account.type))]),
+    ) as Record<AccountsTab, Account[]>;
+  }, [accounts.data]);
   const archived = useMemo(() => (accounts.data ?? []).filter((account) => account.archived), [accounts.data]);
+
+  // The tabs sit side by side in the order they are listed in, so dragging the strip left moves
+  // to the next tab along and dragging it right to the one before. Unlike the months there is a
+  // first and a last, and a drag towards nothing gives a little and comes back.
+  const tabIndex = TAB_ORDER.indexOf(tab);
+  const strip = useSwipeTrack({
+    count: TAB_ORDER.length,
+    index: tabIndex,
+    position: tab,
+    onCommit: (delta) => setParams({ tab: TAB_ORDER[tabIndex + delta] }, { replace: true }),
+  });
 
   // The sheet closes first; each action then opens its own dialog or page.
   const onAction = (action: AccountAction, account: Account) => {
@@ -87,8 +100,48 @@ export function AccountsPage() {
     }
   };
 
+  const tabContent = (option: AccountsTab) => {
+    const visible = byTab[option];
+    if (visible.length === 0 && !(option === 'balance' && archived.length > 0)) {
+      return (
+        <Empty className="border">
+          <EmptyHeader>
+            <EmptyMedia variant="icon">
+              <WalletIcon />
+            </EmptyMedia>
+            <EmptyTitle>{t('accounts.empty.title')}</EmptyTitle>
+            <EmptyDescription>{t('accounts.empty.description')}</EmptyDescription>
+          </EmptyHeader>
+        </Empty>
+      );
+    }
+    // Total is the shape of it — what's held, in what, and what's owed — rather than a fourth
+    // copy of the list, which the other two tabs already give in full.
+    if (option === 'total') {
+      return <AccountsSummary accounts={visible} />;
+    }
+    return (
+      <div className="flex flex-col gap-4">
+        <AccountList accounts={visible} onSelect={(account) => setSheet({ open: true, accountId: account.id })} />
+        {/* Closed to begin with: an archived account is there to be looked up, not looked at. */}
+        {option === 'balance' && archived.length > 0 && (
+          <details className="group flex flex-col gap-1">
+            <summary className="flex cursor-pointer list-none items-center gap-1 px-1 text-sm font-medium text-muted-foreground marker:content-none">
+              {t('accounts.groups.archived')}
+              <span className="tabular-nums">({archived.length})</span>
+              <ChevronDownIcon className="size-4 transition-transform group-open:rotate-180" />
+            </summary>
+            <div className="pt-1">
+              <AccountRows accounts={archived} onSelect={(account) => setSheet({ open: true, accountId: account.id })} />
+            </div>
+          </details>
+        )}
+      </div>
+    );
+  };
+
   return (
-    <section className={cn('flex flex-col gap-4', PAGE_BOTTOM_SPACE)}>
+    <section className={cn('flex flex-1 flex-col gap-4', PAGE_BOTTOM_SPACE)}>
       <PageHeader
         title={t('accounts.title')}
         action={canCreate ? { label: t('accounts.new'), icon: PlusIcon, onClick: () => setDialog({ open: true }) } : undefined}
@@ -121,39 +174,26 @@ export function AccountsPage() {
         <Spinner className="mx-auto size-6 text-muted-foreground" />
       ) : accounts.isError ? (
         <QueryError onRetry={() => void accounts.refetch()} />
-      ) : visible.length === 0 && !(tab === 'balance' && archived.length > 0) ? (
-        <Empty className="border">
-          <EmptyHeader>
-            <EmptyMedia variant="icon">
-              <WalletIcon />
-            </EmptyMedia>
-            <EmptyTitle>{t('accounts.empty.title')}</EmptyTitle>
-            <EmptyDescription>{t('accounts.empty.description')}</EmptyDescription>
-          </EmptyHeader>
-        </Empty>
       ) : (
-        // Total is the shape of it — what's held, in what, and what's owed — rather than a
-        // fourth copy of the list, which the other two tabs already give in full.
-        tab === 'total' ? (
-          <AccountsSummary accounts={visible} />
-        ) : (
-          <>
-            <AccountList accounts={visible} onSelect={(account) => setSheet({ open: true, accountId: account.id })} />
-            {/* Closed to begin with: an archived account is there to be looked up, not looked at. */}
-            {tab === 'balance' && archived.length > 0 && (
-              <details className="group flex flex-col gap-1">
-                <summary className="flex cursor-pointer list-none items-center gap-1 px-1 text-sm font-medium text-muted-foreground marker:content-none">
-                  {t('accounts.groups.archived')}
-                  <span className="tabular-nums">({archived.length})</span>
-                  <ChevronDownIcon className="size-4 transition-transform group-open:rotate-180" />
-                </summary>
-                <div className="pt-1">
-                  <AccountRows accounts={archived} onSelect={(account) => setSheet({ open: true, accountId: account.id })} />
-                </div>
-              </details>
-            )}
-          </>
-        )
+        /*
+          The tabs side by side, clipped to the one on screen. The negative margin pays for the
+          padding inside each, so the rows stay as wide as the page while a gutter opens between
+          one tab and the next as the strip is dragged across, and the strip takes what is left of
+          the screen so a tab holding one row can still be swiped off. Only the tab on screen is
+          rendered while the strip is still: the others would otherwise scroll the page to the
+          length of the longest of them, and they all come from accounts already fetched, so there
+          is nothing to load that rendering them early would get ahead of.
+        */
+        <div {...strip.viewport} className="-mx-2 flex-1 overflow-hidden">
+          <div style={strip.track} className="flex w-full items-start">
+            {TAB_ORDER.map((option) => (
+              // A tab waiting off to the side is to be seen, not read out or tabbed into.
+              <div key={option} inert={option !== tab} className="w-full shrink-0 px-2">
+                {(option === tab || strip.active) && tabContent(option)}
+              </div>
+            ))}
+          </div>
+        </div>
       )}
 
       <AccountActionsSheet
