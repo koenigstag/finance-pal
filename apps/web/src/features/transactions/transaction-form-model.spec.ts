@@ -52,6 +52,14 @@ describe('transactionFormSchema', () => {
     expect(issues(values({}))).toEqual({});
   });
 
+  it('saves a rounding that comes to nothing for now only when it repeats or is dated ahead', () => {
+    const round = (overrides: Partial<TransactionFormValues>) =>
+      issues(values({ roundBalanceTo: '10', amount: '0.00', ...overrides }), { today: '2026-09-17' });
+    expect(round({ repeat: 'month:1' })).toEqual({});
+    expect(round({ day: '2026-09-18' })).toEqual({});
+    expect(round({ day: '2026-09-17' })).toEqual({ amount: 'roundBalanceAmount' });
+  });
+
   it('rejects a zero or malformed amount', () => {
     expect(issues(values({ amount: '0' }))).toEqual({ amount: 'amount' });
     expect(issues(values({ amount: 'ten' }))).toEqual({ amount: 'amount' });
@@ -126,6 +134,21 @@ describe('amountFormSchema', () => {
     expect(sheetIssues({}, { percentage: '150' })).toEqual({ percentage: 'percentage' });
     expect(sheetIssues({}, { percentage: '5', percentageBase: '0', amount: '0.00' })).toEqual({ percentageBase: 'amount' });
     expect(sheetIssues({}, { roundBalanceTo: '100', amount: '0.00' })).toEqual({ amount: 'roundBalanceAmount' });
+  });
+
+  it('lets an amount from the balance be nothing for now when the transaction is scheduled', () => {
+    const scheduledIssues = (overrides: Partial<TransactionFormValues>) => {
+      const { amount, destAmount, percentage, percentageBase, roundBalanceTo } = values(overrides);
+      const result = amountFormSchema({ type: 'expense', accountId: usd.id, toAccountId: '' }, accounts, messages, true).safeParse(
+        { amount, destAmount, percentage, percentageBase, roundBalanceTo },
+      );
+      return result.success ? {} : Object.fromEntries(result.error.issues.map((issue) => [issue.path.join('.'), issue.message]));
+    };
+    expect(scheduledIssues({ roundBalanceTo: '100', amount: '0.00' })).toEqual({});
+    expect(scheduledIssues({ percentage: '3', amount: '0.00' })).toEqual({});
+    // A typed amount or a percentage of a base amount is no estimate.
+    expect(scheduledIssues({ amount: '0' })).toEqual({ amount: 'amount' });
+    expect(scheduledIssues({ percentage: '3', percentageBase: '0,01', amount: '0.00' })).toEqual({ amount: 'percentageAmount' });
   });
 
   it('asks for what arrived only across currencies', () => {

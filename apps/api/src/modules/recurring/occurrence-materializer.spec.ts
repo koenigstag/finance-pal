@@ -228,14 +228,15 @@ describe('materializeOccurrences, for an amount from the balance', () => {
     expect(amounts(incoming.live()).map(([amount]) => amount)).toEqual(['765.44', '765.44', '765.44']);
   });
 
-  it("skips a date already past that comes to nothing, and keeps the series' figure for an estimate of nothing", async () => {
+  it('skips a date already past that comes to nothing, and plans the next one as nothing for now', async () => {
     const series = new FakeSeries();
     const rule = { ...monthlyRule('2027-02-10T12:00:00Z'), percentage: '3', amount: '45.00' } as RecurringRule;
 
     await materializeOccurrences(series.manager, rule, at('2027-03-15T00:00:00Z'));
 
     expect(days(series.live())).toEqual(['2027-04-10']);
-    expect(amounts(series.live())).toEqual([['45.00', '2027-03-15T00:00:00.000Z']]);
+    // An estimate: it follows the account until April, and goes then if it's still nothing.
+    expect(amounts(series.live())).toEqual([['0.00', '2027-03-15T00:00:00.000Z']]);
   });
 
   it('comes to the same every time of a base amount, with no balance to name', async () => {

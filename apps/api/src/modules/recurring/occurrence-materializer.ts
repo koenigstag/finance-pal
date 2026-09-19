@@ -85,8 +85,8 @@ interface OccurrenceAmount {
  * amount: what that comes to, the same every time. A percentage or a rounding of the balance: from
  * the balance on its date — final for a date already past (catching up), and for the planned one an
  * estimate from what's known now, which follows its account until the date comes (see
- * reworkEstimates). An estimate of nothing keeps the series' own figure for now. A date already
- * past that comes to nothing isn't written at all (null): nothing was charged.
+ * reworkEstimates) and may be nothing for now. A date already past that comes to nothing isn't
+ * written at all (null): nothing was charged.
  */
 async function occurrenceAmount(manager: EntityManager, rule: RecurringRule, date: Date, now: Date): Promise<OccurrenceAmount | null> {
   if (rule.percentage === null && rule.roundBalanceTo === null) {
@@ -104,10 +104,10 @@ async function occurrenceAmount(manager: EntityManager, rule: RecurringRule, dat
     return { amount: isPositiveMoney(amount) ? amount : rule.amount, asOf: null };
   }
   const passed = date.getTime() <= now.getTime();
-  if (isPositiveMoney(amount)) {
-    return { amount, asOf: passed ? date : now };
+  if (passed) {
+    return isPositiveMoney(amount) ? { amount, asOf: date } : null;
   }
-  return passed ? null : { amount: rule.amount, asOf: now };
+  return { amount, asOf: now };
 }
 
 function scheduleOf(rule: RecurringRule): Schedule {

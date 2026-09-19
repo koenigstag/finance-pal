@@ -23,7 +23,10 @@ import { RecurrenceUnit, TransactionType } from './enums.js';
   'chk_recurring_sides',
   `(type = 'transfer' AND to_account_id IS NOT NULL AND category_id IS NULL) OR (type IN ('expense', 'income') AND to_account_id IS NULL)`,
 )
-@Check('chk_recurring_amount_positive', `amount > 0`)
+@Check(
+  'chk_recurring_amount_positive',
+  `amount > 0 OR (amount = 0 AND ((percentage IS NOT NULL AND percentage_base IS NULL) OR round_balance_to IS NOT NULL))`,
+)
 @Check('chk_recurring_subcategory', `subcategory_id IS NULL OR category_id IS NOT NULL`)
 @Check('chk_recurring_percentage', `percentage IS NULL OR (percentage > 0 AND percentage <= 100)`)
 @Check('chk_recurring_percentage_base', `percentage_base IS NULL OR (percentage IS NOT NULL AND percentage_base > 0)`)
@@ -87,8 +90,8 @@ export class RecurringRule {
 
   // as on a transaction: each occurrence's amount worked out as this percentage, of percentage_base
   // if set, otherwise of the account's balance on the occurrence's date. `amount` is then what it
-  // came to when the series was saved, and stands in for a planned estimate that comes to nothing
-  // (for a rounding too)
+  // came to when the series was saved (for a rounding too), which from the balance may be nothing,
+  // and stands in when a percentage of a base amount comes to nothing
   @Column({ type: 'numeric', precision: 7, scale: 4, nullable: true })
   percentage!: string | null;
 

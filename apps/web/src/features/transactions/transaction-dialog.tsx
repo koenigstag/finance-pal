@@ -527,6 +527,7 @@ export function TransactionDialog({
         sides={{ type, accountId, toAccountId }}
         accounts={accountList}
         editing={transaction}
+        scheduled={!!repeat || day > todayInput()}
         values={{ amount, destAmount, percentage, percentageBase, roundBalanceTo }}
         onDone={(values) => {
           for (const name of ['amount', 'destAmount', 'percentage', 'percentageBase', 'roundBalanceTo'] as const) {

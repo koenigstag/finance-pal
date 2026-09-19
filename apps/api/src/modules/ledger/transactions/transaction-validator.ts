@@ -145,9 +145,16 @@ export class TransactionValidator {
     @InjectRepository(Category) private readonly categories: Repository<Category>,
   ) {}
 
-  /** Throws for a shape that can't be stored; otherwise returns its category pair to store. */
-  async validate(groupId: string, shape: TransactionShape): Promise<CategoryPair> {
-    if (!isPositiveMoney(shape.amount)) {
+  /**
+   * Throws for a shape that can't be stored; otherwise returns its category pair to store.
+   *
+   * `estimate`: a planned transaction or a series, whose amount from the balance is only what it
+   * comes to as things stand. That may be nothing for now — a balance on a round figure already, an
+   * empty one — and it's worked out again until its date, so it may be zero.
+   */
+  async validate(groupId: string, shape: TransactionShape, { estimate = false }: { estimate?: boolean } = {}): Promise<CategoryPair> {
+    const nothingForNow = estimate && isFromBalance(shape) && Number(shape.amount) === 0;
+    if (!isPositiveMoney(shape.amount) && !nothingForNow) {
       throw new BadRequestException('amount must be greater than zero');
     }
     if (shape.destAmount !== null && !isPositiveMoney(shape.destAmount)) {

@@ -80,13 +80,17 @@ describe('reworkEstimates', () => {
     expect(reworked.map(({ id, action }) => `${id} ${action}`)).toEqual(['landed updated', 'nothing deleted']);
   });
 
-  it('keeps the figure a planned one had while it comes to nothing for now', async () => {
-    const { manager, writes } = database([estimate('round', ahead, '34.56', { percentage: null, round_balance_to: 100 })], {
-      round: '1200.00',
-    });
+  it('makes a planned one nothing for now while its balance is round, and leaves one that is be', async () => {
+    const { manager, writes } = database(
+      [
+        estimate('round', ahead, '34.56', { percentage: null, round_balance_to: 100 }),
+        estimate('still', ahead, '0.00', { percentage: null, round_balance_to: 100 }),
+      ],
+      { round: '1200.00', still: '1200.00' },
+    );
 
-    expect(await reworkEstimates(manager, ['card'], now)).toEqual([]);
-    expect(writes).toEqual([]);
+    expect(await reworkEstimates(manager, ['card'], now)).toEqual([{ id: 'round', groupId: 'group', action: 'updated' }]);
+    expect(writes).toEqual([`set round 0.00 as of ${now.toISOString()}`]);
   });
 
   it('rounds an income up and anything else down', async () => {
