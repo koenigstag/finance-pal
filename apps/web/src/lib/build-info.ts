@@ -18,3 +18,12 @@ export const shortCommit = (commit: string) => commit.slice(0, 7);
 
 /** That commit on GitHub, or null when the build didn't record one. */
 export const commitUrl = (commit: string) => (commit ? `${REPOSITORY_URL}/commit/${commit}` : null);
+
+/**
+ * A new issue on GitHub with the build already filled in: the version and commit are the first
+ * things a report needs, and nobody should have to copy them across by hand.
+ */
+export const newIssueUrl = (version: string, commit: string) => {
+  const build = commit ? `${version} (${shortCommit(commit)})` : version;
+  return `${REPOSITORY_URL}/issues/new?body=${encodeURIComponent(`\n\n---\nVersion: ${build}`)}`;
+};

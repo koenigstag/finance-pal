@@ -392,6 +392,7 @@ export const ru: Catalog<typeof en> = {
     commit: 'Коммит',
     noCommit: 'Не записан',
     source: 'Исходный код на GitHub',
+    reportIssue: 'Сообщить о проблеме',
   },
   settings: {
     title: 'Настройки',
