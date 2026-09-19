@@ -4,6 +4,7 @@ import { booleanQuerySchema } from '../common/boolean-query.schema.js';
 import { moneySchema } from '../common/money.schema.js';
 import { errorSchema } from '../common/error.schema.js';
 import { percentageSchema } from '../common/percentage.schema.js';
+import { roundBalanceToSchema } from '../common/round-balance.schema.js';
 import { timezoneSchema } from '../common/timezone.schema.js';
 import { transactionSchema, transactionTypeSchema } from './transactions.contract.js';
 
@@ -29,6 +30,9 @@ export const recurringRuleSchema = z.object({
   // occurrence's date. `amount` is then what it came to when the series was saved.
   percentage: percentageSchema.nullable(),
   percentageBase: moneySchema.nullable(),
+  // As on a transaction, instead of a percentage: each occurrence rounds the account's balance to a
+  // multiple of this on its date.
+  roundBalanceTo: roundBalanceToSchema.nullable(),
   intervalUnit: recurrenceUnitSchema,
   intervalValue: z.number().int(),
   // Anchor of the series: occurrence k = startsAt + k·interval.
@@ -61,6 +65,7 @@ const createRecurringRuleBodySchema = z.object({
   // Read the same way as on a transaction's body; amount is then what it comes to now.
   percentage: percentageSchema.nullable().optional(),
   percentageBase: moneySchema.nullable().optional(),
+  roundBalanceTo: roundBalanceToSchema.nullable().optional(),
   intervalUnit: recurrenceUnitSchema,
   intervalValue: z.number().int().min(1).optional(),
   startsAt: z.string().datetime(),

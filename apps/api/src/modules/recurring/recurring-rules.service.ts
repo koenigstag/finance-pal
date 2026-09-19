@@ -14,10 +14,13 @@ import { AbilityFactory } from '../_core/authz/ability.factory';
 import { RealtimeEmitterService } from '../realtime/realtime-emitter.service';
 import {
   TransactionValidator,
+  keptPercentage,
   keptPercentageBase,
+  keptRoundBalanceTo,
   keptSubcategory,
   type TransactionShape,
 } from '../ledger/transactions/transaction-validator';
+import { reworkEstimates } from './balance-estimates';
 import {
   detachFutureOccurrences,
   materializeOccurrences,
@@ -40,6 +43,7 @@ export interface CreateRecurringRuleInput {
   note?: string | null;
   percentage?: string | null;
   percentageBase?: string | null;
+  roundBalanceTo?: number | null;
   intervalUnit: (typeof RECURRENCE_UNITS)[number];
   intervalValue?: number;
   startsAt: string;
@@ -67,6 +71,7 @@ function shapeOf(rule: RecurringRule): TransactionShape {
     destAmount: null,
     percentage: rule.percentage,
     percentageBase: rule.percentageBase,
+    roundBalanceTo: rule.roundBalanceTo,
   };
 }
 
@@ -87,6 +92,7 @@ function occurrencesAffected(before: RecurringRule, after: RecurringRule): boole
       ? before.percentage !== after.percentage
       : Number(before.percentage) !== Number(after.percentage)) ||
     before.percentageBase !== after.percentageBase ||
+    before.roundBalanceTo !== after.roundBalanceTo ||
     before.intervalUnit !== after.intervalUnit ||
     before.intervalValue !== after.intervalValue ||
     before.startsAt.getTime() !== after.startsAt.getTime() ||
@@ -152,6 +158,7 @@ export class RecurringRulesService {
       note: input.note ?? null,
       percentage: input.percentage ?? null,
       percentageBase: input.percentageBase ?? null,
+      roundBalanceTo: input.roundBalanceTo ?? null,
       intervalUnit: input.intervalUnit as RecurrenceUnit,
       intervalValue: input.intervalValue ?? 1,
       startsAt,
@@ -171,7 +178,9 @@ export class RecurringRulesService {
     }
 
     const saved = await this.rules.save(rule);
-    await materializeOccurrences(this.rules.manager, saved, new Date());
+    const now = new Date();
+    await materializeOccurrences(this.rules.manager, saved, now);
+    await this.reworkBalanceAmounts(saved, now);
 
     this.realtime.emitToGroup(groupId, { resourceType: 'RecurringRule', resourceId: saved.id, action: 'created', groupId });
     return this.viewOf(await this.findOrFail(groupId, saved.id));
@@ -183,7 +192,7 @@ export class RecurringRulesService {
     const before = await this.findOrFail(groupId, ruleId);
 
     const categoryId = patch.categoryId !== undefined ? patch.categoryId : before.categoryId;
-    const percentage = patch.percentage !== undefined ? patch.percentage : before.percentage;
+    const percentage = keptPercentage(patch, before);
     const after = this.rules.create({
       ...before,
       type: (patch.type as TransactionType | undefined) ?? before.type,
@@ -196,6 +205,7 @@ export class RecurringRulesService {
       note: patch.note !== undefined ? patch.note : before.note,
       percentage,
       percentageBase: keptPercentageBase(patch, before, percentage),
+      roundBalanceTo: keptRoundBalanceTo(patch, before),
       intervalUnit: (patch.intervalUnit as RecurrenceUnit | undefined) ?? before.intervalUnit,
       intervalValue: patch.intervalValue ?? before.intervalValue,
       startsAt: patch.startsAt !== undefined ? new Date(patch.startsAt) : before.startsAt,
@@ -218,6 +228,7 @@ export class RecurringRulesService {
     } else if (!before.active || occurrencesAffected(before, after)) {
       await regenerateOccurrences(manager, after, now);
     }
+    await this.reworkBalanceAmounts(after, now, before);
 
     this.realtime.emitToGroup(groupId, { resourceType: 'RecurringRule', resourceId: ruleId, action: 'updated', groupId });
     return this.viewOf(await this.findOrFail(groupId, ruleId));
@@ -235,6 +246,7 @@ export class RecurringRulesService {
     // edited. Everything else ahead of now was only ever a projection of this rule.
     await removeFutureOccurrences(this.rules.manager, ruleId, now);
     await this.rules.softDelete({ id: ruleId, groupId });
+    await this.reworkBalanceAmounts(rule, now);
     this.realtime.emitToGroup(groupId, { resourceType: 'RecurringRule', resourceId: ruleId, action: 'deleted', groupId });
     // A deleted series produces nothing more.
     return { rule, nextOccurrence: null };
@@ -265,6 +277,18 @@ export class RecurringRulesService {
    * currencies every occurrence would credit the target with the source's figure in the wrong
    * currency, since the balance trigger reads a missing received amount as "the same".
    */
+  /**
+   * After the series' occurrences changed: the amounts that come from the balances of the accounts
+   * it's on, and was on, and are still estimates follow (see reworkEstimates).
+   */
+  private async reworkBalanceAmounts(rule: RecurringRule, now: Date, before?: RecurringRule): Promise<void> {
+    const accountIds = [rule.accountId, rule.toAccountId, before?.accountId, before?.toAccountId];
+    const ids = [...new Set(accountIds.filter((id): id is string => !!id))];
+    for (const { id, groupId, action } of await reworkEstimates(this.rules.manager, ids, now)) {
+      this.realtime.emitToGroup(groupId, { resourceType: 'Transaction', resourceId: id, action, groupId });
+    }
+  }
+
   private async assertOneCurrency(groupId: string, rule: RecurringRule): Promise<void> {
     if (rule.type !== TransactionType.TRANSFER || !rule.toAccountId) {
       return;

@@ -16,6 +16,7 @@ import { keepOnePlannedOccurrence } from './20260918200000-keep-one-planned-occu
 import { addTransactionPercentage } from './20260918180000-add-transaction-percentage.js';
 import { addTransactionPercentageBase } from './20260918190000-add-transaction-percentage-base.js';
 import { addPercentageToSeries } from './20260918210000-add-percentage-to-series.js';
+import { addBalanceRounding } from './20260919120000-add-balance-rounding.js';
 
 export const migrations: readonly Migration[] = [
   createAuthTables,
@@ -38,6 +39,7 @@ export const migrations: readonly Migration[] = [
   addTransactionPercentage,
   addTransactionPercentageBase,
   addPercentageToSeries,
+  addBalanceRounding,
 ];
 
 export * from './migration.interface.js';

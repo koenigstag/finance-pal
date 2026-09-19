@@ -1,7 +1,7 @@
 import type { EntityManager } from 'typeorm';
 import type { RecurringRule } from '@ft/api-database';
 import { isPositiveMoney } from '@ft/shared-contracts';
-import { percentageAmount } from './percentage-amount';
+import { derivedAmount, isFromBalance } from './derived-amount';
 import { firstIndexAtOrAfter, firstOccurrenceAtOrAfter, occurrenceAt, startOfLocalDay, type Schedule } from './recurrence-dates';
 
 // A series writes one row per run, a few when it has some catching up to do. This only exists to
@@ -45,9 +45,9 @@ const INSERT_OCCURRENCE_SQL = `
   INSERT INTO transactions (
     group_id, type, date, amount, currency_id, account_id, category_id, subcategory_id, to_account_id,
     note, recurring_rule_id, recurrence_date, is_customized, created_by,
-    percentage, percentage_base, percentage_as_of
+    percentage, percentage_base, percentage_as_of, round_balance_to
   )
-  VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $3, false, $12, $13, $14, $15)
+  VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $3, false, $12, $13, $14, $15, $16)
   ON CONFLICT (recurring_rule_id, recurrence_date) WHERE recurring_rule_id IS NOT NULL DO NOTHING
   RETURNING id
 `;
@@ -76,34 +76,38 @@ const DETACH_FUTURE_OCCURRENCES_SQL = `
 
 interface OccurrenceAmount {
   amount: string;
-  // See transactions.percentage_as_of: set for a percentage of the balance.
+  // See transactions.percentage_as_of: set for an amount that comes from the balance.
   asOf: Date | null;
 }
 
 /**
  * An occurrence's amount as it's written. A fixed series: its amount. A percentage of a base
- * amount: what that comes to, the same every time. A percentage of the balance: for a date already
- * past (catching up), of the balance on that date, final; for the planned one, of the balance now —
- * an estimate, which the scheduler works out again once its date comes. An estimate of nothing
- * keeps the series' own figure until then. A date already past that comes to nothing isn't
- * written at all (null): nothing was charged.
+ * amount: what that comes to, the same every time. A percentage or a rounding of the balance: from
+ * the balance on its date — final for a date already past (catching up), and for the planned one an
+ * estimate from what's known now, which follows its account until the date comes (see
+ * reworkEstimates). An estimate of nothing keeps the series' own figure for now. A date already
+ * past that comes to nothing isn't written at all (null): nothing was charged.
  */
 async function occurrenceAmount(manager: EntityManager, rule: RecurringRule, date: Date, now: Date): Promise<OccurrenceAmount | null> {
-  if (rule.percentage === null) {
+  if (rule.percentage === null && rule.roundBalanceTo === null) {
     return { amount: rule.amount, asOf: null };
   }
-  const template = { accountId: rule.accountId, percentage: rule.percentage, percentageBase: rule.percentageBase };
-  if (rule.percentageBase !== null) {
-    const amount = await percentageAmount(manager, template, date);
+  const source = {
+    type: rule.type,
+    accountId: rule.accountId,
+    percentage: rule.percentage,
+    percentageBase: rule.percentageBase,
+    roundBalanceTo: rule.roundBalanceTo,
+  };
+  const amount = await derivedAmount(manager, source, date);
+  if (!isFromBalance(source)) {
     return { amount: isPositiveMoney(amount) ? amount : rule.amount, asOf: null };
   }
   const passed = date.getTime() <= now.getTime();
-  const asOf = passed ? date : now;
-  const amount = await percentageAmount(manager, template, asOf);
   if (isPositiveMoney(amount)) {
-    return { amount, asOf };
+    return { amount, asOf: passed ? date : now };
   }
-  return passed ? null : { amount: rule.amount, asOf };
+  return passed ? null : { amount: rule.amount, asOf: now };
 }
 
 function scheduleOf(rule: RecurringRule): Schedule {
@@ -123,8 +127,8 @@ function scheduleOf(rule: RecurringRule): Schedule {
  *
  * Nothing is skipped on the way. An occurrence that fell due while the scheduler wasn't running, or
  * between a start date in the past and today, is written as one that happened — unless it's a
- * percentage of a balance that was empty then (see occurrenceAmount). A date the user deleted, or an
- * occurrence they moved, keeps its row and is stepped over.
+ * percentage or a rounding of a balance that came to nothing then (see occurrenceAmount). A date
+ * the user deleted, or an occurrence they moved, keeps its row and is stepped over.
  *
  * Must run inside the caller's transaction so the inserts and the frontier move commit or fail
  * together. Returns the number of rows inserted.
@@ -159,6 +163,7 @@ export async function materializeOccurrences(manager: EntityManager, rule: Recur
           rule.percentage,
           rule.percentageBase,
           worked.asOf,
+          rule.roundBalanceTo,
         ])
       : [];
     inserted += rows.length;

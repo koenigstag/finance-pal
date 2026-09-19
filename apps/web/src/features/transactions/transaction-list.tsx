@@ -9,8 +9,8 @@ import { useCurrencyCodes } from '@/features/currencies/queries';
 import { formatMoney } from '@/lib/money';
 import { transactionTypeColor } from '@/lib/money-colors';
 import { cn } from '@/lib/utils';
+import { useAmountSourceLabel } from './amount-source-label';
 import { filedUnder } from './filed-under';
-import { usePercentageLabel } from './percentage-label';
 import type { RecurringRule, Transaction } from './queries';
 import { repeatOf, useRepeatLabel } from './repeat';
 
@@ -107,13 +107,13 @@ function TransactionRow({ transaction, planned, accountsById, categoriesById, ru
   const { t, i18n } = useTranslation();
   const currencyCodes = useCurrencyCodes();
   const repeatLabel = useRepeatLabel();
-  const percentageLabel = usePercentageLabel();
+  const amountSourceLabel = useAmountSourceLabel();
   // A planned occurrence stands for its series, so it says how often that repeats, on a line of
   // its own; another row still to come carries the mark by its name. Once one is recorded it says
   // nothing of the series: what happened happened, however it came about.
   const repeats = planned && rule ? repeatLabel(repeatOf(rule)) : null;
-  // Short: the account whose balance it's of is on the line above.
-  const percentage = percentageLabel(transaction);
+  // A percentage or a rounding, short: the account whose balance it's of is on the line above.
+  const source = amountSourceLabel(transaction);
   const account = accountsById.get(transaction.accountId);
   const toAccount = transaction.toAccountId ? accountsById.get(transaction.toAccountId) : undefined;
   const isTransfer = transaction.type === 'transfer';
@@ -153,7 +153,7 @@ function TransactionRow({ transaction, planned, accountsById, categoriesById, ru
         <p className={cn('truncate text-sm', isTransfer ? 'text-foreground/80' : 'text-muted-foreground')}>
           {account?.name ?? '—'}
         </p>
-        {percentage && <p className="truncate text-sm text-muted-foreground">{percentage}</p>}
+        {source && <p className="truncate text-sm text-muted-foreground">{source}</p>}
         {transaction.note && <p className="truncate text-sm text-muted-foreground/70 italic">{transaction.note}</p>}
         {repeats && (
           <p className="flex min-w-0 items-center gap-1 text-sm text-muted-foreground">

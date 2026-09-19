@@ -6,9 +6,17 @@ import { RecurringRule, Tag, Transaction, TransactionTag, TransactionType } from
 import { TRANSACTION_TYPES, type Action, type AppAbility, type Subject } from '@ft/shared-contracts';
 import { AbilityFactory } from '../../_core/authz/ability.factory';
 import { RealtimeEmitterService } from '../../realtime/realtime-emitter.service';
+import { reworkEstimates } from '../../recurring/balance-estimates';
 import { materializeOccurrences } from '../../recurring/occurrence-materializer';
 import { decodeCursor, encodeCursor } from './cursor.util';
-import { TransactionValidator, keptPercentageAsOf, keptPercentageBase, keptSubcategory } from './transaction-validator';
+import {
+  TransactionValidator,
+  keptPercentage,
+  keptPercentageAsOf,
+  keptPercentageBase,
+  keptRoundBalanceTo,
+  keptSubcategory,
+} from './transaction-validator';
 
 // The shared string union, not api-database's TypeORM enum — see the identical comment on
 // GroupWithRole.role in GroupsService for why (assignable one way, not the other).
@@ -24,6 +32,7 @@ export interface CreateTransactionInput {
   destAmount?: string | null;
   percentage?: string | null;
   percentageBase?: string | null;
+  roundBalanceTo?: number | null;
   note?: string;
   tagIds?: string[];
 }
@@ -147,12 +156,14 @@ export class TransactionsService {
       destAmount: input.destAmount ?? null,
       percentage: input.percentage ?? null,
       percentageBase: input.percentageBase ?? null,
+      roundBalanceTo: input.roundBalanceTo ?? null,
     };
     const filed = await this.validator.validate(groupId, merged);
     const tagIds = await this.assertTagsValid(groupId, input.tagIds);
 
     const date = new Date(input.date);
-    const transaction = await this.transactions.save(
+    const now = new Date();
+    const created = await this.transactions.save(
       this.transactions.create({
         groupId,
         type: merged.type,
@@ -166,7 +177,8 @@ export class TransactionsService {
         destAmount: merged.destAmount,
         percentage: merged.percentage,
         percentageBase: merged.percentageBase,
-        percentageAsOf: keptPercentageAsOf(null, merged, date, new Date()),
+        roundBalanceTo: merged.roundBalanceTo,
+        percentageAsOf: keptPercentageAsOf(null, merged, date, now),
         note: input.note ?? null,
         // Explicit, not left to column defaults: save() returns this object, and an omitted
         // nullable column comes back undefined, which the contract's .nullable() rejects.
@@ -180,8 +192,13 @@ export class TransactionsService {
     );
 
     if (tagIds.length > 0) {
-      await this.transactionTags.save(tagIds.map((tagId) => this.transactionTags.create({ transactionId: transaction.id, tagId })));
+      await this.transactionTags.save(tagIds.map((tagId) => this.transactionTags.create({ transactionId: created.id, tagId })));
     }
+
+    const reworked = await this.reworkBalanceAmounts([merged.accountId, merged.toAccountId], created.id, now);
+    // Planned and from the balance, it's worked out again from the balance its date will have,
+    // which may not be the figure it was sent with.
+    const transaction = reworked.has(created.id) ? await this.findOrFail(groupId, created.id) : created;
 
     this.realtime.emitToGroup(groupId, {
       resourceType: 'Transaction',
@@ -207,7 +224,7 @@ export class TransactionsService {
     }
 
     const categoryId = patch.categoryId !== undefined ? patch.categoryId : existing.categoryId;
-    const percentage = patch.percentage !== undefined ? patch.percentage : existing.percentage;
+    const percentage = keptPercentage(patch, existing);
     const merged = {
       type: (patch.type as TransactionType | undefined) ?? existing.type,
       accountId: patch.accountId ?? existing.accountId,
@@ -218,12 +235,14 @@ export class TransactionsService {
       destAmount: patch.destAmount !== undefined ? patch.destAmount : existing.destAmount,
       percentage,
       percentageBase: keptPercentageBase(patch, existing, percentage),
+      roundBalanceTo: keptRoundBalanceTo(patch, existing),
     };
     const filed = await this.validator.validate(groupId, merged);
 
     const patchedTagIds = patch.tagIds !== undefined ? await this.assertTagsValid(groupId, patch.tagIds) : undefined;
 
     const date = patch.date !== undefined ? new Date(patch.date) : existing.date;
+    const now = new Date();
     // Every field below is fully resolved (existing value or patch override), never `undefined`
     // — passing `undefined` into a TypeORM partial update is unreliable to reason about, so the
     // safe rule here is: always write a concrete value.
@@ -241,7 +260,8 @@ export class TransactionsService {
         destAmount: merged.destAmount,
         percentage: merged.percentage,
         percentageBase: merged.percentageBase,
-        percentageAsOf: keptPercentageAsOf(existing, merged, date, new Date()),
+        roundBalanceTo: merged.roundBalanceTo,
+        percentageAsOf: keptPercentageAsOf(existing, merged, date, now),
         note: patch.note !== undefined ? patch.note : existing.note,
         // Editing one occurrence of a series directly pins it: regenerating the series after a
         // rule change replaces only occurrences nobody has touched.
@@ -258,13 +278,22 @@ export class TransactionsService {
       }
     }
     await this.keepSeriesGoing(existing.recurringRuleId);
+    // Both the accounts it was on and the ones it's on now: moving it changes the balance of each.
+    const reworked = await this.reworkBalanceAmounts(
+      [existing.accountId, existing.toAccountId, merged.accountId, merged.toAccountId],
+      transactionId,
+      now,
+    );
+    // A planned amount from the balance brought to today lands, and is worked out a last time,
+    // which can come to nothing: then nothing was charged, and it's gone.
+    const gone = reworked.get(transactionId) === 'deleted';
 
-    const transaction = await this.findOrFail(groupId, transactionId);
+    const transaction = await this.findOrFail(groupId, transactionId, gone);
     const tagIds = patchedTagIds ?? (await this.loadTagIds([transactionId])).get(transactionId) ?? [];
     this.realtime.emitToGroup(groupId, {
       resourceType: 'Transaction',
       resourceId: transactionId,
-      action: 'updated',
+      action: gone ? 'deleted' : 'updated',
       groupId,
     });
     return { transaction, tagIds };
@@ -277,6 +306,7 @@ export class TransactionsService {
     const tagIds = (await this.loadTagIds([transactionId])).get(transactionId) ?? [];
     await this.transactions.softDelete({ id: transactionId, groupId });
     await this.keepSeriesGoing(transaction.recurringRuleId);
+    await this.reworkBalanceAmounts([transaction.accountId, transaction.toAccountId], transactionId, new Date());
     this.realtime.emitToGroup(groupId, {
       resourceType: 'Transaction',
       resourceId: transactionId,
@@ -299,6 +329,26 @@ export class TransactionsService {
     if (rule) {
       await materializeOccurrences(this.rules.manager, rule, new Date());
     }
+  }
+
+  /**
+   * After a write that moves these accounts' balances: the amounts that come from them and are
+   * still estimates follow (see reworkEstimates), and the groups hear of each but `own`, which the
+   * write reports itself. Returns what was reworked.
+   */
+  private async reworkBalanceAmounts(
+    accountIds: (string | null)[],
+    own: string,
+    now: Date,
+  ): Promise<Map<string, 'updated' | 'deleted'>> {
+    const ids = [...new Set(accountIds.filter((id): id is string => id !== null))];
+    const reworked = await reworkEstimates(this.transactions.manager, ids, now);
+    for (const { id, groupId, action } of reworked) {
+      if (id !== own) {
+        this.realtime.emitToGroup(groupId, { resourceType: 'Transaction', resourceId: id, action, groupId });
+      }
+    }
+    return new Map(reworked.map(({ id, action }) => [id, action]));
   }
 
 
@@ -328,8 +378,8 @@ export class TransactionsService {
     return map;
   }
 
-  private async findOrFail(groupId: string, transactionId: string): Promise<Transaction> {
-    const transaction = await this.transactions.findOneBy({ id: transactionId, groupId });
+  private async findOrFail(groupId: string, transactionId: string, withDeleted = false): Promise<Transaction> {
+    const transaction = await this.transactions.findOne({ where: { id: transactionId, groupId }, withDeleted });
     if (!transaction) {
       throw new NotFoundException('Transaction not found');
     }

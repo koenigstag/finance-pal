@@ -31,12 +31,13 @@ import {
 } from './queries';
 import { parseRepeatKey, repeatOf, useRepeatLabel } from './repeat';
 import {
-  amountFromPercentage,
+  derivedAmount,
   defaultTransactionFormValues,
   isPlannedDay,
   nextDateOf,
   pickDefaultAccountId,
   needsDestAmount,
+  parseRoundBalanceTo,
   ruleToFormValues,
   toRecurringRuleBody,
   toRecurringRulePatch,
@@ -131,6 +132,7 @@ export function TransactionDialog({
           pastNextDate: t('transactions.errors.pastNextDate'),
           percentage: t('validation.percentage'),
           percentageAmount: t('transactions.errors.percentageAmount'),
+          roundBalanceAmount: t('transactions.errors.roundBalanceAmount'),
         },
         { seriesNextDay },
       ),
@@ -145,10 +147,23 @@ export function TransactionDialog({
     defaultValues: defaultTransactionFormValues({}),
   });
   const errors = form.formState.errors;
-  const [type, accountId, toAccountId, categoryId, day, repeat, amount, destAmount, percentage, percentageBase] = useWatch({
-    control: form.control,
-    name: ['type', 'accountId', 'toAccountId', 'categoryId', 'day', 'repeat', 'amount', 'destAmount', 'percentage', 'percentageBase'],
-  });
+  const [type, accountId, toAccountId, categoryId, day, repeat, amount, destAmount, percentage, percentageBase, roundBalanceTo] =
+    useWatch({
+      control: form.control,
+      name: [
+        'type',
+        'accountId',
+        'toAccountId',
+        'categoryId',
+        'day',
+        'repeat',
+        'amount',
+        'destAmount',
+        'percentage',
+        'percentageBase',
+        'roundBalanceTo',
+      ],
+    });
 
   // Works the amount out from the percentage, when there is one: of the base amount if one is
   // typed, otherwise of the balance of the account the transaction is on — where an expense or a
@@ -156,7 +171,7 @@ export function TransactionDialog({
   // on opening a saved transaction: its amount may have come from the balance as it was then, and
   // opening it to fix a note mustn't restate it.
   const recalculate = () => {
-    const worked = amountFromPercentage(form.getValues(), accountOf(form.getValues('accountId')), transaction);
+    const worked = derivedAmount(form.getValues(), form.getValues('type'), accountOf(form.getValues('accountId')), transaction);
     if (worked !== null) {
       form.setValue('amount', worked, { shouldValidate: form.formState.isSubmitted });
     }
@@ -226,7 +241,6 @@ export function TransactionDialog({
       if (pick.toAccountId === form.getValues('accountId')) {
         const others = accountList.filter((account) => account.id !== pick.toAccountId);
         form.setValue('accountId', pickDefaultAccountId(others) ?? '');
-        recalculate();
       }
       form.setValue('toAccountId', pick.toAccountId, { shouldValidate: form.formState.isSubmitted });
       form.setValue('categoryId', '');
@@ -240,6 +254,8 @@ export function TransactionDialog({
       form.setValue('categoryId', pick.categoryId);
       form.setValue('toAccountId', '');
     }
+    // The account may have changed, and the type decides which way a rounding goes.
+    recalculate();
     setStage('form');
     setKindPickerOpen(false);
   };
@@ -320,20 +336,26 @@ export function TransactionDialog({
     amountLines.push(t('transactions.receivedAmount', { amount: moneyIn(destAmount, toAccountId) }));
   }
   const validPercentage = parsePercentageInput(percentage);
+  const step = validPercentage ? null : parseRoundBalanceTo(roundBalanceTo);
+  const accountName = accountOf(accountId)?.name ?? '';
   if (validPercentage) {
     const shown = formatPercentage(validPercentage, i18n.language);
     amountLines.push(
       percentageBase.trim()
         ? t('transactions.percentageOfBase', { percentage: shown, base: moneyIn(percentageBase, accountId) })
-        : t('transactions.percentageOfBalance', { percentage: shown, account: accountOf(accountId)?.name ?? '' }),
+        : t('transactions.percentageOfBalance', { percentage: shown, account: accountName }),
     );
-    // A balance still to come: the figure above is today's, and the day itself decides.
-    if (!percentageBase.trim() && (repeat || day > todayInput())) {
-      amountLines.push(t(repeat ? 'transactions.percentageSeriesOnTheDay' : 'transactions.percentageOnTheDay'));
-    }
+  } else if (step) {
+    amountLines.push(
+      t('transactions.roundsBalanceOf', { step: new Intl.NumberFormat(i18n.language).format(step), account: accountName }),
+    );
+  }
+  // A balance still to come: the figure above is today's, and it follows the account until the day.
+  if (((validPercentage && !percentageBase.trim()) || step) && (repeat || day > todayInput())) {
+    amountLines.push(t(repeat ? 'transactions.percentageSeriesOnTheDay' : 'transactions.percentageOnTheDay'));
   }
   // Only those there are: FieldError lists several as bullets, and counts an empty slot as one.
-  const amountErrors = [errors.amount, errors.destAmount, errors.percentage, errors.percentageBase].filter(
+  const amountErrors = [errors.amount, errors.destAmount, errors.percentage, errors.percentageBase, errors.roundBalanceTo].filter(
     (error) => error !== undefined,
   );
 
@@ -505,9 +527,9 @@ export function TransactionDialog({
         sides={{ type, accountId, toAccountId }}
         accounts={accountList}
         editing={transaction}
-        values={{ amount, destAmount, percentage, percentageBase }}
+        values={{ amount, destAmount, percentage, percentageBase, roundBalanceTo }}
         onDone={(values) => {
-          for (const name of ['amount', 'destAmount', 'percentage', 'percentageBase'] as const) {
+          for (const name of ['amount', 'destAmount', 'percentage', 'percentageBase', 'roundBalanceTo'] as const) {
             form.setValue(name, values[name], { shouldValidate: form.formState.isSubmitted });
           }
         }}

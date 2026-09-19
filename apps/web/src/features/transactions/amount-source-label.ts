@@ -4,18 +4,25 @@ import { useCurrencyCodes } from '@/features/currencies/queries';
 import { formatMoney, formatPercentage } from '@/lib/money';
 import type { Transaction } from './queries';
 
-type PercentageOf = Pick<Transaction, 'percentage' | 'percentageBase' | 'currencyId'>;
+type AmountSource = Pick<Transaction, 'percentage' | 'percentageBase' | 'roundBalanceTo' | 'currencyId'>;
 
 /**
- * What an amount worked out as a percentage was of: "5% of $12,000.50" for a base amount, and for
- * the balance "3% of the balance of Card" — or just "3% of the balance" where the account's name
- * shows already. Null for an amount that was simply typed.
+ * What an amount that wasn't typed was worked out from: "5% of $12,000.50" for a base amount; for
+ * the balance, "3% of the balance of Card" or "Rounds the balance of Card to 100" — or, where the
+ * account's name shows already, just "3% of the balance", "Rounds the balance to 100". Null for an
+ * amount that was simply typed.
  */
-export function usePercentageLabel(): (transaction: PercentageOf, accountName?: string) => string | null {
+export function useAmountSourceLabel(): (transaction: AmountSource, accountName?: string) => string | null {
   const { t, i18n } = useTranslation();
   const currencyCodes = useCurrencyCodes();
   return useCallback(
-    (transaction: PercentageOf, accountName?: string) => {
+    (transaction: AmountSource, accountName?: string) => {
+      if (transaction.roundBalanceTo) {
+        const step = new Intl.NumberFormat(i18n.language).format(transaction.roundBalanceTo);
+        return accountName === undefined
+          ? t('transactions.roundsItsBalance', { step })
+          : t('transactions.roundsBalanceOf', { step, account: accountName });
+      }
       if (!transaction.percentage) {
         return null;
       }

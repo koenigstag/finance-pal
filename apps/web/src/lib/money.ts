@@ -1,7 +1,15 @@
-import { isPercentageInRange, parseMoneyInput, percentageSchema } from '@ft/shared-contracts';
+import {
+  convertMoney,
+  isPercentageInRange,
+  parseMoneyInput,
+  percentageSchema,
+  percentOf,
+  roundBalanceAmount,
+} from '@ft/shared-contracts';
 
-// Shared with the API, whose external endpoints read amounts other apps send the same way.
-export { parseMoneyInput };
+// Shared with the API: its external endpoints read amounts other apps send the same way, and it
+// works percentages and roundings out to the same cent the app does.
+export { convertMoney, parseMoneyInput, percentOf, roundBalanceAmount };
 
 /**
  * Turns a typed percentage into the API's form ("3,5" → "3.5"), or null unless it's above zero, at
@@ -42,49 +50,6 @@ export function sumMoney(amounts: string[]): string {
   const whole = (magnitude / factor).toString();
   const fraction = scale > 0 ? `.${(magnitude % factor).toString().padStart(scale, '0')}` : '';
   return `${total < 0n ? '-' : ''}${whole}${fraction}`;
-}
-
-/**
- * An amount in one currency valued in another: `amount` times `rate`, rounded to the cent (half
- * away from zero, as money rounding is read). Integer arithmetic throughout — a rate has up to
- * eight decimals, which a float would already be approximating.
- */
-export function convertMoney(amount: string, rate: string): string {
-  const [value, valueScale] = toUnits(amount);
-  const [factor, factorScale] = toUnits(rate);
-  return roundToCents(value * factor, valueScale + factorScale);
-}
-
-/**
- * `percentage` per cent of an amount, whatever its sign — 3.5% of a -1234.00 balance is 43.19 —
- * rounded to the cent as convertMoney rounds.
- */
-export function percentOf(amount: string, percentage: string): string {
-  const [value, valueScale] = toUnits(amount);
-  const [rate, rateScale] = toUnits(percentage);
-  // Per cent: two more decimals than the rate is written with.
-  return roundToCents((value < 0n ? -value : value) * rate, valueScale + rateScale + 2);
-}
-
-// An integer carrying `scale` decimals, rounded to the cent (half away from zero, as money rounding
-// is read). Taken to tenths of a cent first, so the last digit is the one to round on.
-function roundToCents(units: bigint, scale: number): string {
-  const negative = units < 0n;
-  const magnitude = negative ? -units : units;
-  const shift = scale - 3;
-  const tenths = shift <= 0 ? magnitude * 10n ** BigInt(-shift) : magnitude / 10n ** BigInt(shift);
-  const cents = (tenths + 5n) / 10n;
-  const fraction = (cents % 100n).toString().padStart(2, '0');
-  return `${negative && cents > 0n ? '-' : ''}${cents / 100n}.${fraction}`;
-}
-
-// A decimal string as an integer and the number of decimals it carried.
-function toUnits(input: string): [bigint, number] {
-  const trimmed = input.trim();
-  const negative = trimmed.startsWith('-');
-  const [whole, fraction = ''] = trimmed.replace(/^[-+]/, '').split('.');
-  const units = BigInt(`${whole || '0'}${fraction}`);
-  return [negative ? -units : units, fraction.length];
 }
 
 /** An amount the API will accept for a transaction: well-formed and above zero. */
