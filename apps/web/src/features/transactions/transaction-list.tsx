@@ -43,9 +43,18 @@ export function TransactionList({ transactions, accounts, categories, rules, onS
   const planned = transactions.filter((transaction) => new Date(transaction.date).getTime() > now);
   const happened = transactions.filter((transaction) => new Date(transaction.date).getTime() <= now);
 
-  const renderDays = (items: Transaction[], isPlanned: boolean) =>
-    groupByDay(items).map(({ day, items: dayItems }) => (
-      <section key={`${isPlanned ? 'planned' : 'happened'}-${day}`} className="flex flex-col gap-1" data-day={day}>
+  const renderDays = (items: Transaction[], isPlanned: boolean) => {
+    const days = groupByDay(items);
+    return days.map(({ day, items: dayItems }, index) => (
+      <section
+        key={`${isPlanned ? 'planned' : 'happened'}-${day}`}
+        // A line closes each day off from the next. Not under the last day of a run: below the
+        // planned ones is the separator, itself a rule, and below the rest is the end of the list.
+        // The padding keeps the line clear of the day's own bordered rows, so the two don't read
+        // as one thick edge.
+        className={cn('flex flex-col gap-1', index < days.length - 1 && 'border-b pb-4')}
+        data-day={day}
+      >
         <h3 className={cn('px-1 text-sm font-medium text-muted-foreground', isPlanned && 'opacity-60')}>
           {dayFormat.format(dayItems[0].dateValue)}
         </h3>
@@ -65,6 +74,7 @@ export function TransactionList({ transactions, accounts, categories, rules, onS
         </ul>
       </section>
     ));
+  };
 
   return (
     <div className="flex flex-col gap-4">
