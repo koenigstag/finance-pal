@@ -108,7 +108,8 @@ function TransactionRow({ transaction, planned, accountsById, categoriesById, ru
   const currencyCodes = useCurrencyCodes();
   const repeatLabel = useRepeatLabel();
   // A planned occurrence stands for its series, so it says how often that repeats, on a line of
-  // its own; anything else from a series only carries the mark by its name.
+  // its own; another row still to come carries the mark by its name. Once one is recorded it says
+  // nothing of the series: what happened happened, however it came about.
   const repeats = planned && rule ? repeatLabel(repeatOf(rule)) : null;
   const account = accountsById.get(transaction.accountId);
   const toAccount = transaction.toAccountId ? accountsById.get(transaction.toAccountId) : undefined;
@@ -141,7 +142,7 @@ function TransactionRow({ transaction, planned, accountsById, categoriesById, ru
       <div className="min-w-0 flex-1">
         <p className="flex items-center gap-1.5 truncate font-medium">
           {title}
-          {transaction.recurringRuleId && !repeats && (
+          {planned && transaction.recurringRuleId && !repeats && (
             <RepeatIcon className="size-3.5 shrink-0 text-muted-foreground" aria-label={t('transactions.recurring')} />
           )}
         </p>

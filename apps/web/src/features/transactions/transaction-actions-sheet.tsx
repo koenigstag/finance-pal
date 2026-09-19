@@ -22,7 +22,7 @@ import { cn } from '@/lib/utils';
 import { filedUnder } from './filed-under';
 import type { RecurringRule, Transaction } from './queries';
 import { repeatOf, useRepeatLabel } from './repeat';
-import { isPlannedOccurrence } from './transaction-form-model';
+import { isAhead, isPlannedOccurrence } from './transaction-form-model';
 
 export type TransactionAction = 'edit' | 'date' | 'add-now' | 'skip' | 'duplicate' | 'delete';
 
@@ -77,6 +77,9 @@ export function TransactionActionsSheet({
   const currencyCodes = useCurrencyCodes();
   const repeatLabel = useRepeatLabel();
 
+  // While a transaction is still to come, where it came from is part of what it is, so a series
+  // shows; once it's recorded it stands on its own, whatever wrote it.
+  const ahead = !!transaction && isAhead(transaction.date);
   // Only the occurrence a running series waits on: the date it stands for is the one that can be
   // brought forward or passed over.
   const plannedOccurrence = !!transaction && isPlannedOccurrence(transaction, rule);
@@ -132,7 +135,7 @@ export function TransactionActionsSheet({
                     <span className="truncate">
                       {isTransfer ? t('transactions.types.transfer') : (filed?.name ?? t('transactions.noCategory'))}
                     </span>
-                    {transaction.recurringRuleId && !rule && (
+                    {ahead && transaction.recurringRuleId && !rule && (
                       <RepeatIcon className="size-4 shrink-0 text-muted-foreground" aria-label={t('transactions.recurring')} />
                     )}
                   </DialogTitle>
@@ -147,7 +150,7 @@ export function TransactionActionsSheet({
                           year: 'numeric',
                         }).format(new Date(transaction.date))}
                       </p>
-                      {rule && (
+                      {ahead && rule && (
                         <p className="flex min-w-0 items-center gap-1">
                           <RepeatIcon aria-hidden className="size-3.5 shrink-0" />
                           <span className="truncate">{repeatLabel(repeatOf(rule))}</span>

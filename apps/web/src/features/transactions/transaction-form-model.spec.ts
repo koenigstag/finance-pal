@@ -2,6 +2,7 @@ import { describe, expect, it } from 'vitest';
 import type { RecurringRule, Transaction } from './queries';
 import {
   defaultTransactionFormValues,
+  isAhead,
   isPlannedDay,
   isPlannedOccurrence,
   pickDefaultAccountId,
@@ -183,6 +184,14 @@ describe('isPlannedDay', () => {
     expect(isPlannedDay(new Date(2026, 8, 17, 23, 59).toISOString(), now)).toBe(false);
     expect(isPlannedDay(new Date(2026, 8, 16, 12).toISOString(), now)).toBe(false);
     expect(isPlannedDay(new Date(2026, 8, 18, 0, 0).toISOString(), now)).toBe(true);
+  });
+});
+
+describe('isAhead', () => {
+  it('goes by the clock: what is dated later today has still to happen', () => {
+    expect(isAhead(new Date(2026, 8, 17, 23, 59).toISOString(), now)).toBe(true);
+    expect(isAhead(new Date(2026, 8, 17, 15, 0).toISOString(), now)).toBe(false);
+    expect(isAhead(null, now)).toBe(false);
   });
 });
 
