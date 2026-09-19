@@ -18,6 +18,7 @@ import { capitalizeFirst } from '@/lib/text';
 import { cn } from '@/lib/utils';
 import { useRecurringRules, useTransactionPages, type RecurringRule, type Transaction, type TransactionFilters } from './queries';
 import { DeleteTransactionDialog } from './delete-transaction-dialog';
+import { PlannedOccurrenceDialog, type PlannedOccurrenceAction } from './planned-occurrence-dialog';
 import { TransactionActionsSheet, type TransactionAction } from './transaction-actions-sheet';
 import { TransactionDateSheet } from './transaction-date-sheet';
 import { TransactionDialog } from './transaction-dialog';
@@ -53,6 +54,11 @@ export function TransactionsPage() {
   const [sheet, setSheet] = useState<{ open: boolean; transaction?: Transaction }>({ open: false });
   const [deleting, setDeleting] = useState<{ open: boolean; transaction?: Transaction }>({ open: false });
   const [dating, setDating] = useState<{ open: boolean; transaction?: Transaction }>({ open: false });
+  // Add now or Skip, for the occurrence a series is waiting on.
+  const [settling, setSettling] = useState<{ open: boolean; action: PlannedOccurrenceAction; transaction?: Transaction }>({
+    open: false,
+    action: 'skip',
+  });
   const [filtersOpen, setFiltersOpen] = useState(false);
 
   // Filters live in the URL, so a reload, the back button or a shared link keep them.
@@ -122,6 +128,8 @@ export function TransactionsPage() {
       setDialog(rule ? { open: true, rule } : { open: true, transaction });
     } else if (action === 'date') {
       setDating({ open: true, transaction });
+    } else if (action === 'add-now' || action === 'skip') {
+      setSettling({ open: true, action, transaction });
     } else if (action === 'duplicate') {
       setDialog({ open: true, template: transaction });
     } else {
@@ -242,6 +250,14 @@ export function TransactionsPage() {
         transaction={deleting.transaction}
         open={deleting.open}
         onOpenChange={(open) => setDeleting((current) => ({ ...current, open }))}
+      />
+
+      <PlannedOccurrenceDialog
+        groupId={group.id}
+        transaction={settling.transaction}
+        action={settling.action}
+        open={settling.open}
+        onOpenChange={(open) => setSettling((current) => ({ ...current, open }))}
       />
 
       <TransactionDateSheet

@@ -260,6 +260,9 @@ export const en = {
     actions: {
       duplicate: 'Duplicate',
       date: 'Date',
+      // Only on the occurrence a running series is waiting on.
+      addNow: 'Add now',
+      skip: 'Skip',
     },
     dateSheet: {
       previousMonth: 'Previous month',
@@ -270,6 +273,14 @@ export const en = {
       title: 'Delete this transaction?',
       description: 'Account balances will be recalculated.',
       occurrence: 'Only this date is skipped; the rest of the series stays.',
+    },
+    addNowConfirm: {
+      title: 'Add this transaction now?',
+      description: 'It counts from this moment on, and the series plans the date after it.',
+    },
+    skipConfirm: {
+      title: 'Skip this date?',
+      description: 'Nothing is recorded for it, and the series carries on with the date after it.',
     },
     filters: {
       title: 'Filters',

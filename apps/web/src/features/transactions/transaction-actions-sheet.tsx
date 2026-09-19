@@ -1,10 +1,12 @@
 import {
   ArrowRightIcon,
   CalendarDaysIcon,
+  CheckIcon,
   ChevronRightIcon,
   CopyIcon,
   PencilIcon,
   RepeatIcon,
+  SkipForwardIcon,
   Trash2Icon,
   type LucideIcon,
 } from 'lucide-react';
@@ -20,8 +22,9 @@ import { cn } from '@/lib/utils';
 import { filedUnder } from './filed-under';
 import type { RecurringRule, Transaction } from './queries';
 import { repeatOf, useRepeatLabel } from './repeat';
+import { isPlannedOccurrence } from './transaction-form-model';
 
-export type TransactionAction = 'edit' | 'date' | 'duplicate' | 'delete';
+export type TransactionAction = 'edit' | 'date' | 'add-now' | 'skip' | 'duplicate' | 'delete';
 
 interface TransactionActionsSheetProps {
   transaction?: Transaction;
@@ -49,6 +52,10 @@ interface ActionItem {
  * What can be done with a transaction, opened by tapping its row: a bottom sheet on phones (the
  * dialog's small-screen layout), a dialog from sm up. The same actions serve every transaction:
  * what editing or moving one reaches follows from its date (see TransactionDialog).
+ *
+ * The occurrence a running series is waiting on leads with two of its own: Add now records it
+ * ahead of its date, Skip passes that date over, and either settles it so the series can plan the
+ * one after (see PlannedOccurrenceDialog).
  */
 export function TransactionActionsSheet({
   transaction,
@@ -66,7 +73,17 @@ export function TransactionActionsSheet({
   const currencyCodes = useCurrencyCodes();
   const repeatLabel = useRepeatLabel();
 
+  // Only the occurrence a running series waits on: the date it stands for is the one that can be
+  // brought forward or passed over.
+  const plannedOccurrence = !!transaction && isPlannedOccurrence(transaction, rule);
+
   const actions: ActionItem[] = [];
+  if (plannedOccurrence && canUpdate) {
+    actions.push({ action: 'add-now', label: t('transactions.actions.addNow'), icon: CheckIcon });
+  }
+  if (plannedOccurrence && canDelete) {
+    actions.push({ action: 'skip', label: t('transactions.actions.skip'), icon: SkipForwardIcon });
+  }
   if (canUpdate) {
     actions.push({ action: 'edit', label: t('common.edit'), icon: PencilIcon });
     actions.push({ action: 'date', label: t('transactions.actions.date'), icon: CalendarDaysIcon });
