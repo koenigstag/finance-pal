@@ -208,16 +208,21 @@ export const en = {
     // A series' date: when it next produces a transaction.
     nextDate: 'Next date',
     advanced: 'Advanced',
+    // The checkbox under the Amount sheet's Advanced that brings up the percentage's fields.
+    percentageMode: 'Calculate as a percentage',
+    percentageModeHint: 'Of the account balance or of an amount you enter',
     percentage: 'Percentage',
     percentageBase: 'Base amount',
     percentageBaseHint: 'Leave empty to use the balance of {{account}}',
     // Editing one the balance on the account's card already includes.
     percentageBaseHintWithout: 'Leave empty to use the balance of {{account}}, without this transaction',
-    // Lines under the amount on the form's Amount card.
+    // Lines under the amount on the form's Amount card, and in a transaction's actions sheet.
     receivedAmount: 'Received {{amount}}',
     percentageOfBalance: '{{percentage}} of the balance of {{account}}',
     percentageOfBase: '{{percentage}} of {{base}}',
-    // Under a percentage of the balance on the Amount card, while that balance is still to come.
+    // A list row's, under the name of the account whose balance it is.
+    percentageOfItsBalance: '{{percentage}} of the balance',
+    // Under a percentage of the balance, while that balance is still to come.
     percentageOnTheDay: 'Recalculated on the day',
     percentageSeriesOnTheDay: 'Recalculated on each date',
     note: 'Note',

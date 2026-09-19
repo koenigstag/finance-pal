@@ -1,11 +1,20 @@
 import { zodResolver } from '@hookform/resolvers/zod';
-import { useMemo, useRef, useState, type FocusEvent } from 'react';
+import { useEffect, useMemo, useRef, useState, type FocusEvent } from 'react';
 import { useForm, useWatch } from 'react-hook-form';
 import { useTranslation } from 'react-i18next';
 import { Accordion, AccordionContent, AccordionItem, AccordionTrigger } from '@/components/ui/accordion';
 import { Button } from '@/components/ui/button';
+import { Checkbox } from '@/components/ui/checkbox';
 import { Dialog, DialogContent, DialogFooter, DialogHeader, DialogTitle } from '@/components/ui/dialog';
-import { Field, FieldDescription, FieldError, FieldGroup, FieldLabel } from '@/components/ui/field';
+import {
+  Field,
+  FieldContent,
+  FieldDescription,
+  FieldError,
+  FieldGroup,
+  FieldLabel,
+  FieldTitle,
+} from '@/components/ui/field';
 import { Input } from '@/components/ui/input';
 import type { Account } from '@/features/accounts/queries';
 import { useCurrencyCodes } from '@/features/currencies/queries';
@@ -41,14 +50,16 @@ interface AmountSheetProps {
 
 /**
  * A transaction's amounts, opened from the form's Amount card: the amount itself — a transfer
- * between currencies has two — and, under Advanced, a percentage to work it out from, of an
- * optional base amount or else of the account's balance.
+ * between currencies has two — and, under Advanced, a checkbox to work it out as a percentage
+ * instead, of an optional base amount or else of the account's balance.
  */
 export function AmountSheet({ open, onOpenChange, sides, accounts, editing, values, onDone }: AmountSheetProps) {
   const { t, i18n } = useTranslation();
   const currencyCodes = useCurrencyCodes();
   // Open when it holds what the amount comes from.
   const [advancedOpen, setAdvancedOpen] = useState(values.percentage !== '');
+  // Off unless the amount already is a percentage: its fields only show once asked for.
+  const [percentageOn, setPercentageOn] = useState(values.percentage !== '');
 
   const schema = useMemo(
     () =>
@@ -84,8 +95,36 @@ export function AmountSheet({ open, onOpenChange, sides, accounts, editing, valu
     }
   };
 
+  // Switched on, typing goes on at the percentage. Switched off, the amount is typed again: the
+  // percentage and its base go, and the figure they came to stays, to keep or to retype.
+  const focusPercentage = useRef(false);
+  const switchPercentage = (on: boolean) => {
+    setPercentageOn(on);
+    if (on) {
+      focusPercentage.current = true;
+      return;
+    }
+    form.setValue('percentage', '');
+    form.setValue('percentageBase', '');
+    form.clearErrors(['percentage', 'percentageBase']);
+  };
+  // Once its field has rendered, and only when ticked by hand: a sheet opening on a percentage
+  // already there leaves the focus where the dialog puts it.
+  useEffect(() => {
+    if (percentageOn && focusPercentage.current) {
+      focusPercentage.current = false;
+      form.setFocus('percentage');
+    }
+  }, [percentageOn, form]);
+
   const onSubmit = form.handleSubmit(
     (valid) => {
+      // Asked for, a percentage has to be there; an amount that's simply typed has the box unticked.
+      if (percentageOn && !valid.percentage.trim()) {
+        form.setError('percentage', { message: t('validation.percentage') }, { shouldFocus: true });
+        setAdvancedOpen(true);
+        return;
+      }
       onDone(valid);
       onOpenChange(false);
     },
@@ -167,51 +206,69 @@ export function AmountSheet({ open, onOpenChange, sides, accounts, editing, valu
                     than paragraphs of prose. */}
                 <AccordionContent className="h-auto pt-2 pb-0 [&_p:not(:last-child)]:mb-0">
                   <FieldGroup className="gap-4">
-                    <Field data-invalid={!!errors.percentage}>
-                      <FieldLabel htmlFor="amount-sheet-percentage">{t('transactions.percentage')}</FieldLabel>
-                      <div className="relative">
-                        <Input
-                          id="amount-sheet-percentage"
-                          inputMode="decimal"
-                          autoComplete="off"
-                          className="pr-7"
-                          aria-invalid={!!errors.percentage}
-                          {...form.register('percentage', { onChange: recalculate })}
+                    {/* A card that ticks as a whole; the percentage's fields only show while it's ticked. */}
+                    <FieldLabel htmlFor="amount-sheet-percentage-on">
+                      <Field orientation="horizontal">
+                        <Checkbox
+                          id="amount-sheet-percentage-on"
+                          checked={percentageOn}
+                          onCheckedChange={(checked) => switchPercentage(checked === true)}
                         />
-                        <span
-                          className="pointer-events-none absolute inset-y-0 right-2.5 flex items-center text-muted-foreground"
-                          aria-hidden
-                        >
-                          %
-                        </span>
-                      </div>
-                      <FieldError errors={[errors.percentage]} />
-                    </Field>
-                    {/* Optional: what the percentage is of, in the account's currency, when it isn't
-                        the account's balance — the income a tax is a share of, say. */}
-                    <Field data-invalid={!!errors.percentageBase}>
-                      <FieldLabel htmlFor="amount-sheet-percentageBase">
-                        {withCurrency(t('transactions.percentageBase'), sides.accountId)}
-                      </FieldLabel>
-                      <Input
-                        id="amount-sheet-percentageBase"
-                        inputMode="decimal"
-                        autoComplete="off"
-                        aria-invalid={!!errors.percentageBase}
-                        {...form.register('percentageBase', { onChange: recalculate })}
-                      />
-                      {account && (
-                        <FieldDescription>
-                          {t(
-                            balanceBase(account, editing) === account.balance
-                              ? 'transactions.percentageBaseHint'
-                              : 'transactions.percentageBaseHintWithout',
-                            { account: account.name },
+                        <FieldContent>
+                          <FieldTitle>{t('transactions.percentageMode')}</FieldTitle>
+                          <FieldDescription>{t('transactions.percentageModeHint')}</FieldDescription>
+                        </FieldContent>
+                      </Field>
+                    </FieldLabel>
+                    {percentageOn && (
+                      <>
+                        <Field data-invalid={!!errors.percentage}>
+                          <FieldLabel htmlFor="amount-sheet-percentage">{t('transactions.percentage')}</FieldLabel>
+                          <div className="relative">
+                            <Input
+                              id="amount-sheet-percentage"
+                              inputMode="decimal"
+                              autoComplete="off"
+                              className="pr-7"
+                              aria-invalid={!!errors.percentage}
+                              {...form.register('percentage', { onChange: recalculate })}
+                            />
+                            <span
+                              className="pointer-events-none absolute inset-y-0 right-2.5 flex items-center text-muted-foreground"
+                              aria-hidden
+                            >
+                              %
+                            </span>
+                          </div>
+                          <FieldError errors={[errors.percentage]} />
+                        </Field>
+                        {/* Optional: what the percentage is of, in the account's currency, when it
+                            isn't the account's balance — the income a tax is a share of, say. */}
+                        <Field data-invalid={!!errors.percentageBase}>
+                          <FieldLabel htmlFor="amount-sheet-percentageBase">
+                            {withCurrency(t('transactions.percentageBase'), sides.accountId)}
+                          </FieldLabel>
+                          <Input
+                            id="amount-sheet-percentageBase"
+                            inputMode="decimal"
+                            autoComplete="off"
+                            aria-invalid={!!errors.percentageBase}
+                            {...form.register('percentageBase', { onChange: recalculate })}
+                          />
+                          {account && (
+                            <FieldDescription>
+                              {t(
+                                balanceBase(account, editing) === account.balance
+                                  ? 'transactions.percentageBaseHint'
+                                  : 'transactions.percentageBaseHintWithout',
+                                { account: account.name },
+                              )}
+                            </FieldDescription>
                           )}
-                        </FieldDescription>
-                      )}
-                      <FieldError errors={[errors.percentageBase]} />
-                    </Field>
+                          <FieldError errors={[errors.percentageBase]} />
+                        </Field>
+                      </>
+                    )}
                   </FieldGroup>
                 </AccordionContent>
               </AccordionItem>
