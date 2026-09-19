@@ -403,7 +403,8 @@ export function TransactionDialog({
               </div>
               <Field data-invalid={!!errors.note}>
                 <FieldLabel htmlFor="transaction-note">{t('transactions.note')}</FieldLabel>
-                <Textarea id="transaction-note" rows={2} {...form.register('note')} />
+                {/* Italic while it's typed too, so it looks the way it will read in the list. */}
+                <Textarea id="transaction-note" rows={2} className="italic" {...form.register('note')} />
                 <FieldError errors={[errors.note]} />
               </Field>
             </FieldGroup>

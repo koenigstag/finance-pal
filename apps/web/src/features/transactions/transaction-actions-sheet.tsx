@@ -168,7 +168,10 @@ export function TransactionActionsSheet({
                   currencyDisplay: 'narrowSymbol',
                 })}
               </p>
-              {transaction.note && <p className="text-left text-sm break-words whitespace-pre-line">{transaction.note}</p>}
+              {/* Italic, as a note reads everywhere: in the list, and in the field it's typed in. */}
+              {transaction.note && (
+                <p className="text-left text-sm break-words whitespace-pre-line italic">{transaction.note}</p>
+              )}
             </DialogHeader>
             <ul className="-mx-2 flex flex-col">
               {actions.map(({ action, label, icon: Icon, tone }) => (
