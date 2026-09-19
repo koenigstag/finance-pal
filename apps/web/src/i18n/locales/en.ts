@@ -263,6 +263,8 @@ export const en = {
       // Only on the occurrence a running series is waiting on.
       addNow: 'Add now',
       skip: 'Skip',
+      // Delete, on that same occurrence: it's the series that goes.
+      deleteSeries: 'Delete series',
     },
     dateSheet: {
       previousMonth: 'Previous month',
@@ -273,6 +275,8 @@ export const en = {
       title: 'Delete this transaction?',
       description: 'Account balances will be recalculated.',
       occurrence: 'Only this date is skipped; the rest of the series stays.',
+      seriesTitle: 'Delete this series?',
+      series: 'It stops repeating, and the transaction it has planned goes with it. What it already recorded stays.',
     },
     addNowConfirm: {
       title: 'Add this transaction now?',

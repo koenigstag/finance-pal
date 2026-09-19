@@ -38,6 +38,8 @@ interface TransactionActionsSheetProps {
   canUpdate: boolean;
   canCreate: boolean;
   canDelete: boolean;
+  // Deleting a planned occurrence deletes its series, which is a right of its own.
+  canDeleteSeries: boolean;
   onAction: (action: TransactionAction, transaction: Transaction) => void;
 }
 
@@ -55,7 +57,8 @@ interface ActionItem {
  *
  * The occurrence a running series is waiting on leads with two of its own: Add now records it
  * ahead of its date, Skip passes that date over, and either settles it so the series can plan the
- * one after (see PlannedOccurrenceDialog).
+ * one after (see PlannedOccurrenceDialog). Since Skip is what removing that one date means, Delete
+ * there is the series': it ends the repetition and takes the planned transaction with it.
  */
 export function TransactionActionsSheet({
   transaction,
@@ -67,6 +70,7 @@ export function TransactionActionsSheet({
   canUpdate,
   canCreate,
   canDelete,
+  canDeleteSeries,
   onAction,
 }: TransactionActionsSheetProps) {
   const { t, i18n } = useTranslation();
@@ -95,10 +99,11 @@ export function TransactionActionsSheet({
       icon: CopyIcon,
     });
   }
-  if (canDelete) {
+  if (plannedOccurrence ? canDeleteSeries : canDelete) {
     actions.push({
       action: 'delete',
-      label: t('common.delete'),
+      // Named for what it reaches, so a series is never ended by a button reading "Delete".
+      label: t(plannedOccurrence ? 'transactions.actions.deleteSeries' : 'common.delete'),
       icon: Trash2Icon,
       tone: 'text-destructive',
     });

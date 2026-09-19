@@ -261,6 +261,7 @@ export const ru: Catalog<typeof en> = {
       date: 'Дата',
       addNow: 'Добавить сейчас',
       skip: 'Пропустить',
+      deleteSeries: 'Удалить серию',
     },
     dateSheet: {
       previousMonth: 'Предыдущий месяц',
@@ -271,6 +272,8 @@ export const ru: Catalog<typeof en> = {
       title: 'Удалить операцию?',
       description: 'Балансы счетов будут пересчитаны.',
       occurrence: 'Будет пропущена только эта дата, остальная серия сохранится.',
+      seriesTitle: 'Удалить серию?',
+      series: 'Повторы прекратятся, запланированная операция будет удалена вместе с серией. Уже записанные останутся.',
     },
     addNowConfirm: {
       title: 'Добавить операцию сейчас?',

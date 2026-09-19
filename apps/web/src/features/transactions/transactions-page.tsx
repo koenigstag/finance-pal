@@ -115,6 +115,8 @@ export function TransactionsPage() {
   const canCreate = ability.can('create', 'Transaction');
   const canUpdate = ability.can('update', 'Transaction');
   const canDelete = ability.can('delete', 'Transaction');
+  // Delete on a planned occurrence ends its series (see TransactionActionsSheet).
+  const canDeleteSeries = ability.can('delete', 'RecurringRule');
   // The running series a transaction is an occurrence of, if any.
   const ruleOf = (transaction?: Transaction) =>
     transaction?.recurringRuleId ? rulesById.get(transaction.recurringRuleId) : undefined;
@@ -242,12 +244,14 @@ export function TransactionsPage() {
         canUpdate={canUpdate}
         canCreate={canCreate}
         canDelete={canDelete}
+        canDeleteSeries={canDeleteSeries}
         onAction={onAction}
       />
 
       <DeleteTransactionDialog
         groupId={group.id}
         transaction={deleting.transaction}
+        rule={ruleOf(deleting.transaction)}
         open={deleting.open}
         onOpenChange={(open) => setDeleting((current) => ({ ...current, open }))}
       />
