@@ -36,6 +36,7 @@ export const en = {
     back: 'Back',
     delete: 'Delete',
     edit: 'Edit',
+    ratesPublished: 'Rates published {{date}}',
     comingSoon: {
       title: 'Coming soon',
       description: 'This section is being built.',
@@ -111,8 +112,7 @@ export const en = {
       assets: 'Assets',
       debts: 'Debts',
       total: 'Total',
-      ratesMissing: 'No exchange rates right now, so these currencies cannot be totalled together.',
-      ratesOn: 'Rates published {{date}}',
+      ratesMissing: 'Add the missing exchange rates in settings to total these together.',
     },
     groups: {
       regular: 'Regular',
@@ -430,13 +430,14 @@ export const en = {
     },
     rates: {
       title: 'Exchange rates',
-      description: 'Kept by hand, and used only where a total spans currencies. One unit of each currency, valued in {{code}}.',
+      description: "Fetched daily for the currencies the rate provider quotes; add your own only for the ones it doesn't. One unit of each currency, valued in {{code}}.",
       empty: 'No rates yet.',
       rate: '1 {{code}} in {{base}}',
+      fetchedRate: '1 {{code}} in {{base}}, from the rate provider',
       remove: 'Remove {{code}}',
       add: 'Add a currency',
       addAction: 'Add',
-      note: 'Nothing updates these on its own yet; fetching them daily is for later.',
+      unavailable: "The rate provider can't be reached right now, so these are only your own rates.",
     },
     appearance: {
       title: 'Appearance',

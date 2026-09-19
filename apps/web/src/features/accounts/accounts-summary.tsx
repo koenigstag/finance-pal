@@ -1,6 +1,7 @@
 import { useMemo, type ReactNode } from 'react';
 import { useTranslation } from 'react-i18next';
-import { useCurrencyCodes, useExchangeRates, type ExchangeRates } from '@/features/currencies/queries';
+import { useCurrencyCodes, useRates } from '@/features/currencies/queries';
+import { RatesNote } from '@/features/currencies/rates-note';
 import { useProfile } from '@/features/profile/queries';
 import { convertMoney, formatMoney, moneySign, sumMoney } from '@/lib/money';
 import { signColor } from '@/lib/money-colors';
@@ -10,8 +11,9 @@ import type { Account } from './queries';
 // After the main currency, the ones most likely to be held; anything else follows by code.
 const CURRENCY_ORDER = ['USD', 'EUR'];
 
-// Currencies are added together only through the rates the API fetched from a provider; without
-// one for every currency on show, the converted row is left out rather than guessed at.
+// Currencies are added together through the rates fetched from a provider, or the user's own for
+// the ones it doesn't quote; without one for every currency on show, the converted row is left
+// out rather than guessed at.
 interface CurrencyRow {
   currencyId: number;
   code: string | undefined;
@@ -63,12 +65,14 @@ export function AccountsSummary({ accounts }: { accounts: Account[] }) {
   }, [accounts, currencyCodes, profile.data?.mainCurrencyId]);
 
   // In the base currency: each column added up across the currencies, and the two against each
-  // other. Missing a rate for any currency on show, there is no honest total to give — which
-  // covers a provider nobody could reach as much as a currency nobody quotes.
-  const exchangeRates = useExchangeRates();
+  // other. Missing a rate for any currency on show, there is no honest total to give.
+  const { rates, fetched } = useRates();
   // The base currency is in here too, at 1, so its own row needs no special case.
-  const rates = exchangeRates.data?.rates ?? {};
-  const rateFor = (row: CurrencyRow) => (row.code ? rates[row.code] : undefined);
+  const rateFor = (row: CurrencyRow) => (row.code ? rates[row.code]?.rate : undefined);
+  // Whether any fetched rate went into the total, and so whether to say where they came from.
+  const usesFetched = rows.some(
+    (row) => row.currencyId !== profile.data?.mainCurrencyId && row.code && rates[row.code]?.source === 'provider',
+  );
   const converted = rows.every((row) => rateFor(row))
     ? {
         assets: sumMoney(rows.map((row) => convertMoney(row.assets, rateFor(row) ?? '1'))),
@@ -127,34 +131,7 @@ export function AccountsSummary({ accounts }: { accounts: Account[] }) {
           )
         }
       />
-      {converted && exchangeRates.data && <RatesNote rates={exchangeRates.data} />}
-    </div>
-  );
-}
-
-/**
- * Where the rates came from and when they were published. Not a nicety: open.er-api's terms
- * require its credit on screen wherever its rates are, and which provider answered is only known
- * at request time, so the response carries the credit and this renders whatever came back.
- */
-function RatesNote({ rates }: { rates: ExchangeRates }) {
-  const { t, i18n } = useTranslation();
-  // Parsed as UTC midnight, so it is formatted in UTC too — west of Greenwich it would
-  // otherwise show the day before.
-  const published = new Date(`${rates.publishedOn}T00:00:00Z`).toLocaleDateString(i18n.language, {
-    dateStyle: 'medium',
-    timeZone: 'UTC',
-  });
-
-  // One line each rather than joined in a row, so a long credit can't push the date off a phone.
-  return (
-    <div className="flex flex-col text-xs text-muted-foreground">
-      <p className="truncate">{t('accounts.summary.ratesOn', { date: published })}</p>
-      {rates.attribution && (
-        <a href={rates.attribution.url} target="_blank" rel="noreferrer" className="truncate underline">
-          {rates.attribution.text}
-        </a>
-      )}
+      {converted && usesFetched && fetched.data && <RatesNote rates={fetched.data} />}
     </div>
   );
 }
