@@ -1,7 +1,9 @@
 import { z } from 'zod';
 import { TRANSACTION_TYPES, isRoundBalanceStep, type RoundBalanceStep } from '@ft/shared-contracts';
 import { deviceTimezone, fromDayInput, toDayInput, todayInput } from '@/lib/dates';
+import type { Conversion } from '@/features/currencies/rates';
 import {
+  convertMoney,
   isValidAmountInput,
   parseMoneyInput,
   parsePercentageInput,
@@ -16,6 +18,12 @@ interface AccountLike {
   id: string;
   currencyId: number;
 }
+
+/**
+ * How the app converts from one currency to another, by their ids, or null when it has no rate for
+ * the pair. Handed in by whoever knows the rates (see conversionBetween); the model only reads it.
+ */
+export type ConversionLookup = (fromCurrencyId: number, toCurrencyId: number) => Conversion | null;
 
 /**
  * The account a new transaction starts on: the one asked for (e.g. the account the list is
@@ -86,6 +94,8 @@ export interface TransactionFormContext {
   // written for it.
   seriesNextDay?: string;
   today?: string;
+  // Without it, what arrives across currencies has to be typed, as before rates were fetched.
+  conversionOf?: ConversionLookup;
 }
 
 type AmountMessages = Pick<TransactionFormMessages, 'amount' | 'percentage' | 'percentageAmount' | 'roundBalanceAmount'>;
@@ -100,6 +110,23 @@ export function needsDestAmount(values: TransactionSides, accounts: AccountLike[
   return !!from && !!to && from.currencyId !== to.currencyId;
 }
 
+/**
+ * How a transfer between these accounts converts what it sends into what arrives: null when it
+ * doesn't cross currencies, or when the app has no rate for the pair and what arrives must be typed.
+ */
+export function transferConversion(
+  values: TransactionSides,
+  accounts: AccountLike[],
+  conversionOf: ConversionLookup | undefined,
+): Conversion | null {
+  if (!conversionOf || !needsDestAmount(values, accounts)) {
+    return null;
+  }
+  const from = accounts.find((account) => account.id === values.accountId) as AccountLike;
+  const to = accounts.find((account) => account.id === values.toAccountId) as AccountLike;
+  return conversionOf(from.currencyId, to.currencyId);
+}
+
 // What's wrong with the amounts, for the form and the Amount sheet alike. Worked out from a
 // percentage or by rounding the balance, the amount isn't typed: what can be wrong then is the
 // percentage, the base amount it's of, or else what they came to. A base amount without a
@@ -107,11 +134,15 @@ export function needsDestAmount(values: TransactionSides, accounts: AccountLike[
 //
 // `scheduled`: dated ahead or repeating. Then an amount from the balance is only what it comes to
 // as things stand, worked out again until its date, so nothing for now is no mistake.
+//
+// What arrives across currencies is typed only to override the rate: left empty, it's converted,
+// so it's only missing when there's no rate to convert by.
 function checkAmounts(
   values: AmountValues & TransactionSides,
   accounts: AccountLike[],
   messages: AmountMessages,
   scheduled: boolean,
+  conversion: Conversion | null,
   ctx: z.RefinementCtx,
 ) {
   const percentage = values.percentage.trim() ? parsePercentageInput(values.percentage) : undefined;
@@ -125,7 +156,8 @@ function checkAmounts(
     const message = percentage ? messages.percentageAmount : step ? messages.roundBalanceAmount : messages.amount;
     ctx.addIssue({ code: z.ZodIssueCode.custom, path: ['amount'], message });
   }
-  if (needsDestAmount(values, accounts) && !isValidAmountInput(values.destAmount)) {
+  const typedDest = values.destAmount.trim();
+  if (needsDestAmount(values, accounts) && (typedDest ? !isValidAmountInput(typedDest) : !conversion)) {
     ctx.addIssue({ code: z.ZodIssueCode.custom, path: ['destAmount'], message: messages.amount });
   }
 }
@@ -154,17 +186,19 @@ export function transactionFormSchema(
       repeat: z.string(),
     })
     .superRefine((values, ctx) => {
-      const { seriesNextDay, today = todayInput() } = context;
+      const { seriesNextDay, today = todayInput(), conversionOf } = context;
+      const conversion = transferConversion(values, accounts, conversionOf);
       // Dates as yyyy-MM-dd compare as text.
-      checkAmounts(values, accounts, messages, !!values.repeat || values.day > today, ctx);
+      checkAmounts(values, accounts, messages, !!values.repeat || values.day > today, conversion, ctx);
       if (values.type === 'transfer') {
         if (!values.toAccountId) {
           ctx.addIssue({ code: z.ZodIssueCode.custom, path: ['toAccountId'], message: messages.required });
         } else if (values.toAccountId === values.accountId) {
           ctx.addIssue({ code: z.ZodIssueCode.custom, path: ['toAccountId'], message: messages.sameAccount });
         }
-        // A series carries one amount for both sides, which only holds within one currency.
-        if (values.repeat && needsDestAmount(values, accounts)) {
+        // A series converts each occurrence on its day, and only the API can do that: it needs
+        // rates fetched for both currencies, not ones typed by hand, which only the app has.
+        if (values.repeat && needsDestAmount(values, accounts) && !conversion?.fetched) {
           ctx.addIssue({ code: z.ZodIssueCode.custom, path: ['repeat'], message: messages.repeatCurrency });
         }
       }
@@ -178,7 +212,13 @@ export function transactionFormSchema(
  * The Amount sheet's figures, checked for a transaction with these sides — and, `scheduled`, dated
  * ahead or repeating (see checkAmounts).
  */
-export function amountFormSchema(sides: TransactionSides, accounts: AccountLike[], messages: AmountMessages, scheduled = false) {
+export function amountFormSchema(
+  sides: TransactionSides,
+  accounts: AccountLike[],
+  messages: AmountMessages,
+  scheduled = false,
+  conversion: Conversion | null = null,
+) {
   return z
     .object({
       amount: z.string(),
@@ -187,12 +227,15 @@ export function amountFormSchema(sides: TransactionSides, accounts: AccountLike[
       percentageBase: z.string(),
       roundBalanceTo: z.string(),
     })
-    .superRefine((values, ctx) => checkAmounts({ ...values, ...sides }, accounts, messages, scheduled, ctx));
+    .superRefine((values, ctx) => checkAmounts({ ...values, ...sides }, accounts, messages, scheduled, conversion, ctx));
 }
 
 // Amounts start at "0" rather than empty, so the field always shows a number; the inputs select
 // their content on focus, so typing replaces the zero instead of appending to it.
 const EMPTY_AMOUNT = '0';
+// Except what arrives across currencies: empty there means "at the rate", whose figure the field
+// shows in its place, and a zero would read as nothing arriving.
+const AT_THE_RATE = '';
 
 export function defaultTransactionFormValues(defaults: {
   accountId?: string;
@@ -205,7 +248,7 @@ export function defaultTransactionFormValues(defaults: {
     amount: EMPTY_AMOUNT,
     accountId: defaults.accountId ?? '',
     toAccountId: defaults.toAccountId ?? '',
-    destAmount: EMPTY_AMOUNT,
+    destAmount: AT_THE_RATE,
     categoryId: '',
     subcategoryId: '',
     day: todayInput(defaults.now),
@@ -223,7 +266,9 @@ export function transactionToFormValues(transaction: Transaction): TransactionFo
     amount: transaction.amount,
     accountId: transaction.accountId,
     toAccountId: transaction.toAccountId ?? '',
-    destAmount: transaction.destAmount ?? EMPTY_AMOUNT,
+    // A figure converted at a rate isn't shown as typed: saved untouched, it stays the API's to keep,
+    // or to follow the rate while it's planned.
+    destAmount: transaction.destAmountAsOf === null ? (transaction.destAmount ?? AT_THE_RATE) : AT_THE_RATE,
     categoryId: transaction.categoryId ?? '',
     subcategoryId: transaction.subcategoryId ?? '',
     day: toDayInput(transaction.date),
@@ -286,7 +331,7 @@ export function ruleToFormValues(rule: RecurringRule): TransactionFormValues {
     amount: rule.amount,
     accountId: rule.accountId,
     toAccountId: rule.toAccountId ?? '',
-    destAmount: EMPTY_AMOUNT,
+    destAmount: AT_THE_RATE,
     categoryId: rule.categoryId ?? '',
     subcategoryId: rule.subcategoryId ?? '',
     day: toDayInput(nextDateOf(rule)),
@@ -306,8 +351,10 @@ export function ruleToFormValues(rule: RecurringRule): TransactionFormValues {
 export function toTransactionBody(
   values: TransactionFormValues,
   accounts: AccountLike[],
-  existing?: Pick<Transaction, 'date'>,
+  // What arrives stays out of an edit it was converted for; see destAmountFor.
+  existing?: Pick<Transaction, 'date'> & Partial<Pick<Transaction, 'destAmountAsOf'>>,
   now = new Date(),
+  conversionOf?: ConversionLookup,
 ): TransactionBody {
   const account = accounts.find((candidate) => candidate.id === values.accountId);
   if (!account) {
@@ -328,7 +375,7 @@ export function toTransactionBody(
     // Only ever with its category: on its own it would say nothing the API could file.
     subcategoryId: isTransfer || !values.categoryId ? null : values.subcategoryId || null,
     toAccountId: isTransfer ? values.toAccountId : null,
-    destAmount: needsDestAmount(values, accounts) ? requireMoney(values.destAmount) : null,
+    destAmount: destAmountFor(values, accounts, existing, conversionOf),
     // Null, not left out, once cleared: an edit keeps what it doesn't mention.
     percentage,
     // Only ever with its percentage, which without one is of the account's balance.
@@ -517,6 +564,32 @@ export function balanceBase(account: BalanceLike, editing?: Contribution, now = 
     return sumMoney([account.balance, `-${editing.destAmount ?? editing.amount}`]);
   }
   return account.balance;
+}
+
+/**
+ * What a transfer sends as received. A figure typed stands, and no rate overrides it. Otherwise it's
+ * converted: by the API for a pair whose rates were fetched — null asks it to, and on an edit of an
+ * amount it converted, leaving it out lets it keep that, or follow the rate while it's planned — and
+ * by the app for a pair only the user's own rates cover, which the API has no rate for.
+ */
+function destAmountFor(
+  values: TransactionFormValues,
+  accounts: AccountLike[],
+  existing: Partial<Pick<Transaction, 'destAmountAsOf'>> | undefined,
+  conversionOf: ConversionLookup | undefined,
+): string | null | undefined {
+  if (!needsDestAmount(values, accounts)) {
+    return null;
+  }
+  if (isValidAmountInput(values.destAmount)) {
+    return requireMoney(values.destAmount);
+  }
+  const conversion = transferConversion(values, accounts, conversionOf);
+  if (conversion && !conversion.fetched) {
+    const figure = convertMoney(requireMoney(values.amount), conversion.rate);
+    return isValidAmountInput(figure) ? figure : null;
+  }
+  return existing?.destAmountAsOf ? undefined : null;
 }
 
 function requireMoney(input: string): string {

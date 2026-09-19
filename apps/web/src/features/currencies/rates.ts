@@ -53,3 +53,40 @@ export function manualRatesToKeep(
       .map(([code, rate]) => [code, rate.trim()]),
   );
 }
+
+/** How a transfer converts between two currencies, as far as the app can tell. */
+export interface Conversion {
+  /** What one unit of the currency sent costs in the one received, as a decimal string. */
+  rate: string;
+  /**
+   * Both rates were fetched from the provider, so the API can convert the pair itself: on the day,
+   * for a transfer ahead, and each time, for a series. A rate typed by hand only exists here.
+   */
+  fetched: boolean;
+}
+
+// What the API takes for a rate: at most 12 digits before the point and 8 after.
+const MAX_RATE = 1e12;
+
+/**
+ * The conversion from `from` to `to`, worked out from their rates against the main currency — one
+ * divided by the other. Both come from the same answer, so the pair is as the provider quotes it,
+ * short of the eighth decimal. Null when either rate is missing.
+ */
+export function conversionBetween(rates: Record<string, Rate>, from: string, to: string): Conversion | null {
+  const sent = rates[from];
+  const received = rates[to];
+  if (!sent || !received) {
+    return null;
+  }
+  const ratio = Number(sent.rate) / Number(received.rate);
+  if (!Number.isFinite(ratio) || ratio <= 0 || ratio >= MAX_RATE) {
+    return null;
+  }
+  // Trailing zeros go before the point does, so a whole number keeps its own: "100".
+  const rate = ratio.toFixed(8).replace(/0+$/, '').replace(/\.$/, '');
+  if (rate === '0') {
+    return null;
+  }
+  return { rate, fetched: sent.source === 'provider' && received.source === 'provider' };
+}

@@ -20,7 +20,8 @@ import { Input } from '@/components/ui/input';
 import { ToggleGroup, ToggleGroupItem } from '@/components/ui/toggle-group';
 import type { Account } from '@/features/accounts/queries';
 import { useCurrencyCodes } from '@/features/currencies/queries';
-import { formatPercentage, parsePercentageInput } from '@/lib/money';
+import type { Conversion } from '@/features/currencies/rates';
+import { convertMoney, formatPercentage, isValidAmountInput, parseMoneyInput, parsePercentageInput } from '@/lib/money';
 import type { Transaction } from './queries';
 import {
   amountFormSchema,
@@ -47,6 +48,11 @@ interface AmountSheetProps {
   // Dated ahead or repeating: an amount from the balance may then be nothing for now, being worked
   // out again until its date.
   scheduled: boolean;
+  // Repeating: a series converts each occurrence on its day, so what arrives can't be typed for it.
+  repeats: boolean;
+  // How a transfer between two currencies converts, when there's a rate for the pair: what arrives
+  // is then worked out unless typed.
+  conversion: Conversion | null;
   // The figures the sheet starts from. Read once, when it mounts: the form gives it a new key
   // for each opening.
   values: AmountValues;
@@ -60,7 +66,18 @@ interface AmountSheetProps {
  * behind a checkbox and one at a time: as a percentage, of an optional base amount or else of the
  * account's balance, or as whatever leaves that balance on a round figure.
  */
-export function AmountSheet({ open, onOpenChange, sides, accounts, editing, scheduled, values, onDone }: AmountSheetProps) {
+export function AmountSheet({
+  open,
+  onOpenChange,
+  sides,
+  accounts,
+  editing,
+  scheduled,
+  repeats,
+  conversion,
+  values,
+  onDone,
+}: AmountSheetProps) {
   const { t, i18n } = useTranslation();
   const currencyCodes = useCurrencyCodes();
   // Open when it holds what the amount comes from.
@@ -81,8 +98,9 @@ export function AmountSheet({ open, onOpenChange, sides, accounts, editing, sche
           roundBalanceAmount: t('transactions.errors.roundBalanceAmount'),
         },
         scheduled,
+        conversion,
       ),
-    [sides, accounts, t, scheduled],
+    [sides, accounts, t, scheduled, conversion],
   );
   // As in the form: accounts can refetch while the sheet is open, and the resolver should check
   // against the current ones rather than those of the first render.
@@ -93,7 +111,23 @@ export function AmountSheet({ open, onOpenChange, sides, accounts, editing, sche
     defaultValues: values,
   });
   const errors = form.formState.errors;
-  const [percentage, roundBalanceTo] = useWatch({ control: form.control, name: ['percentage', 'roundBalanceTo'] });
+  const [percentage, roundBalanceTo, amount, destAmount] = useWatch({
+    control: form.control,
+    name: ['percentage', 'roundBalanceTo', 'amount', 'destAmount'],
+  });
+  // What arrives at the rate, shown in the received field until a figure is typed over it.
+  const sent = parseMoneyInput(amount);
+  const atTheRate = conversion && sent !== null && isValidAmountInput(amount) ? convertMoney(sent, conversion.rate) : null;
+  // Where that figure comes from, under the field, while it's the rate's rather than typed.
+  const rateHint = !conversion || destAmount.trim()
+    ? null
+    : repeats
+      ? t('transactions.convertsEachTime')
+      : !conversion.fetched
+        ? t('transactions.atYourRate')
+        : scheduled
+          ? t('transactions.convertsOnTheDay')
+          : t('transactions.atTodaysRate');
 
   const accountOf = (id: string) => accounts.find((account) => account.id === id);
   const account = accountOf(sides.accountId);
@@ -179,9 +213,11 @@ export function AmountSheet({ open, onOpenChange, sides, accounts, editing, sche
     t('transactions.roundBalanceStep', { step: new Intl.NumberFormat(i18n.language).format(step) });
 
   const amountInput = (name: 'amount' | 'destAmount', label: string) => {
-    // Only the amount taken from the account, which the percentage is of or which rounds it; what
-    // arrives across currencies is still typed.
-    const disabled = name === 'amount' && derived;
+    // The amount taken from the account, while a percentage or a rounding works it out. What arrives
+    // across currencies, for a series: each occurrence converts on its day, so nothing typed here
+    // could be kept.
+    const disabled = name === 'amount' ? derived : repeats && !!conversion;
+    const received = name === 'destAmount';
     return (
       <Field data-invalid={!!errors[name]} data-disabled={disabled}>
         <FieldLabel htmlFor={`amount-sheet-${name}`}>{label}</FieldLabel>
@@ -191,11 +227,14 @@ export function AmountSheet({ open, onOpenChange, sides, accounts, editing, sche
           autoComplete="off"
           aria-invalid={!!errors[name]}
           onFocus={selectOnFocus}
+          // Empty is "at the rate", and the figure that comes to stands in for it.
+          placeholder={received && atTheRate ? atTheRate : undefined}
           {...form.register(name)}
           // On the element, not through register's `disabled` option, which would also leave the
           // worked-out amount out of what's submitted.
           disabled={disabled}
         />
+        {received && rateHint && <FieldDescription>{rateHint}</FieldDescription>}
         <FieldError errors={[errors[name]]} />
       </Field>
     );

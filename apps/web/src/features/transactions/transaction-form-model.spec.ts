@@ -258,6 +258,50 @@ const rule = (overrides: Partial<RecurringRule>): RecurringRule => ({
   ...overrides,
 });
 
+describe('between two currencies', () => {
+  // USD accounts are currency 1, EUR ones 2.
+  const fetched = () => ({ rate: '0.87', fetched: true });
+  const typedByHand = () => ({ rate: '0.87', fetched: false });
+  const noRate = () => null;
+  const transfer = (overrides: Partial<TransactionFormValues>) =>
+    values({ type: 'transfer', toAccountId: eur.id, amount: '100', destAmount: '', ...overrides });
+
+  it('leaves what arrives to the rate when it is not typed, so long as there is one', () => {
+    expect(issues(transfer({}), { conversionOf: fetched })).toEqual({});
+    expect(issues(transfer({}), { conversionOf: typedByHand })).toEqual({});
+    expect(issues(transfer({}), { conversionOf: noRate })).toEqual({ destAmount: 'amount' });
+  });
+
+  it('still checks a figure that is typed', () => {
+    expect(issues(transfer({ destAmount: 'abc' }), { conversionOf: fetched })).toEqual({ destAmount: 'amount' });
+  });
+
+  it('repeats only with rates fetched for both, which the API converts each occurrence by', () => {
+    expect(issues(transfer({ repeat: 'month:1' }), { conversionOf: fetched })).toEqual({});
+    expect(issues(transfer({ repeat: 'month:1' }), { conversionOf: typedByHand })).toEqual({ repeat: 'currency' });
+    // With no rates at all, as before: what arrives is typed, and it doesn't repeat.
+    expect(issues(transfer({ repeat: 'month:1' }))).toEqual({ destAmount: 'amount', repeat: 'currency' });
+  });
+
+  it('sends a typed figure as it is, whatever the rate', () => {
+    expect(toTransactionBody(transfer({ destAmount: '90' }), accounts, undefined, now, fetched).destAmount).toBe('90');
+  });
+
+  it('asks the API to convert a new one whose rates were fetched', () => {
+    expect(toTransactionBody(transfer({}), accounts, undefined, now, fetched).destAmount).toBeNull();
+  });
+
+  it('leaves an amount the API converted out of an edit, for it to keep or follow the rate', () => {
+    const converted = { date: now.toISOString(), destAmountAsOf: now.toISOString() };
+    expect(toTransactionBody(transfer({}), accounts, converted, now, fetched).destAmount).toBeUndefined();
+  });
+
+  it('converts itself by a rate typed by hand, which the API has no rate for', () => {
+    // 100 USD at 0.87.
+    expect(toTransactionBody(transfer({}), accounts, undefined, now, typedByHand).destAmount).toBe('87.00');
+  });
+});
+
 describe('toRecurringRuleBody', () => {
   it('starts the series on the chosen date, in the given zone', () => {
     const body = toRecurringRuleBody(values({ categoryId: 'rent', day: '2026-10-05', repeat: 'week:2' }), accounts, now, 'Europe/Kyiv');
