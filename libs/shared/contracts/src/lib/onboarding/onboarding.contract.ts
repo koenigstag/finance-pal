@@ -1,17 +1,15 @@
 import { initContract } from '@ts-rest/core';
 import { z } from 'zod';
 import { errorSchema } from '../common/error.schema.js';
+// Declared with the rates contract, which is what fills these in now; the profile only stores
+// whatever the user typed before that existed.
+import { exchangeRatesSchema } from '../ledger/exchange-rates.contract.js';
 
 const c = initContract();
 
 // Keep in sync with ONBOARDING_REQUIRED_FIELDS in apps/api's onboarding module — these are the
 // two fields whose absence flips isOnboarded back to false, for new registrations and for
 // existing profiles alike whenever a new one is added.
-// One unit of the currency in the key, valued in the profile's main currency. A string, like
-// every other amount here, so no float rounding sneaks into a converted total.
-export const exchangeRateSchema = z.string().regex(/^\d{1,12}(\.\d{1,8})?$/, 'invalid rate format');
-export const exchangeRatesSchema = z.record(z.string().length(3), exchangeRateSchema);
-
 export const profileSchema = z.object({
   displayName: z.string().min(1).max(80).nullable(),
   startDayOfWeek: z.number().int().min(0).max(6).nullable(),

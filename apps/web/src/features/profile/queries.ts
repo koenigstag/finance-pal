@@ -33,7 +33,12 @@ export function useUpdateProfile() {
   return useMutation({
     mutationFn: (body: ProfileUpdate) => unwrap(api.onboarding.updateProfile({ body }), 200),
     onSuccess: async (profile) => {
+      const previous = queryClient.getQueryData<{ mainCurrencyId: number } | null>(queryKeys.profile);
       queryClient.setQueryData(queryKeys.profile, profile);
+      // Fetched rates are quoted against the main currency, so a new one needs a new set.
+      if (previous && previous.mainCurrencyId !== profile.mainCurrencyId) {
+        void queryClient.invalidateQueries({ queryKey: queryKeys.exchangeRates });
+      }
       // Awaited so a caller navigating on success lands on fresh status, not the cached
       // "not onboarded" that would bounce it straight back.
       await queryClient.invalidateQueries({ queryKey: queryKeys.onboardingStatus });

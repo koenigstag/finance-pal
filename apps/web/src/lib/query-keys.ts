@@ -9,6 +9,7 @@ export const queryKeys = {
   profile: ['profile'] as const,
   onboardingStatus: ['onboarding', 'status'] as const,
   currencies: ['currencies'] as const,
+  exchangeRates: ['exchange-rates'] as const,
   groups: ['groups'] as const,
   group: (groupId: string) => ['group', groupId] as const,
   members: (groupId: string) => ['group', groupId, 'members'] as const,
