@@ -8,15 +8,31 @@ export type Account = ClientInferResponseBody<typeof accountsContract.get, 200>;
 export type CreateAccountBody = ClientInferRequest<typeof accountsContract.create>['body'];
 export type UpdateAccountBody = ClientInferRequest<typeof accountsContract.update>['body'];
 
+// Where each kind of account sits when they are offered in sections: what there is to spend with,
+// then what is put aside, then what is owed — the order the accounts page reads in. A record of
+// every kind rather than a list of some, so a kind added to the contract has to be given a place
+// here instead of quietly going missing from the pickers.
+const GROUP_RANK = { regular: 0, savings: 1, debt: 2 } as const satisfies Record<Account['type'], number>;
+
+export interface AccountGroup {
+  // Names the section: accounts.groups.<type>.
+  type: Account['type'];
+  accounts: Account[];
+}
+
 /**
- * The same accounts, with the debts after the rest and the order they came in kept on either side
- * of that. A debt account is money owed to or by someone rather than money to spend with, so it is
- * seldom the account a transfer is headed for — and a handful of them at the top of a picker push
- * the accounts that usually are out of reach. The accounts page already lists its sections this
- * way round: everyday money, then what's put aside, then what's owed.
+ * The accounts under the sections a picker offers them in, sections with nothing in them left out
+ * and the order the accounts came in kept within each.
+ *
+ * Debts come last. A debt account is money owed to or by someone rather than money to spend with,
+ * so it is seldom the account a transfer is headed for, and a handful of them among the rest push
+ * the accounts that usually are down out of reach.
  */
-export function debtsLast(accounts: Account[]): Account[] {
-  return [...accounts].sort((a, b) => Number(a.type === 'debt') - Number(b.type === 'debt'));
+export function accountGroups(accounts: Account[]): AccountGroup[] {
+  return (Object.keys(GROUP_RANK) as Account['type'][])
+    .sort((a, b) => GROUP_RANK[a] - GROUP_RANK[b])
+    .map((type) => ({ type, accounts: accounts.filter((account) => account.type === type) }))
+    .filter((group) => group.accounts.length > 0);
 }
 
 /**

@@ -1,9 +1,9 @@
-import { useEffect, useState, type ReactNode } from 'react';
+import { useEffect, useId, useState, type ReactNode } from 'react';
 import { useTranslation } from 'react-i18next';
 import { AppearanceIcon } from '@/components/appearance/appearance-icon';
 import { Dialog, DialogContent, DialogHeader, DialogTitle } from '@/components/ui/dialog';
 import { ToggleGroup, ToggleGroupItem } from '@/components/ui/toggle-group';
-import { debtsLast, type Account } from '@/features/accounts/queries';
+import { accountGroups, type Account } from '@/features/accounts/queries';
 import { categoriesUnder, type Category } from '@/features/categories/queries';
 import { useCurrencyCodes } from '@/features/currencies/queries';
 import { formatMoney, moneySign } from '@/lib/money';
@@ -21,8 +21,8 @@ export type KindPick =
 /**
  * The first step of a transaction: what kind it is, and what it's for. Income and expense list
  * their top-level categories — a subcategory is picked afterwards, from chips on the form; a
- * transfer lists the accounts it could go to, debts last. A bottom sheet on phones, a dialog
- * from sm up.
+ * transfer lists the accounts it could go to, in a section per kind. A bottom sheet on phones,
+ * a dialog from sm up.
  */
 export function KindPicker({
   open,
@@ -92,20 +92,15 @@ export function KindPicker({
           </ToggleGroup>
         )}
 
-        <ul className="-mx-2 flex min-h-0 flex-1 flex-col overflow-y-auto [scrollbar-gutter:stable]">
+        <div className="-mx-2 flex min-h-0 flex-1 flex-col gap-3 overflow-y-auto [scrollbar-gutter:stable]">
           {tab === 'transfer' ? (
-            debtsLast(accounts.filter((account) => account.id !== fromAccountId)).map((account) => (
-              <PickerRow
-                key={account.id}
-                selected={selected === account.id}
-                onClick={() => onPick({ type: 'transfer', toAccountId: account.id })}
-                icon={<AppearanceIcon icon={account.icon} color={account.color} fallbackIcon="wallet" />}
-                label={account.name}
-                aside={<AccountBalance account={account} />}
-              />
-            ))
+            <AccountOptions
+              accounts={accounts.filter((account) => account.id !== fromAccountId)}
+              selectedId={selected}
+              onPick={(toAccountId) => onPick({ type: 'transfer', toAccountId })}
+            />
           ) : (
-            <>
+            <ul>
               <PickerRow
                 selected={selected === ''}
                 onClick={() => onPick({ type: tab, categoryId: '' })}
@@ -121,9 +116,9 @@ export function KindPicker({
                   label={category.name}
                 />
               ))}
-            </>
+            </ul>
           )}
-        </ul>
+        </div>
       </DialogContent>
     </Dialog>
   );
@@ -131,7 +126,7 @@ export function KindPicker({
 
 /**
  * Choosing one account for one side of a transaction: the account chosen now on top, the rest
- * below it and the debts last of those. Its title says which side it's for.
+ * below it in a section per kind. Its title says which side it's for.
  */
 export function AccountPicker({
   open,
@@ -166,21 +161,60 @@ export function AccountPicker({
             <AccountBalance account={current} />
           </div>
         )}
-        <ul className="-mx-2 flex min-h-0 flex-1 flex-col overflow-y-auto [scrollbar-gutter:stable]">
-          {debtsLast(accounts.filter((account) => account.id !== excludeId)).map((account) => (
-            <PickerRow
-              key={account.id}
-              selected={account.id === selectedId}
-              onClick={() => onPick(account.id)}
-              icon={<AppearanceIcon icon={account.icon} color={account.color} fallbackIcon="wallet" />}
-              label={account.name}
-              aside={<AccountBalance account={account} />}
-            />
-          ))}
-        </ul>
+        <div className="-mx-2 flex min-h-0 flex-1 flex-col gap-3 overflow-y-auto [scrollbar-gutter:stable]">
+          <AccountOptions
+            accounts={accounts.filter((account) => account.id !== excludeId)}
+            selectedId={selectedId}
+            onPick={onPick}
+          />
+        </div>
       </DialogContent>
     </Dialog>
   );
+}
+
+/**
+ * The accounts to choose from, under a heading per kind. With everything falling under one there
+ * is nothing to tell apart, so the heading is left off and the accounts stand on their own.
+ */
+function AccountOptions({
+  accounts,
+  selectedId,
+  onPick,
+}: {
+  accounts: Account[];
+  selectedId?: string;
+  onPick: (accountId: string) => void;
+}) {
+  const { t } = useTranslation();
+  const headings = useId();
+  const groups = accountGroups(accounts);
+
+  return groups.map(({ type, accounts: inGroup }) => (
+    <section
+      key={type}
+      aria-labelledby={groups.length > 1 ? `${headings}-${type}` : undefined}
+      className="flex flex-col gap-1"
+    >
+      {groups.length > 1 && (
+        <h3 id={`${headings}-${type}`} className="px-2 text-sm font-medium text-muted-foreground">
+          {t(`accounts.groups.${type}`)}
+        </h3>
+      )}
+      <ul>
+        {inGroup.map((account) => (
+          <PickerRow
+            key={account.id}
+            selected={account.id === selectedId}
+            onClick={() => onPick(account.id)}
+            icon={<AppearanceIcon icon={account.icon} color={account.color} fallbackIcon="wallet" />}
+            label={account.name}
+            aside={<AccountBalance account={account} />}
+          />
+        ))}
+      </ul>
+    </section>
+  ));
 }
 
 export function AccountBalance({ account, className }: { account: Account; className?: string }) {
