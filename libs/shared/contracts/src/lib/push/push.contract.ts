@@ -18,11 +18,9 @@ const c = initContract();
  */
 
 // What a device asks to be told about. Each one is its own switch in settings.
-//
-// Deliberately nothing for a transaction somebody records: in a shared budget that is the most
-// frequent thing that happens, and an app that buzzes on every coffee is one whose notifications
-// get turned off altogether. Changes anyone made reach an open app over the socket instead.
 export const PUSH_TOPICS = [
+  // Someone else in a group recorded a transaction. Never your own, whichever device recorded it.
+  'transactions',
   // You were added to a group.
   'members',
   // A planned transaction has come round and is now part of the ledger.
@@ -31,9 +29,13 @@ export const PUSH_TOPICS = [
 export type PushTopic = (typeof PUSH_TOPICS)[number];
 export const pushTopicSchema = z.enum(PUSH_TOPICS);
 
-// What a new device starts with: both of them, for now — each is occasional, and a device that
-// asked for notifications and then got none would read as broken. A noisier topic added later
-// would not belong here.
+// What a new device starts with: the two occasional ones.
+//
+// 'transactions' is deliberately not among them, though it is the one most worth having in a
+// group that wants it. In a busy shared budget it is also the most frequent thing that happens,
+// and an app that buzzes on every coffee is one whose notifications get turned off altogether —
+// taking the other two with them. So it is offered, unticked, for the people who do want it, and
+// an open app still shows every change at once over the socket either way.
 export const DEFAULT_PUSH_TOPICS: readonly PushTopic[] = ['members', 'planned'];
 
 // A push service's URL for one device. Long, opaque, and the closest thing to an identifier a

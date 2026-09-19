@@ -8,7 +8,16 @@ type TransactionKind = (typeof TRANSACTION_TYPES)[number];
  * read the app in different languages.
  */
 export type PushMessage =
-  // Whoever added them, as they call themselves; null when they haven't set a name.
+  | {
+      kind: 'transaction.recorded';
+      groupId: string;
+      groupName: string;
+      // Whoever recorded it, as they call themselves; null when they haven't set a name.
+      actor: string | null;
+      type: TransactionKind;
+      amount: string;
+      currency: string;
+    }
   | { kind: 'member.added'; groupId: string; groupName: string; actor: string | null }
   | { kind: 'planned.recorded'; groupId: string; groupName: string; type: TransactionKind; amount: string; currency: string }
   | { kind: 'push.test' };
@@ -20,6 +29,8 @@ export type PushMessage =
  */
 export function topicFor(message: PushMessage): PushTopic | null {
   switch (message.kind) {
+    case 'transaction.recorded':
+      return 'transactions';
     case 'member.added':
       return 'members';
     case 'planned.recorded':
@@ -37,6 +48,7 @@ type Language = (typeof LANGUAGES)[number];
 interface PushStrings {
   // What to call someone who hasn't set a display name.
   someone: string;
+  recorded: Record<TransactionKind, (actor: string, amount: string) => string>;
   planned: Record<TransactionKind, (amount: string) => string>;
   memberAdded: (actor: string) => string;
   test: { title: string; body: string };
@@ -47,6 +59,11 @@ interface PushStrings {
 const STRINGS: Record<Language, PushStrings> = {
   en: {
     someone: 'Someone',
+    recorded: {
+      expense: (actor, amount) => `${actor} spent ${amount}`,
+      income: (actor, amount) => `${actor} received ${amount}`,
+      transfer: (actor, amount) => `${actor} moved ${amount}`,
+    },
     planned: {
       expense: (amount) => `A planned expense of ${amount} was recorded`,
       income: (amount) => `A planned income of ${amount} was recorded`,
@@ -57,6 +74,11 @@ const STRINGS: Record<Language, PushStrings> = {
   },
   ru: {
     someone: 'Кто-то',
+    recorded: {
+      expense: (actor, amount) => `${actor} потратил(а) ${amount}`,
+      income: (actor, amount) => `${actor} получил(а) ${amount}`,
+      transfer: (actor, amount) => `${actor} перевёл(а) ${amount}`,
+    },
     planned: {
       expense: (amount) => `Запланированный расход ${amount} добавлен`,
       income: (amount) => `Запланированный доход ${amount} добавлен`,
@@ -103,6 +125,16 @@ export function renderPushMessage(message: PushMessage, language: string): PushP
   const { strings, language: resolved } = stringsFor(language);
 
   switch (message.kind) {
+    case 'transaction.recorded':
+      return {
+        title: message.groupName,
+        body: strings.recorded[message.type](
+          message.actor ?? strings.someone,
+          formatAmount(message.amount, message.currency, resolved),
+        ),
+        path: `g/${message.groupId}/transactions`,
+        tag: `transactions:${message.groupId}`,
+      };
     case 'planned.recorded':
       return {
         title: message.groupName,

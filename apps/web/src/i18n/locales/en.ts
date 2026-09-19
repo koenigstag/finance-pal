@@ -427,6 +427,10 @@ export const en = {
       tested_other: 'Sent to {{count}} devices.',
       testedNone: 'No device is registered to send to.',
       topics: {
+        transactions: {
+          label: 'What others record',
+          description: 'When someone else in a group records a transaction. Never your own, and often in a busy group.',
+        },
         members: {
           label: 'Being added to a group',
           description: 'When someone gives you access to their group.',

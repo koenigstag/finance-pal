@@ -1,9 +1,9 @@
 # Push notifications
 
-The app can notify someone while it is closed: someone adds them to a group, a planned
-transaction comes round. It is Web Push — the standard the browsers implement — so there is no
-Firebase project and no app store involved, and a notification travels through whichever push
-service the device's browser trusts.
+The app can notify someone while it is closed: a co-member records a transaction, someone adds
+them to a group, a planned transaction comes round. It is Web Push — the standard the browsers
+implement — so there is no Firebase project and no app store involved, and a notification travels
+through whichever push service the device's browser trusts.
 
 This is the counterpart to the live updates over the socket, not a replacement for them. An open
 app refetches what changed (`libs/shared/contracts/.../realtime-event.ts`); a closed one gets a
@@ -58,23 +58,28 @@ every device the signed-in person has registered, whatever they left switched on
 
 ## What gets sent
 
-| Switch                  | Sent when                                                        | To                       |
-| ----------------------- | ---------------------------------------------------------------- | ------------------------ |
-| Being added to a group  | Someone is added to a group                                       | The person who was added |
-| Planned transactions    | A series' planned occurrence lands and the next one is written    | Everyone in the group    |
+| Switch                  | On by default | Sent when                                                      | To                                |
+| ----------------------- | ------------- | -------------------------------------------------------------- | --------------------------------- |
+| What others record      | no            | A transaction is recorded, dated now or earlier                 | Everyone in the group but whoever recorded it |
+| Being added to a group  | yes           | Someone is added to a group                                     | The person who was added          |
+| Planned transactions    | yes           | A series' planned occurrence lands and the next one is written  | Everyone in the group             |
 
-Each is a switch per device, so a phone can buzz about the first and a laptop about neither.
+Each is a switch per device, so a phone can buzz about all three and a laptop about none.
 
-Nothing is sent for a transaction somebody records, deliberately. In a shared budget that is the
-most frequent thing that happens, and an app that buzzes on every coffee is one whose
-notifications get turned off altogether — along with the two above, which are worth having. What
-anyone changes still reaches an open app at once over the socket.
+**What others record is off until someone turns it on.** It is the one most worth having in a
+group that wants it, and in a busy shared budget also the most frequent thing that happens — an
+app that buzzes on every coffee is one whose notifications get turned off altogether, taking the
+other two with them. It is offered unticked rather than not offered, and an open app shows every
+change at once over the socket either way.
 
 A notification carries a title (the group's name), one line, and a link into the app. It is
 written in the language of whoever receives it, not whoever set it off — two people in one group
 may well read the app in different languages — from the catalogue in
 `apps/api/src/modules/push/push-messages.ts`. It deliberately carries no more than the line being
 shown: it is rendered by the operating system, often on a locked screen.
+
+Edits and deletions are not notified. The socket reports them to whoever is looking, and a
+notification for every correction to a figure would be noise.
 
 ## How it fits together
 
