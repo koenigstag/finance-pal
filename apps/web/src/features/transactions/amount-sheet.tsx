@@ -2,6 +2,7 @@ import { zodResolver } from '@hookform/resolvers/zod';
 import { useEffect, useMemo, useRef, useState, type FocusEvent } from 'react';
 import { useForm, useWatch } from 'react-hook-form';
 import { useTranslation } from 'react-i18next';
+import { ROUND_BALANCE_STEPS } from '@ft/shared-contracts';
 import { Accordion, AccordionContent, AccordionItem, AccordionTrigger } from '@/components/ui/accordion';
 import { Button } from '@/components/ui/button';
 import { Checkbox } from '@/components/ui/checkbox';
@@ -16,15 +17,17 @@ import {
   FieldTitle,
 } from '@/components/ui/field';
 import { Input } from '@/components/ui/input';
+import { ToggleGroup, ToggleGroupItem } from '@/components/ui/toggle-group';
 import type { Account } from '@/features/accounts/queries';
 import { useCurrencyCodes } from '@/features/currencies/queries';
 import { formatPercentage, parsePercentageInput } from '@/lib/money';
 import type { Transaction } from './queries';
 import {
   amountFormSchema,
-  amountFromPercentage,
   balanceBase,
+  derivedAmount,
   needsDestAmount,
+  parseRoundBalanceTo,
   type AmountValues,
   type TransactionSides,
 } from './transaction-form-model';
@@ -50,16 +53,18 @@ interface AmountSheetProps {
 
 /**
  * A transaction's amounts, opened from the form's Amount card: the amount itself — a transfer
- * between currencies has two — and, under Advanced, a checkbox to work it out as a percentage
- * instead, of an optional base amount or else of the account's balance.
+ * between currencies has two — and, under Advanced, two ways to have it worked out instead, each
+ * behind a checkbox and one at a time: as a percentage, of an optional base amount or else of the
+ * account's balance, or as whatever leaves that balance on a round figure.
  */
 export function AmountSheet({ open, onOpenChange, sides, accounts, editing, values, onDone }: AmountSheetProps) {
   const { t, i18n } = useTranslation();
   const currencyCodes = useCurrencyCodes();
   // Open when it holds what the amount comes from.
-  const [advancedOpen, setAdvancedOpen] = useState(values.percentage !== '');
-  // Off unless the amount already is a percentage: its fields only show once asked for.
+  const [advancedOpen, setAdvancedOpen] = useState(values.percentage !== '' || values.roundBalanceTo !== '');
+  // Off unless the amount already comes from one: their fields only show once asked for.
   const [percentageOn, setPercentageOn] = useState(values.percentage !== '');
+  const [roundOn, setRoundOn] = useState(values.roundBalanceTo !== '');
 
   const schema = useMemo(
     () =>
@@ -67,6 +72,7 @@ export function AmountSheet({ open, onOpenChange, sides, accounts, editing, valu
         amount: t('validation.amount'),
         percentage: t('validation.percentage'),
         percentageAmount: t('transactions.errors.percentageAmount'),
+        roundBalanceAmount: t('transactions.errors.roundBalanceAmount'),
       }),
     [sides, accounts, t],
   );
@@ -79,17 +85,17 @@ export function AmountSheet({ open, onOpenChange, sides, accounts, editing, valu
     defaultValues: values,
   });
   const errors = form.formState.errors;
-  const percentage = useWatch({ control: form.control, name: 'percentage' });
+  const [percentage, roundBalanceTo] = useWatch({ control: form.control, name: ['percentage', 'roundBalanceTo'] });
 
   const accountOf = (id: string) => accounts.find((account) => account.id === id);
   const account = accountOf(sides.accountId);
   const currencyOf = (id: string) => currencyCodes.get(accountOf(id)?.currencyId ?? -1);
   const withCurrency = (label: string, id: string) => (currencyOf(id) ? `${label} (${currencyOf(id)})` : label);
 
-  // Works the amount out again whenever the percentage or its base changes; the account is the
-  // form's, fixed while the sheet is open.
+  // Works the amount out again whenever the percentage, its base or the step changes; the account
+  // is the form's, fixed while the sheet is open.
   const recalculate = () => {
-    const amount = amountFromPercentage(form.getValues(), account, editing);
+    const amount = derivedAmount(form.getValues(), sides.type, account, editing);
     if (amount !== null) {
       form.setValue('amount', amount, { shouldValidate: form.formState.isSubmitted });
     }
@@ -101,12 +107,28 @@ export function AmountSheet({ open, onOpenChange, sides, accounts, editing, valu
   const switchPercentage = (on: boolean) => {
     setPercentageOn(on);
     if (on) {
+      switchRounding(false);
       focusPercentage.current = true;
       return;
     }
     form.setValue('percentage', '');
     form.setValue('percentageBase', '');
     form.clearErrors(['percentage', 'percentageBase']);
+  };
+  // The same for rounding the balance, which takes a percentage's place: never the two at once.
+  const switchRounding = (on: boolean) => {
+    setRoundOn(on);
+    if (on) {
+      switchPercentage(false);
+      return;
+    }
+    form.setValue('roundBalanceTo', '');
+    form.clearErrors('roundBalanceTo');
+  };
+  const pickStep = (step: string) => {
+    form.setValue('roundBalanceTo', step);
+    form.clearErrors('roundBalanceTo');
+    recalculate();
   };
   // Once its field has rendered, and only when ticked by hand: a sheet opening on a percentage
   // already there leaves the focus where the dialog puts it.
@@ -125,25 +147,32 @@ export function AmountSheet({ open, onOpenChange, sides, accounts, editing, valu
         setAdvancedOpen(true);
         return;
       }
+      if (roundOn && !parseRoundBalanceTo(valid.roundBalanceTo)) {
+        form.setError('roundBalanceTo', { message: t('transactions.errors.roundBalanceStep') });
+        setAdvancedOpen(true);
+        return;
+      }
       onDone(valid);
       onOpenChange(false);
     },
     // A wrong percentage or base amount may sit in the folded section, out of sight.
     (invalid) => {
-      if (invalid.percentage || invalid.percentageBase) {
+      if (invalid.percentage || invalid.percentageBase || invalid.roundBalanceTo) {
         setAdvancedOpen(true);
       }
     },
   );
 
-  // Any percentage typed, even one still wrong, takes the amount over: it's what the amount comes
-  // from, and a figure typed beside it would be overwritten by the next change to it.
-  const derived = percentage.trim() !== '';
+  // Any percentage typed, even one still wrong, or a step picked, takes the amount over: it's what
+  // the amount comes from, and a figure typed beside it would be overwritten by the next change.
+  const derived = percentage.trim() !== '' || roundBalanceTo !== '';
   const validPercentage = parsePercentageInput(percentage);
+  const stepLabel = (step: number) =>
+    t('transactions.roundBalanceStep', { step: new Intl.NumberFormat(i18n.language).format(step) });
 
   const amountInput = (name: 'amount' | 'destAmount', label: string) => {
-    // Only the amount taken from the account, which the percentage is of; what arrives across
-    // currencies is still typed.
+    // Only the amount taken from the account, which the percentage is of or which rounds it; what
+    // arrives across currencies is still typed.
     const disabled = name === 'amount' && derived;
     return (
       <Field data-invalid={!!errors[name]} data-disabled={disabled}>
@@ -195,9 +224,11 @@ export function AmountSheet({ open, onOpenChange, sides, accounts, editing, valu
                   {/* Taking the free space, it keeps what follows next to the chevron. */}
                   <span className="flex-1">{t('transactions.advanced')}</span>
                   {/* Folded away, the section still says where the amount comes from. */}
-                  {!advancedOpen && validPercentage && (
+                  {!advancedOpen && (validPercentage || parseRoundBalanceTo(roundBalanceTo)) && (
                     <span className="mr-2 font-normal text-muted-foreground">
-                      {formatPercentage(validPercentage, i18n.language)}
+                      {validPercentage
+                        ? formatPercentage(validPercentage, i18n.language)
+                        : stepLabel(Number(roundBalanceTo))}
                     </span>
                   )}
                 </AccordionTrigger>
@@ -268,6 +299,43 @@ export function AmountSheet({ open, onOpenChange, sides, accounts, editing, valu
                           <FieldError errors={[errors.percentageBase]} />
                         </Field>
                       </>
+                    )}
+                    <FieldLabel htmlFor="amount-sheet-round-on">
+                      <Field orientation="horizontal">
+                        <Checkbox
+                          id="amount-sheet-round-on"
+                          checked={roundOn}
+                          onCheckedChange={(checked) => switchRounding(checked === true)}
+                        />
+                        <FieldContent>
+                          <FieldTitle>{t('transactions.roundBalanceMode')}</FieldTitle>
+                          <FieldDescription>{t('transactions.roundBalanceModeHint')}</FieldDescription>
+                        </FieldContent>
+                      </Field>
+                    </FieldLabel>
+                    {roundOn && (
+                      <Field data-invalid={!!errors.roundBalanceTo}>
+                        {/* One step at a time, like radio buttons: tapping the picked one keeps it. */}
+                        <ToggleGroup
+                          type="single"
+                          variant="outline"
+                          className="w-full flex-wrap justify-start"
+                          aria-label={t('transactions.roundBalanceMode')}
+                          value={roundBalanceTo}
+                          onValueChange={(next) => next && pickStep(next)}
+                        >
+                          {ROUND_BALANCE_STEPS.map((step) => (
+                            <ToggleGroupItem
+                              key={step}
+                              value={String(step)}
+                              className="rounded-full data-[state=on]:border-foreground/60"
+                            >
+                              {stepLabel(step)}
+                            </ToggleGroupItem>
+                          ))}
+                        </ToggleGroup>
+                        <FieldError errors={[errors.roundBalanceTo]} />
+                      </Field>
                     )}
                   </FieldGroup>
                 </AccordionContent>

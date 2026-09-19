@@ -211,6 +211,10 @@ export const en = {
     // The checkbox under the Amount sheet's Advanced that brings up the percentage's fields.
     percentageMode: 'Calculate as a percentage',
     percentageModeHint: 'Of the account balance or of an amount you enter',
+    // The other checkbox there, and its choices: each a step the balance is rounded to.
+    roundBalanceMode: 'Round the balance',
+    roundBalanceModeHint: 'The amount leaves the account balance on a round figure',
+    roundBalanceStep: 'To {{step}}',
     percentage: 'Percentage',
     percentageBase: 'Base amount',
     percentageBaseHint: 'Leave empty to use the balance of {{account}}',
@@ -222,6 +226,8 @@ export const en = {
     percentageOfBase: '{{percentage}} of {{base}}',
     // A list row's, under the name of the account whose balance it is.
     percentageOfItsBalance: '{{percentage}} of the balance',
+    roundsBalanceOf: 'Rounds the balance of {{account}} to {{step}}',
+    roundsItsBalance: 'Rounds the balance to {{step}}',
     // Under a percentage of the balance, while that balance is still to come.
     percentageOnTheDay: 'Recalculated on the day',
     percentageSeriesOnTheDay: 'Recalculated on each date',
@@ -274,6 +280,8 @@ export const en = {
       repeatCurrency: 'Only a transfer within one currency can repeat',
       pastNextDate: "The next date can't be in the past",
       percentageAmount: 'This percentage comes to zero',
+      roundBalanceAmount: 'The balance is round already',
+      roundBalanceStep: 'Choose what to round to',
     },
     actions: {
       duplicate: 'Duplicate',

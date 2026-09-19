@@ -19,8 +19,8 @@ import { useCurrencyCodes } from '@/features/currencies/queries';
 import { formatMoney } from '@/lib/money';
 import { transactionTypeColor } from '@/lib/money-colors';
 import { cn } from '@/lib/utils';
+import { useAmountSourceLabel } from './amount-source-label';
 import { filedUnder } from './filed-under';
-import { usePercentageLabel } from './percentage-label';
 import type { RecurringRule, Transaction } from './queries';
 import { repeatOf, useRepeatLabel } from './repeat';
 import { isAhead, isPlannedOccurrence } from './transaction-form-model';
@@ -77,7 +77,7 @@ export function TransactionActionsSheet({
   const { t, i18n } = useTranslation();
   const currencyCodes = useCurrencyCodes();
   const repeatLabel = useRepeatLabel();
-  const percentageLabel = usePercentageLabel();
+  const amountSourceLabel = useAmountSourceLabel();
 
   // While a transaction is still to come, where it came from is part of what it is, so a series
   // shows; once it's recorded it stands on its own, whatever wrote it.
@@ -120,7 +120,7 @@ export function TransactionActionsSheet({
   const isTransfer = transaction?.type === 'transfer';
   // As on the form's Amount card: what the amount was worked out from and, while it's taken of a
   // balance still to come, that the day itself decides.
-  const percentage = transaction ? percentageLabel(transaction, account?.name ?? '—') : null;
+  const source = transaction ? amountSourceLabel(transaction, account?.name ?? '—') : null;
   const estimate =
     !!transaction?.percentageAsOf && Date.parse(transaction.percentageAsOf) < Date.parse(transaction.date);
 
@@ -184,7 +184,7 @@ export function TransactionActionsSheet({
                     currencyDisplay: 'narrowSymbol',
                   })}
                 </p>
-                {percentage && <p className="text-sm text-muted-foreground">{percentage}</p>}
+                {source && <p className="text-sm text-muted-foreground">{source}</p>}
                 {estimate && <p className="text-sm text-muted-foreground">{t('transactions.percentageOnTheDay')}</p>}
               </div>
               {/* Italic, as a note reads everywhere: in the list, and in the field it's typed in. */}

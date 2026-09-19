@@ -1,7 +1,14 @@
 import { z } from 'zod';
-import { TRANSACTION_TYPES } from '@ft/shared-contracts';
+import { TRANSACTION_TYPES, isRoundBalanceStep, type RoundBalanceStep } from '@ft/shared-contracts';
 import { deviceTimezone, fromDayInput, toDayInput, todayInput } from '@/lib/dates';
-import { isValidAmountInput, parseMoneyInput, parsePercentageInput, percentOf, sumMoney } from '@/lib/money';
+import {
+  isValidAmountInput,
+  parseMoneyInput,
+  parsePercentageInput,
+  percentOf,
+  roundBalanceAmount,
+  sumMoney,
+} from '@/lib/money';
 import type { RecurringRule, RecurringRuleBody, RecurringRulePatch, Transaction, TransactionBody } from './queries';
 import { parseRepeatKey, repeatOf, toRepeatKey } from './repeat';
 
@@ -46,13 +53,18 @@ export interface TransactionFormValues {
   percentage: string;
   // What the percentage is of; '' for the account's balance.
   percentageBase: string;
+  // Instead of a percentage: the step ("100") the amount rounds the account's balance to; '' for none.
+  roundBalanceTo: string;
   note: string;
   // How often it repeats, as toRepeatKey writes it; '' for a one-off transaction.
   repeat: string;
 }
 
 // The figures the Amount sheet edits, and the sides that decide which of them a transaction needs.
-export type AmountValues = Pick<TransactionFormValues, 'amount' | 'destAmount' | 'percentage' | 'percentageBase'>;
+export type AmountValues = Pick<
+  TransactionFormValues,
+  'amount' | 'destAmount' | 'percentage' | 'percentageBase' | 'roundBalanceTo'
+>;
 export type TransactionSides = Pick<TransactionFormValues, 'type' | 'accountId' | 'toAccountId'>;
 
 export interface TransactionFormMessages {
@@ -64,6 +76,8 @@ export interface TransactionFormMessages {
   percentage: string;
   // The amount a valid percentage came to is nothing: what it's of is zero or too small for it.
   percentageAmount: string;
+  // Rounding the balance comes to nothing: it's on a multiple of the step already.
+  roundBalanceAmount: string;
 }
 
 export interface TransactionFormContext {
@@ -74,7 +88,7 @@ export interface TransactionFormContext {
   today?: string;
 }
 
-type AmountMessages = Pick<TransactionFormMessages, 'amount' | 'percentage' | 'percentageAmount'>;
+type AmountMessages = Pick<TransactionFormMessages, 'amount' | 'percentage' | 'percentageAmount' | 'roundBalanceAmount'>;
 
 /** A transfer between accounts in different currencies records what arrived, too. */
 export function needsDestAmount(values: TransactionSides, accounts: AccountLike[]): boolean {
@@ -87,9 +101,9 @@ export function needsDestAmount(values: TransactionSides, accounts: AccountLike[
 }
 
 // What's wrong with the amounts, for the form and the Amount sheet alike. Worked out from a
-// percentage, the amount isn't typed: what can be wrong then is the percentage, the base amount
-// it's of, or else what the two came to. A base amount without a percentage isn't used, so it
-// isn't checked either.
+// percentage or by rounding the balance, the amount isn't typed: what can be wrong then is the
+// percentage, the base amount it's of, or else what they came to. A base amount without a
+// percentage isn't used, so it isn't checked either.
 function checkAmounts(values: AmountValues & TransactionSides, accounts: AccountLike[], messages: AmountMessages, ctx: z.RefinementCtx) {
   const percentage = values.percentage.trim() ? parsePercentageInput(values.percentage) : undefined;
   if (percentage === null) {
@@ -97,7 +111,11 @@ function checkAmounts(values: AmountValues & TransactionSides, accounts: Account
   } else if (percentage && values.percentageBase.trim() && !isValidAmountInput(values.percentageBase)) {
     ctx.addIssue({ code: z.ZodIssueCode.custom, path: ['percentageBase'], message: messages.amount });
   } else if (!isValidAmountInput(values.amount)) {
-    const message = percentage ? messages.percentageAmount : messages.amount;
+    const message = percentage
+      ? messages.percentageAmount
+      : parseRoundBalanceTo(values.roundBalanceTo)
+        ? messages.roundBalanceAmount
+        : messages.amount;
     ctx.addIssue({ code: z.ZodIssueCode.custom, path: ['amount'], message });
   }
   if (needsDestAmount(values, accounts) && !isValidAmountInput(values.destAmount)) {
@@ -124,6 +142,7 @@ export function transactionFormSchema(
       day: z.string().min(1, messages.required),
       percentage: z.string(),
       percentageBase: z.string(),
+      roundBalanceTo: z.string(),
       note: z.string().max(1000),
       repeat: z.string(),
     })
@@ -156,6 +175,7 @@ export function amountFormSchema(sides: TransactionSides, accounts: AccountLike[
       destAmount: z.string(),
       percentage: z.string(),
       percentageBase: z.string(),
+      roundBalanceTo: z.string(),
     })
     .superRefine((values, ctx) => checkAmounts({ ...values, ...sides }, accounts, messages, ctx));
 }
@@ -181,6 +201,7 @@ export function defaultTransactionFormValues(defaults: {
     day: todayInput(defaults.now),
     percentage: '',
     percentageBase: '',
+    roundBalanceTo: '',
     note: '',
     repeat: '',
   };
@@ -198,6 +219,7 @@ export function transactionToFormValues(transaction: Transaction): TransactionFo
     day: toDayInput(transaction.date),
     percentage: transaction.percentage ?? '',
     percentageBase: transaction.percentageBase ?? '',
+    roundBalanceTo: transaction.roundBalanceTo ? String(transaction.roundBalanceTo) : '',
     note: transaction.note ?? '',
     repeat: '',
   };
@@ -260,6 +282,7 @@ export function ruleToFormValues(rule: RecurringRule): TransactionFormValues {
     day: toDayInput(nextDateOf(rule)),
     percentage: rule.percentage ?? '',
     percentageBase: rule.percentageBase ?? '',
+    roundBalanceTo: rule.roundBalanceTo ? String(rule.roundBalanceTo) : '',
     note: rule.note ?? '',
     repeat: toRepeatKey(repeatOf(rule)),
   };
@@ -300,6 +323,8 @@ export function toTransactionBody(
     percentage,
     // Only ever with its percentage, which without one is of the account's balance.
     percentageBase: percentage && values.percentageBase.trim() ? requireMoney(values.percentageBase) : null,
+    // Never beside a percentage; null clears it, as for the percentage.
+    roundBalanceTo: percentage ? null : parseRoundBalanceTo(values.roundBalanceTo),
     // The API can't set a note to null; an empty string is how an edit clears it.
     note: note || (existing ? '' : undefined),
   };
@@ -390,6 +415,7 @@ export function plannedToRecurringRuleBody(
     note: transaction.note,
     percentage: transaction.percentage,
     percentageBase: transaction.percentageBase,
+    roundBalanceTo: transaction.roundBalanceTo,
     intervalUnit: repeat.unit,
     intervalValue: repeat.value,
     startsAt: fromDayInput(choice.day, transaction.date, now),
@@ -400,7 +426,7 @@ export function plannedToRecurringRuleBody(
 
 // What each of a series' transactions will be. As in toTransactionBody, fields that don't apply to
 // the type go as null, and a series has no received amount (see transactionFormSchema). With a
-// percentage, the amount is what it comes to now; each occurrence works it out afresh.
+// percentage or a rounding, the amount is what it comes to now; each occurrence works it out afresh.
 function seriesTemplate(values: TransactionFormValues, accounts: AccountLike[]) {
   const account = accounts.find((candidate) => candidate.id === values.accountId);
   if (!account) {
@@ -411,6 +437,7 @@ function seriesTemplate(values: TransactionFormValues, accounts: AccountLike[]) 
   return {
     percentage,
     percentageBase: percentage && values.percentageBase.trim() ? requireMoney(values.percentageBase) : null,
+    roundBalanceTo: percentage ? null : parseRoundBalanceTo(values.roundBalanceTo),
     amount: requireMoney(values.amount),
     currencyId: account.currencyId,
     accountId: account.id,
@@ -430,30 +457,43 @@ interface BalanceLike {
   balance: string;
 }
 
+/** The step a form field holds ("100"), or null for none or anything that isn't one. */
+export function parseRoundBalanceTo(value: string): RoundBalanceStep | null {
+  const step = Number(value);
+  return value !== '' && isRoundBalanceStep(step) ? step : null;
+}
+
 /**
- * The amount a percentage comes to: of the base amount when one is typed, otherwise of the
- * account's balance as balanceBase has it. Null until there's a valid percentage and something
- * valid for it to be of.
+ * The amount the form's figures work out to: a percentage of the base amount when one is typed,
+ * otherwise of the account's balance as balanceBase has it; or, rounding the balance, whatever
+ * leaves it on a multiple of the step once the transaction goes through: down for money going out,
+ * up for an income. Null until there's something valid to work it out from.
  */
-export function amountFromPercentage(
-  values: Pick<AmountValues, 'percentage' | 'percentageBase'>,
+export function derivedAmount(
+  values: Pick<AmountValues, 'percentage' | 'percentageBase' | 'roundBalanceTo'>,
+  type: TransactionFormValues['type'],
   account: BalanceLike | undefined,
   editing?: Contribution,
   now = new Date(),
 ): string | null {
   const percentage = parsePercentageInput(values.percentage);
-  const base = values.percentageBase.trim()
-    ? parseMoneyInput(values.percentageBase)
-    : account
-      ? balanceBase(account, editing, now)
-      : null;
-  return percentage && base !== null ? percentOf(base, percentage) : null;
+  if (percentage) {
+    const base = values.percentageBase.trim()
+      ? parseMoneyInput(values.percentageBase)
+      : account
+        ? balanceBase(account, editing, now)
+        : null;
+    return base !== null ? percentOf(base, percentage) : null;
+  }
+  const step = parseRoundBalanceTo(values.roundBalanceTo);
+  return step && account ? roundBalanceAmount(balanceBase(account, editing, now), step, type === 'income' ? 'in' : 'out') : null;
 }
 
 /**
- * The balance a percentage is taken of without a base amount: the account's current one, less what
- * the transaction being edited has already put into it — worked out afresh, a charge mustn't count
- * itself. A future-dated transaction isn't in the current balance yet, so then nothing comes off.
+ * The balance a percentage without a base amount is taken of, or a rounding rounds: the account's
+ * current one, less what the transaction being edited has already put into it — worked out afresh,
+ * a charge mustn't count itself. A future-dated transaction isn't in the current balance yet, so
+ * then nothing comes off.
  */
 export function balanceBase(account: BalanceLike, editing?: Contribution, now = new Date()): string {
   if (!editing || new Date(editing.date) > now) {

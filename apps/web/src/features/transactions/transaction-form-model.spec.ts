@@ -2,8 +2,8 @@ import { describe, expect, it } from 'vitest';
 import type { RecurringRule, Transaction } from './queries';
 import {
   amountFormSchema,
-  amountFromPercentage,
   balanceBase,
+  derivedAmount,
   defaultTransactionFormValues,
   isAhead,
   isPlannedDay,
@@ -33,6 +33,7 @@ const messages = {
   pastNextDate: 'past',
   percentage: 'percentage',
   percentageAmount: 'percentageAmount',
+  roundBalanceAmount: 'roundBalanceAmount',
 };
 
 const values = (overrides: Partial<TransactionFormValues>): TransactionFormValues => ({
@@ -105,12 +106,16 @@ describe('transactionFormSchema', () => {
 
 describe('amountFormSchema', () => {
   const sheetIssues = (sides: Partial<TransactionFormValues>, overrides: Partial<TransactionFormValues>) => {
-    const { type, accountId, toAccountId, amount, destAmount, percentage, percentageBase } = values({ ...sides, ...overrides });
+    const { type, accountId, toAccountId, amount, destAmount, percentage, percentageBase, roundBalanceTo } = values({
+      ...sides,
+      ...overrides,
+    });
     const result = amountFormSchema({ type, accountId, toAccountId }, accounts, messages).safeParse({
       amount,
       destAmount,
       percentage,
       percentageBase,
+      roundBalanceTo,
     });
     return result.success ? {} : Object.fromEntries(result.error.issues.map((issue) => [issue.path.join('.'), issue.message]));
   };
@@ -120,6 +125,7 @@ describe('amountFormSchema', () => {
     expect(sheetIssues({}, { amount: '0' })).toEqual({ amount: 'amount' });
     expect(sheetIssues({}, { percentage: '150' })).toEqual({ percentage: 'percentage' });
     expect(sheetIssues({}, { percentage: '5', percentageBase: '0', amount: '0.00' })).toEqual({ percentageBase: 'amount' });
+    expect(sheetIssues({}, { roundBalanceTo: '100', amount: '0.00' })).toEqual({ amount: 'roundBalanceAmount' });
   });
 
   it('asks for what arrived only across currencies', () => {
@@ -144,6 +150,7 @@ describe('toTransactionBody', () => {
       destAmount: null,
       percentage: null,
       percentageBase: null,
+      roundBalanceTo: null,
       note: 'lunch',
     });
   });
@@ -158,6 +165,13 @@ describe('toTransactionBody', () => {
     expect(body({ percentage: '5', percentageBase: '12 000,5' })).toMatchObject({ percentage: '5', percentageBase: '12000.5' });
     expect(body({ percentage: '5', percentageBase: ' ' })).toMatchObject({ percentage: '5', percentageBase: null });
     expect(body({ percentage: '', percentageBase: '12000' })).toMatchObject({ percentage: null, percentageBase: null });
+  });
+
+  it('sends the step the balance is rounded to, never beside a percentage', () => {
+    const body = (overrides: Partial<TransactionFormValues>) => toTransactionBody(values(overrides), accounts, undefined, now);
+    expect(body({ roundBalanceTo: '100' })).toMatchObject({ percentage: null, roundBalanceTo: 100 });
+    expect(body({ roundBalanceTo: '' })).toMatchObject({ roundBalanceTo: null });
+    expect(body({ roundBalanceTo: '100', percentage: '5' })).toMatchObject({ percentage: '5', roundBalanceTo: null });
   });
 
   it('sends a subcategory only together with its category', () => {
@@ -207,6 +221,7 @@ const rule = (overrides: Partial<RecurringRule>): RecurringRule => ({
   note: null,
   percentage: null,
   percentageBase: null,
+  roundBalanceTo: null,
   intervalUnit: 'month',
   intervalValue: 1,
   startsAt: new Date(2026, 0, 5, 12).toISOString(),
@@ -234,6 +249,7 @@ describe('toRecurringRuleBody', () => {
       note: null,
       percentage: null,
       percentageBase: null,
+      roundBalanceTo: null,
       intervalUnit: 'week',
       intervalValue: 2,
       // Local noon, as for a transaction dated on a day other than today.
@@ -316,6 +332,7 @@ describe('plannedToRecurringRuleBody', () => {
       note: 'SIM',
       percentage: '3.5',
       percentageBase: null,
+      roundBalanceTo: null,
     } as Transaction;
     expect(plannedToRecurringRuleBody(planned, { day: '2026-10-01', repeat: 'month:1' }, now, 'UTC')).toEqual({
       type: 'expense',
@@ -328,6 +345,7 @@ describe('plannedToRecurringRuleBody', () => {
       note: 'SIM',
       percentage: '3.5',
       percentageBase: null,
+      roundBalanceTo: null,
       intervalUnit: 'month',
       intervalValue: 1,
       startsAt: planned.date,
@@ -350,6 +368,11 @@ describe('toRecurringRulePatch', () => {
     expect(ruleToFormValues(rule({ percentage: null, percentageBase: null }))).toMatchObject({ percentage: '', percentageBase: '' });
   });
 
+  it('shows the step a series rounds the balance to', () => {
+    expect(ruleToFormValues(rule({ roundBalanceTo: 1000 }))).toMatchObject({ roundBalanceTo: '1000', percentage: '' });
+    expect(ruleToFormValues(rule({}))).toMatchObject({ roundBalanceTo: '' });
+  });
+
   it('leaves the schedule alone when neither the next date nor the repeat changed', () => {
     const patch = toRecurringRulePatch({ ...ruleToFormValues(rule({})), amount: '9500' }, accounts, rule({}), now, 'UTC');
     expect(patch).toEqual({
@@ -362,6 +385,7 @@ describe('toRecurringRulePatch', () => {
       note: null,
       percentage: null,
       percentageBase: null,
+      roundBalanceTo: null,
       intervalUnit: 'month',
       intervalValue: 1,
     });
@@ -421,9 +445,13 @@ describe('pickDefaultAccountId', () => {
   });
 });
 
-describe('amountFromPercentage', () => {
+describe('derivedAmount', () => {
   const card = { id: usd.id, balance: '-10000.00' };
-  const worked = (percentage: string, percentageBase = '') => amountFromPercentage({ percentage, percentageBase }, card, undefined, now);
+  const wallet = { id: usd.id, balance: '1234.56' };
+  const worked = (percentage: string, percentageBase = '') =>
+    derivedAmount({ percentage, percentageBase, roundBalanceTo: '' }, 'expense', card, undefined, now);
+  const rounded = (roundBalanceTo: string, type: TransactionFormValues['type'] = 'expense') =>
+    derivedAmount({ percentage: '', percentageBase: '', roundBalanceTo }, type, wallet, undefined, now);
 
   it('takes the percentage of the base amount when there is one', () => {
     expect(worked('5', '12 000,50')).toBe('600.03');
@@ -431,13 +459,28 @@ describe('amountFromPercentage', () => {
 
   it('takes it of the account balance otherwise', () => {
     expect(worked('3,5')).toBe('350.00');
-    expect(amountFromPercentage({ percentage: '3', percentageBase: '' }, undefined, undefined, now)).toBeNull();
+    expect(derivedAmount({ percentage: '3', percentageBase: '', roundBalanceTo: '' }, 'expense', undefined, undefined, now)).toBeNull();
   });
 
   it('works nothing out from a wrong percentage or base amount', () => {
     expect(worked('')).toBeNull();
     expect(worked('150')).toBeNull();
     expect(worked('5', 'x')).toBeNull();
+  });
+
+  it('rounds the balance down for money going out, up for money coming in', () => {
+    expect(rounded('100')).toBe('34.56');
+    expect(rounded('100', 'transfer')).toBe('34.56');
+    expect(rounded('100', 'income')).toBe('65.44');
+    expect(rounded('1')).toBe('0.56');
+    // What a balance on a round figure already comes to: the form says so.
+    expect(derivedAmount({ percentage: '', percentageBase: '', roundBalanceTo: '10' }, 'expense', card, undefined, now)).toBe('0.00');
+  });
+
+  it('rounds nothing without a step, or beside a percentage', () => {
+    expect(rounded('')).toBeNull();
+    expect(rounded('50')).toBeNull();
+    expect(derivedAmount({ percentage: '3', percentageBase: '', roundBalanceTo: '100' }, 'expense', card, undefined, now)).toBe('300.00');
   });
 });
 
