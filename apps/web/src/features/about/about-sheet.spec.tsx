@@ -1,7 +1,7 @@
 import { render, screen } from '@testing-library/react';
 import { describe, expect, it, vi } from 'vitest';
-import '@/i18n';
-import { REPOSITORY_URL } from '@/lib/build-info';
+import i18n from '@/i18n';
+import { REPOSITORY_URL, newIssueUrl } from '@/lib/build-info';
 import { AboutSheet } from './about-sheet';
 
 // Hoisted with the mock below, which vitest lifts above the imports.
@@ -26,5 +26,12 @@ describe('AboutSheet', () => {
 
     const source = screen.getByRole('link', { name: /GitHub/ });
     expect(source.getAttribute('href')).toBe(REPOSITORY_URL);
+  });
+
+  it('opens a new issue carrying that same build', () => {
+    render(<AboutSheet open onOpenChange={vi.fn()} />);
+
+    const report = screen.getByRole('link', { name: i18n.t('about.reportIssue') });
+    expect(report.getAttribute('href')).toBe(newIssueUrl('1.2.3', COMMIT));
   });
 });

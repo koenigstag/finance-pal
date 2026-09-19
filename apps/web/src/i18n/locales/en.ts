@@ -401,6 +401,7 @@ export const en = {
     commit: 'Commit',
     noCommit: 'Not recorded',
     source: 'Source on GitHub',
+    reportIssue: 'Report an issue',
   },
   settings: {
     title: 'Settings',

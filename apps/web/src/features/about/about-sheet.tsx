@@ -1,8 +1,8 @@
-import { CodeIcon, WalletIcon } from 'lucide-react';
+import { BugIcon, CodeIcon, WalletIcon } from 'lucide-react';
 import { useTranslation } from 'react-i18next';
 import { Button } from '@/components/ui/button';
 import { Dialog, DialogContent, DialogDescription, DialogHeader, DialogTitle } from '@/components/ui/dialog';
-import { APP_COMMIT, APP_VERSION, REPOSITORY_URL, commitUrl, shortCommit } from '@/lib/build-info';
+import { APP_COMMIT, APP_VERSION, REPOSITORY_URL, commitUrl, newIssueUrl, shortCommit } from '@/lib/build-info';
 
 interface AboutSheetProps {
   open: boolean;
@@ -59,12 +59,21 @@ export function AboutSheet({ open, onOpenChange }: AboutSheetProps) {
           </div>
         </dl>
 
-        <Button variant="outline" asChild>
-          <a href={REPOSITORY_URL} target="_blank" rel="noreferrer">
-            <CodeIcon />
-            {t('about.source')}
-          </a>
-        </Button>
+        {/* Their own row: the dialog's own gap would set these two further apart than they belong. */}
+        <div className="grid gap-2">
+          <Button variant="outline" asChild>
+            <a href={REPOSITORY_URL} target="_blank" rel="noreferrer">
+              <CodeIcon />
+              {t('about.source')}
+            </a>
+          </Button>
+          <Button variant="outline" asChild>
+            <a href={newIssueUrl(APP_VERSION, APP_COMMIT)} target="_blank" rel="noreferrer">
+              <BugIcon />
+              {t('about.reportIssue')}
+            </a>
+          </Button>
+        </div>
       </DialogContent>
     </Dialog>
   );
