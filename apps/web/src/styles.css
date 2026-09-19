@@ -134,8 +134,13 @@
   body {
     @apply bg-background text-foreground;
     }
+  /* overscroll-behavior-x: a sideways swipe moves the month, not the browser's history.
+     touch-action alone doesn't stop that: Chrome reads a horizontal drag as "go back" through its
+     own gesture pipeline, and the page navigates away mid-swipe. Nothing here scrolls sideways,
+     so there is nothing given up by containing it. */
   html {
     @apply font-sans;
+    overscroll-behavior-x: contain;
     }
   /* Tailwind v4's preflight leaves buttons on the browser's default cursor; restore the pointer
      for everything clickable. Disabled controls keep the not-allowed cursor their classes set. */

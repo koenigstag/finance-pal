@@ -1,32 +1,27 @@
-import { ChevronLeftIcon, ChevronRightIcon, ListFilterIcon, PlusIcon, ReceiptTextIcon } from 'lucide-react';
-import { useEffect, useMemo, useRef, useState } from 'react';
+import { ChevronLeftIcon, ChevronRightIcon, ListFilterIcon, PlusIcon } from 'lucide-react';
+import { useMemo, useState } from 'react';
 import { useTranslation } from 'react-i18next';
 import { useSearchParams } from 'react-router';
 import { TRANSACTION_TYPES } from '@ft/shared-contracts';
 import { HeaderTools } from '@/components/header-tools';
-import { PAGE_BOTTOM_SPACE, PageHeader } from '@/components/page-header';
-import { QueryError } from '@/components/query-error';
+import { PageHeader } from '@/components/page-header';
 import { Badge } from '@/components/ui/badge';
 import { Button } from '@/components/ui/button';
-import { Empty, EmptyDescription, EmptyHeader, EmptyMedia, EmptyTitle } from '@/components/ui/empty';
-import { Spinner } from '@/components/ui/spinner';
 import { useAccounts } from '@/features/accounts/queries';
 import { useCategories } from '@/features/categories/queries';
 import { useGroupScope } from '@/features/groups/group-context';
-import { monthRange, parseMonthParam, shiftMonth, toMonthParam } from '@/lib/dates';
-import { useSwipe } from '@/lib/swipe';
+import { parseMonthParam, shiftMonth, toMonthParam } from '@/lib/dates';
+import { useSwipeTrack } from '@/lib/swipe';
 import { capitalizeFirst } from '@/lib/text';
-import { cn } from '@/lib/utils';
-import { useRecurringRules, useTransactionPages, type RecurringRule, type Transaction, type TransactionFilters } from './queries';
+import { useRecurringRules, type RecurringRule, type Transaction } from './queries';
 import { DeleteTransactionDialog } from './delete-transaction-dialog';
+import { MonthTransactions } from './month-transactions';
 import { PlannedOccurrenceDialog, type PlannedOccurrenceAction } from './planned-occurrence-dialog';
 import { TransactionActionsSheet, type TransactionAction } from './transaction-actions-sheet';
 import { TransactionDateSheet } from './transaction-date-sheet';
 import { TransactionDialog } from './transaction-dialog';
 import { isPlannedDay } from './transaction-form-model';
-import { TransactionList } from './transaction-list';
 import { TransactionFiltersSheet, type TransactionFilterValues } from './transaction-filters-sheet';
-import { useTodayAnchor } from './use-today-anchor';
 
 type TransactionType = (typeof TRANSACTION_TYPES)[number];
 
@@ -64,6 +59,7 @@ export function TransactionsPage() {
 
   // Filters live in the URL, so a reload, the back button or a shared link keep them.
   const month = parseMonthParam(params.get('month'));
+  const monthKey = toMonthParam(month);
   const accountId = params.get('account') ?? undefined;
   const categoryId = params.get('category') ?? undefined;
   const typeParam = params.get('type');
@@ -88,11 +84,12 @@ export function TransactionsPage() {
     );
   const setParam = (name: string, value: string | undefined) => updateParams({ [name]: value });
 
-  // A month at a time, back or forward: the chevrons beside the month's name, and — on a phone,
-  // where there is no chevron under a thumb — a swipe across the list, each way pointing at the
-  // chevron it stands for: left for the month before, right for the one after.
+  // A month at a time, back or forward. The three months sit side by side in the order they
+  // happened, so dragging the strip left brings the month after into view and dragging it right
+  // the month before — the same way round as the chevrons either side of the month's name, which
+  // step to a neighbour already on the strip and so have nothing to wait for.
   const goToMonth = (delta: number) => setParam('month', toMonthParam(shiftMonth(month, delta)));
-  const swipe = useSwipe((direction) => goToMonth(direction === 'left' ? -1 : 1));
+  const strip = useSwipeTrack(monthKey, goToMonth);
 
   const filterValues: TransactionFilterValues = { search, accountId, type, categoryId };
   const onFiltersChange = (patch: Partial<TransactionFilterValues>) =>
@@ -102,27 +99,11 @@ export function TransactionsPage() {
       ),
     );
 
-  const monthKey = toMonthParam(month);
-  // The side the month on screen came in from, so it slides in from there however it was reached:
-  // swiped, tapped or stepped back to with the browser's own back button.
-  const [slide, setSlide] = useState<{ month: string; from: 'left' | 'right' | null }>({ month: monthKey, from: null });
-  if (slide.month !== monthKey) {
-    setSlide({ month: monthKey, from: monthKey < slide.month ? 'left' : 'right' });
-  }
-  const filters = useMemo<TransactionFilters>(
-    () => ({ ...monthRange(parseMonthParam(monthKey)), accountId, categoryId, type, search: search || undefined }),
-    [monthKey, accountId, categoryId, type, search],
+  // The month on screen and the ones either side of it, loaded and waiting just out of sight.
+  const months = useMemo(
+    () => [-1, 0, 1].map((delta) => shiftMonth(parseMonthParam(monthKey), delta)),
+    [monthKey],
   );
-  const pages = useTransactionPages(group.id, filters);
-  const loaded = useMemo(() => pages.data?.pages.flatMap((page) => page.items) ?? [], [pages.data]);
-  // A month still to come reads forwards — the next thing due first — while this month and the
-  // ones behind it read backwards, from what happened last. The API always answers newest first.
-  const upcomingMonth = new Date(monthRange(month).dateFrom) > new Date();
-  const transactions = useMemo(() => (upcomingMonth ? [...loaded].reverse() : loaded), [loaded, upcomingMonth]);
-  const scrollerRef = useRef<HTMLDivElement>(null);
-  // The list opens on the separator before what already happened; planned transactions wait
-  // above it, a scroll up. The title, month and filters above the list don't move.
-  const anchorSpacer = useTodayAnchor(scrollerRef, JSON.stringify([group.id, filters]), pages.isSuccess);
 
   const activeFilterCount = [search, accountId, categoryId, type].filter(Boolean).length;
   const canCreate = ability.can('create', 'Transaction');
@@ -151,8 +132,10 @@ export function TransactionsPage() {
       setDeleting({ open: true, transaction });
     }
   };
+  // Names the month the strip is nearest rather than the one the URL still holds, so the name
+  // changes as a half-finished drag passes the halfway mark and not a moment after it lands.
   const monthLabel = capitalizeFirst(
-    new Intl.DateTimeFormat(i18n.language, { month: 'long', year: 'numeric' }).format(month),
+    new Intl.DateTimeFormat(i18n.language, { month: 'long', year: 'numeric' }).format(months[1 + strip.showing]),
     i18n.language,
   );
 
@@ -168,7 +151,7 @@ export function TransactionsPage() {
             variant="ghost"
             size="icon"
             aria-label={t('transactions.filters.previousMonth')}
-            onClick={() => goToMonth(-1)}
+            onClick={() => strip.step(-1)}
           >
             <ChevronLeftIcon />
           </Button>
@@ -179,7 +162,7 @@ export function TransactionsPage() {
             variant="ghost"
             size="icon"
             aria-label={t('transactions.filters.nextMonth')}
-            onClick={() => goToMonth(1)}
+            onClick={() => strip.step(1)}
           >
             <ChevronRightIcon />
           </Button>
@@ -207,51 +190,28 @@ export function TransactionsPage() {
         </Button>
       </HeaderTools>
 
-      {/* Swipeable, and never scrolling sideways itself: a month sliding in must not be reachable
-          by dragging the list across. */}
-      <div
-        ref={scrollerRef}
-        {...swipe}
-        className={cn('-mx-1 min-h-0 flex-1 overflow-x-hidden overflow-y-auto px-1 scrollbar-none', PAGE_BOTTOM_SPACE)}
-      >
-        <div
-          // Remounted with the month, which is what starts the slide over again.
-          key={monthKey}
-          className={cn(
-            slide.from && 'duration-200 animate-in motion-reduce:animate-none',
-            slide.from === 'left' && 'slide-in-from-left-6',
-            slide.from === 'right' && 'slide-in-from-right-6',
-          )}
-        >
-          {pages.isPending ? (
-            <Spinner className="mx-auto size-6 text-muted-foreground" />
-          ) : pages.isError ? (
-            <QueryError onRetry={() => void pages.refetch()} />
-          ) : transactions.length === 0 ? (
-            <Empty className="border">
-              <EmptyHeader>
-                <EmptyMedia variant="icon">
-                  <ReceiptTextIcon />
-                </EmptyMedia>
-                <EmptyTitle>{t('transactions.empty.title')}</EmptyTitle>
-                <EmptyDescription>{t('transactions.empty.description')}</EmptyDescription>
-              </EmptyHeader>
-            </Empty>
-          ) : (
-            <div className="flex flex-col gap-4">
-              <TransactionList
-                transactions={transactions}
-                accounts={accounts.data ?? []}
-                categories={categories.data ?? []}
-                rules={rules.data ?? []}
-                onSelect={canUpdate || canCreate || canDelete ? (transaction) => setSheet({ open: true, transaction }) : undefined}
-              />
-              {pages.hasNextPage && (
-                <LoadMore loading={pages.isFetchingNextPage} onLoadMore={() => void pages.fetchNextPage()} />
-              )}
-              {anchorSpacer > 0 && <div aria-hidden style={{ height: anchorSpacer }} />}
-            </div>
-          )}
+      {/*
+        The strip: three months side by side, clipped to the one in the middle. The negative
+        margin pays for the padding inside each panel, so the rows stay as wide as the page while
+        a gutter opens between one month and the next as the strip is dragged across.
+      */}
+      <div {...strip.viewport} className="-mx-2 min-h-0 flex-1 overflow-hidden">
+        <div style={strip.track} className="flex h-full w-full">
+          {months.map((panelMonth) => (
+            <MonthTransactions
+              key={toMonthParam(panelMonth)}
+              groupId={group.id}
+              month={panelMonth}
+              accountId={accountId}
+              categoryId={categoryId}
+              type={type}
+              search={search}
+              accounts={accounts.data ?? []}
+              categories={categories.data ?? []}
+              rules={rules.data ?? []}
+              onSelect={canUpdate || canCreate || canDelete ? (transaction) => setSheet({ open: true, transaction }) : undefined}
+            />
+          ))}
         </div>
       </div>
 
@@ -314,37 +274,5 @@ export function TransactionsPage() {
         onOpenChange={(open) => setDialog((current) => ({ ...current, open }))}
       />
     </section>
-  );
-}
-
-// Loads the next page when the end of the list scrolls into view; the button covers browsers
-// or layouts where that never happens.
-function LoadMore({ loading, onLoadMore }: { loading: boolean; onLoadMore: () => void }) {
-  const { t } = useTranslation();
-  const ref = useRef<HTMLDivElement>(null);
-  const onLoadMoreRef = useRef(onLoadMore);
-  onLoadMoreRef.current = onLoadMore;
-
-  useEffect(() => {
-    const element = ref.current;
-    if (!element || loading) {
-      return;
-    }
-    const observer = new IntersectionObserver((entries) => {
-      if (entries.some((entry) => entry.isIntersecting)) {
-        onLoadMoreRef.current();
-      }
-    });
-    observer.observe(element);
-    return () => observer.disconnect();
-  }, [loading]);
-
-  return (
-    <div ref={ref} className="flex justify-center">
-      <Button variant="outline" disabled={loading} onClick={onLoadMore}>
-        {loading && <Spinner />}
-        {t('transactions.loadMore')}
-      </Button>
-    </div>
   );
 }
