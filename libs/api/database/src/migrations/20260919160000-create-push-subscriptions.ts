@@ -4,13 +4,14 @@ import type { Migration } from './migration.interface.js';
 
 // Devices registered for Web Push, one row per browser per person.
 //
-// Two SECURITY DEFINER functions come with the table, for the same reason authenticate_api_key
-// has one: sending a notification is work done *for* someone other than whoever asked. The member
-// whose transaction sets it off may not read their co-members' rows, and the notification itself
-// is sent after their transaction has committed, on a connection with no app.current_user_id at
-// all — under the policy below, both see nothing. These two functions are the only way past it,
-// and neither takes a topic or a device from the outside: the caller passes the recipients it has
-// already established, under RLS, that it may notify.
+// The SECURITY DEFINER functions below come with the table, for the same reason
+// authenticate_api_key has one: sending a notification is work done *for* someone other than
+// whoever asked. Whoever sets a notification off may not read the recipients' rows, the
+// scheduler's notifications are set off by nobody at all, and either way the sending happens
+// after the transaction it belongs to has committed, on a connection with no app.current_user_id
+// — under the policy below, all of that sees nothing. These functions are the only way past it,
+// and none of them takes a device from the outside: they are handed a person, or a group, and a
+// topic, and hand back only what has asked to hear about it.
 async function up(queryRunner: QueryRunner): Promise<void> {
   await queryRunner.createTable(
     new Table({
@@ -110,12 +111,12 @@ async function up(queryRunner: QueryRunner): Promise<void> {
     $$
   `);
 
-  // The same, for everyone in a group but the person who set the change off. Their membership is
-  // what makes them a recipient, so this reads group_members itself instead of being handed a
-  // list: the notification goes out after the caller's transaction has committed, when there is
-  // no longer a session whose membership Postgres could check it against.
+  // The same for a whole group. Membership is what makes someone a recipient, so this reads
+  // group_members itself instead of being handed a list: the one thing sent this way comes from
+  // the scheduler, which acts for nobody and has no session whose membership Postgres could
+  // check a list against.
   await queryRunner.query(`
-    CREATE OR REPLACE FUNCTION find_group_push_targets(p_group_id uuid, p_except_user_id uuid, p_topic text)
+    CREATE OR REPLACE FUNCTION find_group_push_targets(p_group_id uuid, p_topic text)
     RETURNS TABLE (subscription_id uuid, user_id uuid, endpoint text, p256dh text, auth text, language text)
     LANGUAGE sql SECURITY DEFINER STABLE
     SET search_path = public, pg_temp
@@ -124,8 +125,7 @@ async function up(queryRunner: QueryRunner): Promise<void> {
       FROM push_subscriptions s
       JOIN group_members m ON m.user_id = s.user_id AND m.group_id = p_group_id
       LEFT JOIN profiles p ON p.id = s.user_id
-      WHERE (p_except_user_id IS NULL OR s.user_id <> p_except_user_id)
-        AND (p_topic IS NULL OR p_topic = ANY(s.topics))
+      WHERE p_topic IS NULL OR p_topic = ANY(s.topics)
     $$
   `);
 
@@ -146,7 +146,7 @@ async function up(queryRunner: QueryRunner): Promise<void> {
 
 async function down(queryRunner: QueryRunner): Promise<void> {
   await queryRunner.query('DROP FUNCTION IF EXISTS record_push_delivery(uuid, boolean)');
-  await queryRunner.query('DROP FUNCTION IF EXISTS find_group_push_targets(uuid, uuid, text)');
+  await queryRunner.query('DROP FUNCTION IF EXISTS find_group_push_targets(uuid, text)');
   await queryRunner.query('DROP FUNCTION IF EXISTS find_push_targets(uuid[], text)');
   await queryRunner.query('DROP FUNCTION IF EXISTS claim_push_subscription(uuid, text, text, text, text[], text)');
   // Takes its policy, index and foreign key along.

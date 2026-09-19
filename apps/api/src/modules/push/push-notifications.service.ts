@@ -7,16 +7,6 @@ import { renderPushMessage, topicFor, type PushMessage } from './push-messages';
 import { PushSenderService, type PushTarget } from './push-sender.service';
 import { PushSubscriptionsService } from './push-subscriptions.service';
 
-export interface TransactionRecordedInput {
-  groupId: string;
-  groupName: string;
-  // Whoever recorded it; they are the one member who doesn't hear about it.
-  actorUserId: string;
-  type: TransactionType;
-  amount: string;
-  currencyId: number;
-}
-
 export interface AddedToGroupInput {
   groupId: string;
   groupName: string;
@@ -39,10 +29,10 @@ export interface PlannedRecordedInput {
  * RealtimeEmitterService, for the case the socket can't cover — nobody has the app open.
  *
  * Like that service, the work is deferred to `runOnTransactionCommit()`, so a rollback later in
- * the same request never produces a notification for money nobody spent. Unlike it, the work is
- * a network call to someone else's server: it is never awaited by the request, and a failure is
- * logged rather than raised. A missed notification is a nuisance; a transaction that fails to
- * save because a push service was down would be a bug.
+ * the same request never announces something that in the end never happened. Unlike it, the work
+ * is a network call to someone else's server: it is never awaited by the request, and a failure
+ * is logged rather than raised. A missed notification is a nuisance; a write that fails to save
+ * because a push service was down would be a bug.
  *
  * Nothing at all happens where no VAPID keys are configured, and that check comes first in every
  * method: a deployment without push pays for none of this, not even a query.
@@ -60,28 +50,6 @@ export class PushNotificationsService {
     private readonly subscriptions: PushSubscriptionsService,
     private readonly sender: PushSenderService,
   ) {}
-
-  /** A member recorded a transaction: everyone else in the group hears about it. */
-  async transactionRecorded(input: TransactionRecordedInput): Promise<void> {
-    if (!this.sender.isConfigured) {
-      return;
-    }
-    const currency = await this.currencyCode(input.currencyId);
-    if (!currency) {
-      return;
-    }
-
-    const message: PushMessage = {
-      kind: 'transaction.recorded',
-      groupId: input.groupId,
-      groupName: input.groupName,
-      actor: await this.actorName(input.actorUserId),
-      type: input.type,
-      amount: input.amount,
-      currency,
-    };
-    this.onCommit(() => this.deliverToGroup(input.groupId, input.actorUserId, message));
-  }
 
   /** Someone was added to a group: they hear about it, the group doesn't. */
   async addedToGroup(input: AddedToGroupInput): Promise<void> {
@@ -112,7 +80,7 @@ export class PushNotificationsService {
       return;
     }
 
-    await this.deliverToGroup(input.groupId, null, {
+    await this.deliverToGroup(input.groupId, {
       kind: 'planned.recorded',
       groupId: input.groupId,
       groupName: input.groupName,
@@ -149,8 +117,8 @@ export class PushNotificationsService {
     }
   }
 
-  private async deliverToGroup(groupId: string, exceptUserId: string | null, message: PushMessage): Promise<number> {
-    const targets = await this.subscriptions.targetsForGroup(groupId, exceptUserId, topicFor(message));
+  private async deliverToGroup(groupId: string, message: PushMessage): Promise<number> {
+    const targets = await this.subscriptions.targetsForGroup(groupId, topicFor(message));
     return this.deliver(targets, message);
   }
 

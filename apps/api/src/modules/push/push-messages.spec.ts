@@ -2,72 +2,73 @@ import { formatAmount, renderPushMessage, topicFor, type PushMessage } from './p
 
 const GROUP_ID = '3f1b2c4d-5e6f-4a7b-8c9d-0e1f2a3b4c5d';
 
-const recorded: PushMessage = {
-  kind: 'transaction.recorded',
+const planned: PushMessage = {
+  kind: 'planned.recorded',
+  groupId: GROUP_ID,
+  groupName: 'Household',
+  type: 'expense',
+  amount: '12000.00',
+  currency: 'UAH',
+};
+
+const added: PushMessage = {
+  kind: 'member.added',
   groupId: GROUP_ID,
   groupName: 'Household',
   actor: 'Anna',
-  type: 'expense',
-  amount: '450.00',
-  currency: 'UAH',
 };
 
 describe('renderPushMessage', () => {
   it('titles a notification with the group and links to its transactions', () => {
-    const payload = renderPushMessage(recorded, 'en');
+    const payload = renderPushMessage(planned, 'en');
 
     expect(payload.title).toBe('Household');
-    expect(payload.body).toMatch(/Anna/);
-    expect(payload.body).toMatch(/450/);
+    expect(payload.body).toMatch(/12[\s,]?000/);
     // Relative to the app's scope, so it also lands right under a project path on GitHub Pages.
     expect(payload.path).toBe(`g/${GROUP_ID}/transactions`);
   });
 
-  it('writes in the recipient\'s language, not the language of whoever set it off', () => {
-    expect(renderPushMessage(recorded, 'ru').body).toMatch(/Anna потратил/);
+  it("writes in the recipient's language, not the language of whoever set it off", () => {
+    expect(renderPushMessage(planned, 'ru').body).toMatch(/^Запланированный расход/);
+    expect(renderPushMessage(added, 'ru').body).toMatch(/добавил\(а\) вас/);
   });
 
   it('reads a language with a region as the language', () => {
-    expect(renderPushMessage(recorded, 'ru-RU').body).toMatch(/потратил/);
+    expect(renderPushMessage(planned, 'ru-RU').body).toMatch(/^Запланированный/);
   });
 
   it('falls back to English for a language it has no words in', () => {
-    expect(renderPushMessage(recorded, 'fr').body).toMatch(/^Anna spent/);
-  });
-
-  it('names someone who has no display name rather than leaving a gap', () => {
-    expect(renderPushMessage({ ...recorded, actor: null }, 'en').body).toMatch(/^Someone spent/);
-    expect(renderPushMessage({ ...recorded, actor: null }, 'ru').body).toMatch(/^Кто-то/);
+    expect(renderPushMessage(planned, 'fr').body).toMatch(/^A planned expense of/);
   });
 
   it('tells income, expense and transfer apart', () => {
-    expect(renderPushMessage({ ...recorded, type: 'income' }, 'en').body).toMatch(/received/);
-    expect(renderPushMessage({ ...recorded, type: 'transfer' }, 'en').body).toMatch(/moved/);
+    expect(renderPushMessage({ ...planned, type: 'income' }, 'en').body).toMatch(/^A planned income of/);
+    expect(renderPushMessage({ ...planned, type: 'transfer' }, 'en').body).toMatch(/^A planned transfer of/);
   });
 
   it('gives notifications about one group the same tag, so a later one replaces the last', () => {
-    const first = renderPushMessage(recorded, 'en');
-    const second = renderPushMessage({ ...recorded, amount: '12.00' }, 'en');
+    const first = renderPushMessage(planned, 'en');
+    const second = renderPushMessage({ ...planned, amount: '12.00' }, 'en');
 
     expect(first.tag).toBe(second.tag);
-    expect(renderPushMessage({ ...recorded, groupId: GROUP_ID.replace('3f', '4f') }, 'en').tag).not.toBe(first.tag);
+    expect(renderPushMessage({ ...planned, groupId: GROUP_ID.replace('3f', '4f') }, 'en').tag).not.toBe(first.tag);
   });
 
-  it('announces a planned transaction without an actor', () => {
-    const payload = renderPushMessage(
-      { kind: 'planned.recorded', groupId: GROUP_ID, groupName: 'Household', type: 'expense', amount: '12000.00', currency: 'UAH' },
-      'en',
-    );
-
-    expect(payload.title).toBe('Household');
-    expect(payload.body).toMatch(/^A planned expense of/);
+  it('keeps the two kinds apart, so neither replaces the other', () => {
+    expect(renderPushMessage(planned, 'en').tag).not.toBe(renderPushMessage(added, 'en').tag);
   });
 
   it('sends whoever was added to a group to that group', () => {
-    const payload = renderPushMessage({ kind: 'member.added', groupId: GROUP_ID, groupName: 'Household', actor: 'Anna' }, 'en');
+    const payload = renderPushMessage(added, 'en');
 
+    expect(payload.title).toBe('Household');
     expect(payload.body).toBe('Anna added you to this group');
     expect(payload.path).toBe(`g/${GROUP_ID}`);
+  });
+
+  it('names someone who has no display name rather than leaving a gap', () => {
+    expect(renderPushMessage({ ...added, actor: null }, 'en').body).toMatch(/^Someone added/);
+    expect(renderPushMessage({ ...added, actor: null }, 'ru').body).toMatch(/^Кто-то/);
   });
 
   it('opens the app where it was left for the test notification', () => {
@@ -78,8 +79,8 @@ describe('renderPushMessage', () => {
 
 describe('topicFor', () => {
   it('routes each kind to the switch it answers to', () => {
-    expect(topicFor(recorded)).toBe('transactions');
-    expect(topicFor({ kind: 'member.added', groupId: GROUP_ID, groupName: 'Household', actor: null })).toBe('members');
+    expect(topicFor(planned)).toBe('planned');
+    expect(topicFor(added)).toBe('members');
   });
 
   it('gives the test notification no topic, so it reaches every device its owner has', () => {

@@ -18,9 +18,11 @@ const c = initContract();
  */
 
 // What a device asks to be told about. Each one is its own switch in settings.
+//
+// Deliberately nothing for a transaction somebody records: in a shared budget that is the most
+// frequent thing that happens, and an app that buzzes on every coffee is one whose notifications
+// get turned off altogether. Changes anyone made reach an open app over the socket instead.
 export const PUSH_TOPICS = [
-  // Someone else in a group recorded a transaction. Never your own, whichever device recorded it.
-  'transactions',
   // You were added to a group.
   'members',
   // A planned transaction has come round and is now part of the ledger.
@@ -29,9 +31,10 @@ export const PUSH_TOPICS = [
 export type PushTopic = (typeof PUSH_TOPICS)[number];
 export const pushTopicSchema = z.enum(PUSH_TOPICS);
 
-// Everything but 'planned', which only says what the ledger was going to do anyway: what a new
-// device starts with, and what the settings card offers to turn back on.
-export const DEFAULT_PUSH_TOPICS: readonly PushTopic[] = ['transactions', 'members'];
+// What a new device starts with: both of them, for now — each is occasional, and a device that
+// asked for notifications and then got none would read as broken. A noisier topic added later
+// would not belong here.
+export const DEFAULT_PUSH_TOPICS: readonly PushTopic[] = ['members', 'planned'];
 
 // A push service's URL for one device. Long, opaque, and the closest thing to an identifier a
 // subscription has — the API stores one row per endpoint and replaces it when the same device

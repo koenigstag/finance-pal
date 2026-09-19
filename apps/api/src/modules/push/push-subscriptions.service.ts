@@ -87,11 +87,10 @@ export class PushSubscriptionsService {
     return rows.map(toTarget);
   }
 
-  /** The same for everyone in a group, except whoever set the change off. */
-  async targetsForGroup(groupId: string, exceptUserId: string | null, topic: PushTopic | null): Promise<PushTarget[]> {
-    const rows: TargetRow[] = await this.subscriptions.query('SELECT * FROM find_group_push_targets($1, $2, $3)', [
+  /** The same for everyone in a group. */
+  async targetsForGroup(groupId: string, topic: PushTopic | null): Promise<PushTarget[]> {
+    const rows: TargetRow[] = await this.subscriptions.query('SELECT * FROM find_group_push_targets($1, $2)', [
       groupId,
-      exceptUserId,
       topic,
     ]);
     return rows.map(toTarget);

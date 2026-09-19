@@ -418,10 +418,6 @@ export const ru: Catalog<typeof en> = {
       tested_other: 'Отправлено на {{count}} устройств.',
       testedNone: 'Нет ни одного устройства, куда отправлять.',
       topics: {
-        transactions: {
-          label: 'Записи других участников',
-          description: 'Когда кто-то другой в группе записывает операцию. О своих — никогда.',
-        },
         members: {
           label: 'Добавление в группу',
           description: 'Когда вам открывают доступ к своей группе.',
