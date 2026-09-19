@@ -76,6 +76,9 @@
   ],
   "analytics": false,
   "targetDefaults": {
+    "typecheck": {
+      "inputs": ["default", "^production"]
+    },
     "test": {
       "dependsOn": ["^build"],
       "options": {
