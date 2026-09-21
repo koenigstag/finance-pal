@@ -6,6 +6,7 @@ import { Category, CategoryType, RecurringRule, Transaction } from '@ft/api-data
 import { CATEGORY_TYPES, type Action, type AppAbility, type Subject } from '@ft/shared-contracts';
 import { AbilityFactory } from '../../_core/authz/ability.factory';
 import { RealtimeEmitterService } from '../../realtime/realtime-emitter.service';
+import { sortOrderChanges } from './category-order';
 
 // The shared string union, not api-database's TypeORM enum — see the identical comment on
 // GroupWithRole.role in GroupsService for why (assignable one way, not the other).
@@ -92,6 +93,54 @@ export class CategoriesService {
     const updated = await this.findOrFail(groupId, categoryId);
     this.realtime.emitToGroup(groupId, { resourceType: 'Category', resourceId: categoryId, action: 'updated', groupId });
     return updated;
+  }
+
+  /**
+   * Puts the categories in the order given, by renumbering each one's place among its siblings.
+   * Nothing moves between levels here — a category keeps its type and its parent — so this never
+   * re-files a transaction; that's what update() is for.
+   *
+   * The caller sends the list it is showing rather than one category's new place, so an order
+   * settled from several drags arrives as one request, and the result doesn't depend on which
+   * sortOrder values the rows happened to hold.
+   */
+  @Transactional()
+  async reorder(userId: string, groupId: string, categoryIds: string[]): Promise<Category[]> {
+    await this.authorize(userId, groupId, 'update', 'Category');
+    if (new Set(categoryIds).size !== categoryIds.length) {
+      throw new BadRequestException('A category cannot appear twice in the order');
+    }
+    const found = await this.categories.find({ where: { groupId, id: In(categoryIds) } });
+    const byId = new Map(found.map((category) => [category.id, category]));
+    const ordered = categoryIds.map((categoryId) => {
+      const category = byId.get(categoryId);
+      if (!category) {
+        throw new NotFoundException('Category not found');
+      }
+      return category;
+    });
+
+    // One at a time, as everywhere else here: the request's RLS transaction holds a single
+    // connection, and only the rows that actually moved are written.
+    const changes = sortOrderChanges(ordered);
+    for (const { id, sortOrder } of changes) {
+      await this.categories.update({ id, groupId }, { sortOrder });
+    }
+    if (changes.length === 0) {
+      return ordered;
+    }
+
+    this.realtime.emitToGroup(groupId, {
+      resourceType: 'Category',
+      // One event for the whole reorder, naming the first category in it: what other tabs do with
+      // it is refetch the list, which is the same however many rows moved.
+      resourceId: ordered[0].id,
+      action: 'reordered',
+      groupId,
+    });
+    const renumbered = await this.categories.find({ where: { groupId, id: In(categoryIds) } });
+    const updatedById = new Map(renumbered.map((category) => [category.id, category]));
+    return ordered.map((category) => updatedById.get(category.id) ?? category);
   }
 
   @Transactional()

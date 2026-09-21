@@ -145,6 +145,12 @@ export const ru: Catalog<typeof en> = {
     subcategoryCount_many: '{{count}} подкатегорий',
     subcategoryCount_other: '{{count}} подкатегории',
     subcategoriesOf: 'Подкатегории «{{name}}»',
+    reorder: {
+      start: 'Изменить порядок',
+      save: 'Сохранить порядок',
+      hint: 'Перетаскивайте строки за левый край или перемещайте выбранную стрелками.',
+      move: 'Переместить «{{name}}»',
+    },
     types: {
       income: 'Доходы',
       expense: 'Расходы',

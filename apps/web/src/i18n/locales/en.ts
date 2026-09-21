@@ -143,6 +143,12 @@ export const en = {
     subcategoryCount_many: '{{count}} subcategories',
     subcategoryCount_other: '{{count}} subcategories',
     subcategoriesOf: 'Subcategories of “{{name}}”',
+    reorder: {
+      start: 'Reorder',
+      save: 'Save order',
+      hint: 'Drag a row by its handle, or move the one in focus with the arrow keys.',
+      move: 'Move “{{name}}”',
+    },
     types: {
       income: 'Income',
       expense: 'Expense',

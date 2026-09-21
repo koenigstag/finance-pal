@@ -79,6 +79,14 @@ export class CategoriesController {
     });
   }
 
+  @TsRestHandler(categoriesContract.reorder)
+  reorder(@CurrentUser() user?: RequestUser) {
+    return tsRestHandler(categoriesContract.reorder, async ({ params, body }) => {
+      const reordered = await this.categories.reorder(requireUser(user).id, params.groupId, body.categoryIds);
+      return { status: 200 as const, body: reordered.map(toCategoryDto) };
+    });
+  }
+
   @TsRestHandler(categoriesContract.usage)
   usage(@CurrentUser() user?: RequestUser) {
     return tsRestHandler(categoriesContract.usage, async ({ params }) => {

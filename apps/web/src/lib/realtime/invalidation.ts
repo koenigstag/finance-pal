@@ -52,7 +52,8 @@ export function invalidationFor({ resourceType, resourceId, action, groupId }: R
         // Its transactions and recurring rules lost it.
         return afterDelete(groupId, queryKeys.categoryUsage(groupId, resourceId));
       }
-      // An update may have moved it under another parent, which re-files its transactions.
+      // An update may have moved it under another parent, which re-files its transactions; a
+      // reorder only changes where the list puts them.
       return action === 'updated'
         ? refresh(queryKeys.categories(groupId), queryKeys.transactions(groupId))
         : refresh(queryKeys.categories(groupId));
