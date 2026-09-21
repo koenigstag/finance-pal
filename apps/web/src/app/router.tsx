@@ -9,6 +9,7 @@ import { CreateGroupPage } from '@/features/groups/create-group-page';
 import { GroupIndexRedirect } from '@/features/groups/group-index-redirect';
 import { GroupLayout } from '@/features/groups/group-layout';
 import { useTranslation } from 'react-i18next';
+import { NotificationsPage } from '@/features/push/notifications-page';
 import { OnboardingPage } from '@/features/profile/onboarding-page';
 import { RequireOnboarded } from '@/features/profile/require-onboarded';
 import { SettingsPage } from '@/features/profile/settings-page';
@@ -28,6 +29,7 @@ export const router = createBrowserRouter(
             { path: '/', element: <GroupIndexRedirect /> },
             { path: '/groups/new', element: <CreateGroupPage /> },
             { path: '/settings', element: <SettingsPage /> },
+            { path: '/settings/notifications', element: <NotificationsPage /> },
             // The active group lives in the URL, so a reload or a shared link keeps it.
             {
               path: '/g/:groupId',

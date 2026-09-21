@@ -2,6 +2,7 @@ import { Module } from '@nestjs/common';
 import { TypeOrmModule } from '@nestjs/typeorm';
 import { Account, Category, Currency, RecurringRule, Tag, Transaction, TransactionTag } from '@ft/api-database';
 import { AuthzModule } from '../../_core/authz/authz.module';
+import { PushModule } from '../../push/push.module';
 import { RealtimeModule } from '../../realtime/realtime.module';
 import { ExchangeRatesModule } from '../exchange-rates/exchange-rates.module';
 import { TransactionValidator } from './transaction-validator';
@@ -12,6 +13,7 @@ import { TransactionsService } from './transactions.service';
   imports: [
     TypeOrmModule.forFeature([Transaction, TransactionTag, Account, Category, Currency, Tag, RecurringRule]),
     AuthzModule,
+    PushModule,
     RealtimeModule,
     ExchangeRatesModule,
   ],

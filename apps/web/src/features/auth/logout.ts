@@ -1,9 +1,13 @@
 import { api } from '@/lib/api/client';
+import { unregisterThisDevice } from '@/features/push/queries';
 import { queryClient } from '@/lib/query-client';
 import { rootStore } from '@/stores/root-store';
 
 export async function logout(): Promise<void> {
   const session = rootStore.session.session;
+  // Before the session goes: taking this device off the list needs the access token, and a
+  // registration left behind would keep buzzing a browser its owner has signed out of.
+  await unregisterThisDevice().catch(() => undefined);
   rootStore.session.clear();
   // Cached data belongs to the user who just left; the next one must not see it even briefly.
   queryClient.clear();

@@ -1,5 +1,6 @@
 import { Module } from '@nestjs/common';
 import { APP_FILTER, APP_INTERCEPTOR } from '@nestjs/core';
+import { ScheduleModule } from '@nestjs/schedule';
 import { TsRestModule } from '@ts-rest/nest';
 import { AppConfigModule } from './config/app-config.module';
 import { AuthnModule } from './authn/authn.module';
@@ -20,6 +21,11 @@ import { RlsContextInterceptor } from './rls/rls-context.interceptor';
     AppConfigModule,
     AuthnModule,
     DatabaseModule,
+    // Registered once for the whole app: forRoot() sets up one orchestrator, and a second
+    // registration would run every @Cron twice. Two modules have jobs now — the recurring
+    // scheduler and the one that sends scheduled notifications — so it moved here, to the
+    // infrastructure they both sit on.
+    ScheduleModule.forRoot(),
     TsRestModule.register({ validateResponses: true, isGlobal: true }),
   ],
   controllers: [HealthController],

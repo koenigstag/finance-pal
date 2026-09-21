@@ -451,6 +451,46 @@ export const en = {
       addAction: 'Add',
       unavailable: "The rate provider can't be reached right now, so these are only your own rates.",
     },
+    notifications: {
+      title: 'Notifications',
+      // The line under the link on the settings page.
+      summary: 'What this device is told about.',
+      unavailable: 'Notifications are not set up on this server.',
+      thisDevice: 'This device',
+      description: 'A phone and a laptop are set up separately, each with its own switches.',
+      off: 'This device gets no notifications yet.',
+      enable: 'Turn on notifications',
+      disable: 'Turn off',
+      blocked: 'This browser is set to refuse notifications from the app. Allow them in its site settings, then come back.',
+      unsupported: 'This browser cannot show notifications. On an iPhone or iPad, add the app to the home screen first.',
+      noWorker: 'Notifications need the installed app. Reload the page, or install it, and try again.',
+      test: 'Send a test',
+      tested_one: 'Sent to {{count}} device.',
+      tested_few: 'Sent to {{count}} devices.',
+      tested_many: 'Sent to {{count}} devices.',
+      tested_other: 'Sent to {{count}} devices.',
+      // Only reachable with a device registered — the button isn't there otherwise — so zero
+      // means every push service refused it, not that there was nowhere to send.
+      testedNone: "Nothing was sent. This device's registration may have lapsed — turn notifications off and on again.",
+      topics: {
+        transactions: {
+          label: 'What others record',
+          description: 'When someone else in a group records a transaction. Never your own, and often in a busy group.',
+        },
+        members: {
+          label: 'Being added to a group',
+          description: 'When someone gives you access to their group.',
+        },
+        planned: {
+          label: 'Planned transactions',
+          description: 'When a repeating transaction comes round and joins the ledger.',
+        },
+        scheduled: {
+          label: 'Scheduled notes',
+          description: 'When a note someone in a group scheduled reaches its moment.',
+        },
+      },
+    },
     appearance: {
       title: 'Appearance',
       description: 'Applies to this device only.',
@@ -477,6 +517,7 @@ export const en = {
       open: 'Settings for {{name}}',
       details: 'Edit group details',
       members: 'Manage members',
+      scheduled: 'Scheduled notifications',
       apiKeys: 'API keys',
       delete: 'Delete group and its data',
     },
@@ -580,6 +621,20 @@ export const en = {
       description: 'Apps using this key stop working at once.',
       action: 'Delete key',
     },
+  },
+  scheduled: {
+    description: 'A note everyone in the group gets as a notification at the moment you pick. Sent once, to the minute.',
+    text: 'Note',
+    textPlaceholder: 'Rent goes out tomorrow',
+    date: 'Date',
+    time: 'Time',
+    schedule: 'Schedule it',
+    pastMoment: 'Pick a moment that is still to come.',
+    empty: 'Nothing scheduled.',
+    sent: 'Sent',
+    remove: 'Remove “{{text}}”',
+    readOnly: 'You are a viewer here, so you can see what is scheduled but not add to it.',
+    archivedGroup: 'The group is archived, so nothing new can be scheduled.',
   },
   validation: {
     required: 'Required',

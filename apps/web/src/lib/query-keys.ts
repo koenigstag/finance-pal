@@ -21,7 +21,12 @@ export const queryKeys = {
     ['group', groupId, 'categories', categoryId, 'usage'] as const,
   transactions: (groupId: string) => ['group', groupId, 'transactions'] as const,
   apiKeys: (groupId: string) => ['group', groupId, 'api-keys'] as const,
+  scheduledNotifications: (groupId: string) => ['group', groupId, 'scheduled-notifications'] as const,
   recurringRules: (groupId: string) => ['group', groupId, 'recurring-rules'] as const,
+  // Not group data: a device is registered by a person, for every group they are in.
+  pushPublicKey: ['push', 'public-key'] as const,
+  pushDevice: ['push', 'device'] as const,
+  pushSubscriptions: ['push', 'subscriptions'] as const,
 };
 
 export function startsWith(key: QueryKey, prefix: QueryKey): boolean {

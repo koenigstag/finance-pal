@@ -15,3 +15,5 @@ export * from './transaction-tag.entity.js';
 export * from './recurring-rule.entity.js';
 export * from './api-key.entity.js';
 export * from './exchange-rate.entity.js';
+export * from './push-subscription.entity.js';
+export * from './scheduled-notification.entity.js';

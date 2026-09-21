@@ -8,6 +8,7 @@ import { AppearanceCard } from '@/theme/appearance-card';
 import { ChangePasswordCard } from '@/features/auth/change-password-card';
 import { LogoutCard } from '@/features/auth/logout-card';
 import { readLastGroupId } from '@/features/groups/last-group';
+import { NotificationsLink } from '@/features/push/notifications-link';
 import { ExchangeRatesCard } from './exchange-rates-card';
 import { ProfileCard } from './profile-card';
 
@@ -38,7 +39,6 @@ export function SettingsPage() {
           </Button>
           <h1 className="text-xl font-semibold">{t('settings.title')}</h1>
         </div>
-
         <Tabs
           value={tab}
           // Replaced rather than pushed: switching tabs shouldn't fill the back button with every
@@ -73,10 +73,14 @@ export function SettingsPage() {
             <ExchangeRatesCard />
           </TabsContent>
           <TabsContent value="account" className="flex flex-col gap-4">
+            {/* A row rather than a card: what it leads to is a page of its own, because it is
+                about this device rather than this account and has more in it than a tab wants. */}
+            <NotificationsLink />
             <ChangePasswordCard />
             <LogoutCard />
           </TabsContent>
         </Tabs>
+
       </main>
     </>
   );

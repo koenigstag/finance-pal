@@ -1,8 +1,8 @@
 import { Module } from '@nestjs/common';
-import { ScheduleModule } from '@nestjs/schedule';
 import { TypeOrmModule } from '@nestjs/typeorm';
 import { Currency, RecurringRule, Transaction } from '@ft/api-database';
 import { AuthzModule } from '../_core/authz/authz.module';
+import { PushModule } from '../push/push.module';
 import { RealtimeModule } from '../realtime/realtime.module';
 import { ExchangeRatesModule } from '../ledger/exchange-rates/exchange-rates.module';
 import { TransactionsModule } from '../ledger/transactions/transactions.module';
@@ -12,11 +12,10 @@ import { RecurringRulesService } from './recurring-rules.service';
 
 @Module({
   imports: [
-    // The scheduler is this module's alone; registered here rather than in AppModule so the
-    // cron dependency lives next to its only user.
-    ScheduleModule.forRoot(),
+    // @Cron comes from CoreModule's single ScheduleModule.forRoot(); this module only declares jobs.
     TypeOrmModule.forFeature([RecurringRule, Transaction, Currency]),
     AuthzModule,
+    PushModule,
     RealtimeModule,
     TransactionsModule,
     ExchangeRatesModule,
