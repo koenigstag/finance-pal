@@ -143,7 +143,7 @@ export const AppHeader = observer(function AppHeader({ currentGroupId, page }: A
         onOpenChange={setGroupsOpen}
         onOpenSettings={setSettingsGroup}
       />
-      <DataSheet open={dataOpen} onOpenChange={setDataOpen} />
+      <DataSheet open={dataOpen} onOpenChange={setDataOpen} currentGroupId={currentGroupId} />
       <AboutSheet open={aboutOpen} onOpenChange={setAboutOpen} />
       <GroupSettingsSheet
         // Kept after closing so the sheet keeps its content while it animates out.

@@ -106,7 +106,9 @@
     "argon2": "^0.45.1",
     "date-fns": "^4.4.0",
     "dotenv": "^17.4.2",
+    "fflate": "^0.8.3",
     "pg": "^8.22.0",
+    "read-excel-file": "^9.3.10",
     "reflect-metadata": "^0.2.0",
     "rxjs": "^7.8.0",
     "socket.io": "^4.8.3",
@@ -114,6 +116,7 @@
     "typeorm": "^1.1.0",
     "typeorm-transactional": "^0.5.0",
     "web-push": "^3.6.7",
+    "write-excel-file": "^4.1.1",
     "zod": "3.25.76"
   },
   "devDependencies": {

@@ -39,9 +39,10 @@ async function bootstrap() {
   // The web app is served from another origin in production (GitHub Pages), so browsers need
   // CORS. Development doesn't: the Vite dev server proxies /api on the app's own origin.
   // Auth travels in the Authorization header, never cookies, so no credentials mode is needed.
+  // Content-Disposition is exposed for downloads (a group's export), whose name the API gives.
   const corsOrigins = parseList(process.env.CORS_ORIGINS);
   if (corsOrigins.length > 0) {
-    app.enableCors({ origin: corsOrigins });
+    app.enableCors({ origin: corsOrigins, exposedHeaders: ['Content-Disposition'] });
   }
 
   // No global prefix here on purpose: every route path, including the /api prefix,

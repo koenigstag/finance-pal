@@ -10,21 +10,25 @@ import {
   Post,
   Query,
   UploadedFile,
+  UploadedFiles,
   UseInterceptors,
 } from '@nestjs/common';
-import { FileInterceptor } from '@nestjs/platform-express';
+import { AnyFilesInterceptor, FileInterceptor } from '@nestjs/platform-express';
 import { isValidTimezone } from '@ft/shared-contracts';
 import { CurrentUser, type RequestUser } from '../_core/authn/request-user';
 import { requireUser } from '../_core/authn/require-user';
+import { DataFileProblem, groupNameFromFiles, readDataFiles } from '../data-file/files';
+import { ImportProblems, collectTables, planImport } from '../data-file/import-plan';
+import { TABLES } from '../data-file/tables';
 import { ImportService, type ImportSummary } from './import.service';
 import { OneMoneyFormatError, parseOneMoneyBackup } from './one-money-parser';
 
 // A backup holds every daily snapshot the app ever wrote, so the file grows with use; 64 MB is
-// far above the real ones seen (7 MB) and still bounded.
+// far above the real ones seen (7 MB) and still bounded. The same bound serves a Finance Pal file.
 const MAX_FILE_BYTES = 64 * 1024 * 1024;
 const MAX_GROUP_NAME = 120;
 
-// What FileInterceptor hands over, without depending on multer's own types: the fields used here.
+// What the file interceptors hand over, without depending on multer's own types: the fields used here.
 interface UploadedBackup {
   originalname: string;
   buffer: Buffer;
@@ -32,16 +36,17 @@ interface UploadedBackup {
 }
 
 /**
- * Importing from other finance apps. No UI yet: this is meant to be called with the file in hand,
- * e.g.
+ * Importing into a new group, named after the file, which the caller owns. Authentication is the
+ * app's usual bearer token — every route requires one unless marked public — and everything is
+ * written as the caller. The web app's Data sheet calls these; with the file in hand, so can curl:
  *
  *   curl -X POST "https://<api>/api/import/1money?timezone=Europe/Kyiv" \
  *        -H "Authorization: Bearer <access token>" \
  *        -F file=@1Money_BACKUP_17_09_2026
  *
- * The new group is named after the file. Authentication is the app's usual bearer token — every
- * route requires one unless marked public — and the import is written as the caller, who owns the
- * resulting group.
+ *   curl -X POST "https://<api>/api/import/finance-pal?timezone=Europe/Kyiv" \
+ *        -H "Authorization: Bearer <access token>" \
+ *        -F file=@"Family 2026-09-21.xlsx"
  */
 // The '/api' prefix is part of every route here: ts-rest contracts carry it in their paths,
 // so this controller spells it out rather than relying on a global prefix, which the app has none of.
@@ -63,10 +68,8 @@ export class ImportController {
   ): Promise<ImportSummary> {
     const userId = requireUser(user).id;
     const overrides = parseCurrencyOverrides(currencies);
-    if (timezone !== undefined && !isValidTimezone(timezone)) {
-      throw new BadRequestException(`Unknown time zone "${timezone}"`);
-    }
-    const name = groupNameFor(file.originalname);
+    assertTimezone(timezone);
+    const name = groupNameFor(uploadedName(file.originalname));
 
     // node:sqlite opens a path, not a buffer, and the file arrives in memory: park it in a
     // private temp directory for the length of the request.
@@ -85,17 +88,67 @@ export class ImportController {
       await rm(directory, { recursive: true, force: true });
     }
   }
+
+  /**
+   * A Finance Pal file, as the export writes it or as someone filled it in: an .xlsx workbook with
+   * the tables as sheets, a .zip of CSV files of one table each, or such CSV files sent together
+   * (the field names don't matter). Everything wrong with it comes back at once, a line each, and
+   * nothing is written.
+   */
+  @Post('finance-pal')
+  @UseInterceptors(AnyFilesInterceptor({ limits: { fileSize: MAX_FILE_BYTES, files: TABLES.length } }))
+  async importFinancePal(
+    @UploadedFiles() files: UploadedBackup[] | undefined,
+    @CurrentUser() user?: RequestUser,
+    // The IANA zone the file's dates are local times in; the app sends the device's.
+    @Query('timezone') timezone?: string,
+  ): Promise<ImportSummary> {
+    const userId = requireUser(user).id;
+    if (!files || files.length === 0) {
+      throw new BadRequestException('Send the workbook, the .zip, or the CSV files, as multipart form data');
+    }
+    assertTimezone(timezone);
+    const zone = timezone ?? 'UTC';
+    const now = new Date();
+
+    const uploads = files.map((file) => ({ name: uploadedName(file.originalname), content: file.buffer }));
+    const name = cleanGroupName(groupNameFromFiles(uploads.map((upload) => upload.name)));
+    try {
+      const tables = collectTables(await readDataFiles(uploads));
+      const plan = planImport(tables, { timezone: zone, now, currencies: await this.imports.currencyCodes() });
+      return await this.imports.importFinancePal(userId, name, plan, { timezone: zone, now });
+    } catch (error) {
+      if (error instanceof DataFileProblem) {
+        throw new BadRequestException(error.message);
+      }
+      if (error instanceof ImportProblems) {
+        throw new BadRequestException(error.problems);
+      }
+      throw error;
+    }
+  }
 }
 
-// The uploaded file's own name, which is what the person recognizes the export by. Multer decodes
-// it as latin1 per the HTTP spec, so non-ASCII names need putting back together.
-function groupNameFor(originalName: string): string {
+function assertTimezone(timezone: string | undefined): void {
+  if (timezone !== undefined && !isValidTimezone(timezone)) {
+    throw new BadRequestException(`Unknown time zone "${timezone}"`);
+  }
+}
+
+// The uploaded file's own name, which is what the person recognizes it by. Multer decodes it as
+// latin1 per the HTTP spec, so non-ASCII names need putting back together.
+function uploadedName(originalName: string): string {
   const decoded = Buffer.from(originalName, 'latin1').toString('utf8');
-  const name = (isMojibake(decoded) ? originalName : decoded)
-    .replace(/\.[A-Za-z0-9]{1,8}$/, '')
-    .replace(/[\\/]/g, ' ')
-    .trim();
-  return name.slice(0, MAX_GROUP_NAME) || 'Import';
+  return isMojibake(decoded) ? originalName : decoded;
+}
+
+// A group's name from a file's: without its extension.
+function groupNameFor(fileName: string): string {
+  return cleanGroupName(fileName.replace(/\.[A-Za-z0-9]{1,8}$/, ''));
+}
+
+function cleanGroupName(name: string): string {
+  return name.replace(/[\\/]/g, ' ').trim().slice(0, MAX_GROUP_NAME) || 'Import';
 }
 
 // A name that was plain ASCII to begin with survives the round trip unchanged; anything with a
