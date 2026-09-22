@@ -57,8 +57,9 @@ describe('ExternalNotificationsService', () => {
     expect(create.mock.calls[0][1]).toEqual({ type: 'income', amount: '500', accountId: 'card', note: undefined });
   });
 
-  it('records nothing for a notification that moves no money', async () => {
+  it('records nothing for a notification that moves no money, and logs why without the text', async () => {
     parse.mockReturnValue({ kind: 'skip', reason: 'A one-time code' });
+    const log = jest.spyOn(Logger.prototype, 'log').mockImplementation(() => undefined);
     const { service, create, lookup } = serviceWith();
 
     await expect(service.forward(apiKey, { type: 'abank', text: 'Код: 1234' })).resolves.toEqual({
@@ -67,6 +68,9 @@ describe('ExternalNotificationsService', () => {
     });
     expect(lookup.accountsOf).not.toHaveBeenCalled();
     expect(create).not.toHaveBeenCalled();
+    expect(log).toHaveBeenCalledWith('Skipped abank notification (key key-1): A one-time code');
+    expect(log.mock.calls.flat().join(' ')).not.toContain('1234');
+    log.mockRestore();
   });
 
   it('refuses text it cannot read, naming the bank', async () => {
@@ -101,6 +105,9 @@ describe('ExternalNotificationsService', () => {
 
     await expect(service.forward(apiKey, { type: 'abank', text: 'Покупка 1 UAH' })).rejects.toThrow(/No account receives/);
     expect(create).not.toHaveBeenCalled();
+    // The reason reaches the log, the text doesn't.
+    expect(warn).toHaveBeenCalledWith(expect.stringMatching(/^Unrecorded abank notification \(key key-1\): No account receives/));
+    expect(warn.mock.calls.flat().join(' ')).not.toContain('Покупка');
   });
 });
 

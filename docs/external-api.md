@@ -115,6 +115,7 @@ All paths start with `/api/external/v1`.
 | `GET`   | `/categories/:categoryId`         | `categories:read`      |
 | `POST`  | `/categories`                     | `categories:create`    |
 | `PATCH` | `/categories/:categoryId`         | `categories:update`    |
+| `POST`  | `/notifications`                  | `transactions:create`  |
 
 ## Recording a transaction
 
@@ -184,6 +185,51 @@ response's `nextCursor` as `cursor` for the next page. It filters by `accountId`
 category takes in its subcategories' transactions), `type`, `dateFrom`, `dateTo` and `search`,
 which looks in notes.
 
+## Forwarding a bank's notification
+
+`POST /notifications` records what a bank's notification says. The phone forwards the notification
+as it is, and the API reads it the way that bank words them: which way the money went, how much,
+in what currency, and who it went to or came from, which becomes the note. It is recorded as
+`POST /transactions` records, idempotency included: the text is the key, so a notification the
+bank posts twice records once.
+
+The body names the bank and gives the text:
+
+```json
+{"type":"abank","text":"🛒 -133.40 ₴\nАТБ\nКешбек: 1.6 ₴\nБаланс: 5 757.11 ₴"}
+```
+
+Or send the bare text as `text/plain`, with the bank in the query string:
+`POST /notifications?type=abank`. That form needs no escaping, which matters to automation apps
+that can't escape a notification's quotes and line breaks into JSON.
+
+- The text should hold the notification's title and its text, one after the other on separate
+  lines. Some banks print the amount in the title. An expanded text repeating the same lines is
+  fine.
+- The account is the one set to receive that bank's notifications. In the app, edit the account
+  and choose the bank under **Bank notifications**. A bank with accounts in several currencies
+  has one receiving each, and the currency in the notification picks it.
+
+| Status | Means                                                                                         |
+| ------ | --------------------------------------------------------------------------------------------- |
+| 201    | recorded; the transaction, as `POST /transactions` answers. Sent again: the same one, with `Idempotent-Replayed: true` |
+| 200    | `{"recorded": false, "reason": "…"}`: nothing to record, such as a declined payment |
+| 422    | the text isn't worded like anything the API knows from that bank, no account receives the bank's notifications, or none of them is in the notification's currency |
+
+A text the API can't read is logged on the server, whole, so its wording can be taught to the
+parser. Texts it reads are never logged.
+
+Banks, by `type`:
+
+- **`abank`, A-Bank** (the àbank24 app). It reads the title's signed amount and currency
+  (`🛒 -133.40 ₴`), the name at the start of the text, and the balance line (`Баланс: …`), which
+  every payment has. A notification without one gets a 422 rather than a guess.
+  - A move between your own A-Bank cards records nothing. It posts a minus on one card and a
+    plus on the other, and the two cancel out.
+  - A declined payment records nothing.
+  - A purchase abroad arrives in its own currency (`-4 280.00 HUF`), so it's refused unless an
+    account in that currency receives A-Bank's notifications.
+
 ## Accounts and categories
 
 `POST /accounts` takes `name` and `currency`, and optionally `type` (`regular`, `debt`,
@@ -200,9 +246,46 @@ subcategory to its category.
 
 ## A phone automation: MacroDroid
 
-What follows turns a bank's notification into an expense. Other automation apps (Tasker,
-Automate, iOS Shortcuts) work the same way: a trigger, a value taken out of the text, one HTTP
-request.
+Other automation apps (Tasker, Automate, iOS Shortcuts) work the same way: a trigger, and one
+HTTP request.
+
+### Forwarding the notification, for a bank the API reads
+
+The phone only forwards the notification; everything else happens on the server.
+
+1. In the app, create a key with **Transactions: Add**. Set **Bank notifications** on the account
+   the bank's payments go to.
+2. In MacroDroid, create a macro with the **Notification Received** trigger, set to the bank's app
+   (for A-Bank, àbank24). Under the text content choose **Matches** and tick **Use regex**. The
+   pattern below passes only payments, meaning an amount with decimals and a currency, and never
+   a code, so one-time codes stay on the phone:
+
+   ```
+   (?s)^(?!.*(Код|код|OTP|пароль|Пароль|PIN)).*\d(\d| |\u00A0|\u202F)*(\.|,)\d\d?( |\u00A0|\u202F)?(₴|грн|UAH|USD|EUR|PLN|GBP|CHF|CZK|HUF|TRY|GEL|MDL|RON|BGN|SEK|NOK|DKK|CAD|JPY|CNY|AED|ILS|KZT).*$
+   ```
+
+   With a regex, MacroDroid matches the whole text and ignores **Ignore case**, which is why the
+   pattern starts and ends with `.*` and spells out both cases. It has no `{…}` quantifiers,
+   because MacroDroid reads braces as magic text.
+3. Add an **HTTP Request** action:
+   - method `POST`, address `https://<api host>/api/external/v1/notifications?type=abank`
+   - a header `X-Api-Key` with the key
+   - a body of type `text/plain`, holding the title, the text and the expanded text:
+
+     ```
+     {not_title}
+     {notification}
+     {not_text_big}
+     ```
+
+   `{notification}` alone isn't enough: A-Bank prints the amount in the title.
+4. Optionally, save the response code into a variable. `201` is recorded, `200` is nothing to
+   record, and `422` says in its body what went wrong.
+
+### Parsing on the phone, for any other bank
+
+What follows turns a bank's notification into an expense by taking the amount out on the phone
+and sending `POST /transactions`.
 
 1. In the app, create a key with **Transactions: Add** and copy it, along with the address shown
    next to it.
