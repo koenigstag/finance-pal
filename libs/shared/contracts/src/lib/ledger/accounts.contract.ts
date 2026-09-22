@@ -3,6 +3,7 @@ import { z } from 'zod';
 import { booleanQuerySchema } from '../common/boolean-query.schema.js';
 import { moneySchema, signedMoneySchema } from '../common/money.schema.js';
 import { errorSchema } from '../common/error.schema.js';
+import { notificationBankSchema } from '../external/notification-banks.js';
 
 const c = initContract();
 
@@ -21,6 +22,8 @@ export const accountSchema = z.object({
   color: z.string().nullable(),
   description: z.string().nullable(),
   isIncludedInBalance: z.boolean(),
+  // The bank whose notifications, forwarded to the external API, are recorded on this account.
+  notificationBank: notificationBankSchema.nullable(),
   sortOrder: z.number().int(),
   archived: z.boolean(),
   archivedAt: z.string().datetime().nullable(),
@@ -53,6 +56,8 @@ const createAccountBodySchema = z.object({
     .optional(),
   description: z.string().optional(),
   isIncludedInBalance: z.boolean().optional(),
+  // null: none.
+  notificationBank: notificationBankSchema.nullable().optional(),
   sortOrder: z.number().int().optional(),
 });
 

@@ -3,7 +3,7 @@ import { useEffect, useState } from 'react';
 import { Controller, useForm, useWatch } from 'react-hook-form';
 import { useTranslation } from 'react-i18next';
 import { z } from 'zod';
-import { ACCOUNT_TYPES, accountsContract } from '@ft/shared-contracts';
+import { ACCOUNT_TYPES, NOTIFICATION_BANK_NAMES, NOTIFICATION_BANKS, accountsContract } from '@ft/shared-contracts';
 import { ACCOUNT_ICON_NAMES, defaultAppearance } from '@/components/appearance/appearance';
 import { AppearanceIcon } from '@/components/appearance/appearance-icon';
 import { ColorPicker, IconPicker } from '@/components/appearance/appearance-picker';
@@ -23,11 +23,15 @@ const accountFormSchema = accountsContract.create.body.extend({
   name: z.string().trim().min(1).max(120),
   type: z.enum(ACCOUNT_TYPES),
   isIncludedInBalance: z.boolean(),
+  notificationBank: z.enum(NOTIFICATION_BANKS).nullable(),
   icon: z.string().nullable(),
   color: z.string().nullable(),
 });
 
 type AccountFormValues = z.infer<typeof accountFormSchema>;
+
+// A select's items can't have an empty value, so "no bank" needs one of its own.
+const NO_NOTIFICATION_BANK = 'none';
 
 interface AccountDialogProps {
   groupId: string;
@@ -68,6 +72,7 @@ export function AccountDialog({
               type: account.type,
               currencyId: account.currencyId,
               isIncludedInBalance: account.isIncludedInBalance,
+              notificationBank: account.notificationBank,
               icon: account.icon,
               color: account.color,
             }
@@ -76,6 +81,7 @@ export function AccountDialog({
               type: 'regular',
               currencyId: profile.data?.mainCurrencyId ?? currencies.data?.[0]?.id ?? 1,
               isIncludedInBalance: true,
+              notificationBank: null,
               ...defaultAppearance(undefined, accountCount, 'wallet'),
             },
       );
@@ -179,6 +185,32 @@ export function AccountDialog({
                   </Field>
                 )}
               />
+              <Field>
+                <FieldLabel htmlFor="account-notification-bank">{t('accounts.notificationBank')}</FieldLabel>
+                <Controller
+                  control={form.control}
+                  name="notificationBank"
+                  render={({ field }) => (
+                    <Select
+                      value={field.value ?? NO_NOTIFICATION_BANK}
+                      onValueChange={(value) => field.onChange(value === NO_NOTIFICATION_BANK ? null : value)}
+                    >
+                      <SelectTrigger id="account-notification-bank" className="w-full">
+                        <SelectValue />
+                      </SelectTrigger>
+                      <SelectContent>
+                        <SelectItem value={NO_NOTIFICATION_BANK}>{t('accounts.notificationBankNone')}</SelectItem>
+                        {NOTIFICATION_BANKS.map((bank) => (
+                          <SelectItem key={bank} value={bank}>
+                            {NOTIFICATION_BANK_NAMES[bank]}
+                          </SelectItem>
+                        ))}
+                      </SelectContent>
+                    </Select>
+                  )}
+                />
+                <FieldDescription>{t('accounts.notificationBankDescription')}</FieldDescription>
+              </Field>
               <Field>
                 <FieldLabel htmlFor="account-color">{t('accounts.color')}</FieldLabel>
                 <Controller
