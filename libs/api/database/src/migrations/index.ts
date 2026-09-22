@@ -23,6 +23,7 @@ import { addTransactionDestAmountAsOf } from './20260919170000-add-transaction-d
 import { createPushSubscriptions } from './20260919160000-create-push-subscriptions.js';
 import { createScheduledNotifications } from './20260919170000-create-scheduled-notifications.js';
 import { addAccountNotificationBank } from './20260922120000-add-account-notification-bank.js';
+import { createCategoryRules } from './20260922160000-create-category-rules.js';
 
 export const migrations: readonly Migration[] = [
   createAuthTables,
@@ -54,6 +55,7 @@ export const migrations: readonly Migration[] = [
   createPushSubscriptions,
   createScheduledNotifications,
   addAccountNotificationBank,
+  createCategoryRules,
 ];
 
 export * from './migration.interface.js';

@@ -10,6 +10,8 @@ export const REALTIME_RESOURCE_TYPES = [
   'Account',
   'AccountTarget',
   'Category',
+  // Changes only the rules list: what a rule filed stays where it is.
+  'CategoryRule',
   'Tag',
   'Transaction',
   // One event per rule change, not one per occurrence it materialized — a client should refresh

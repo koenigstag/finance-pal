@@ -57,6 +57,9 @@ export function invalidationFor({ resourceType, resourceId, action, groupId }: R
       return action === 'updated'
         ? refresh(queryKeys.categories(groupId), queryKeys.transactions(groupId))
         : refresh(queryKeys.categories(groupId));
+    case 'CategoryRule':
+      // Only the rules list: what a rule filed stays where it is.
+      return refresh(queryKeys.categoryRules(groupId));
     case 'Tag':
       // No list of tags is cached yet. Transactions carry tag ids, and a deleted tag drops out of them.
       return action === 'deleted' ? refresh(queryKeys.transactions(groupId)) : refresh();

@@ -2,7 +2,7 @@ import { BadRequestException, ForbiddenException, Injectable, NotFoundException 
 import { InjectRepository } from '@nestjs/typeorm';
 import { In, IsNull, Repository } from 'typeorm';
 import { Transactional } from 'typeorm-transactional';
-import { Category, CategoryType, RecurringRule, Transaction } from '@ft/api-database';
+import { Category, CategoryRule, CategoryType, RecurringRule, Transaction } from '@ft/api-database';
 import { CATEGORY_TYPES, type Action, type AppAbility, type Subject } from '@ft/shared-contracts';
 import { AbilityFactory } from '../../_core/authz/ability.factory';
 import { RealtimeEmitterService } from '../../realtime/realtime-emitter.service';
@@ -27,6 +27,7 @@ export interface CategoryUsage {
   transactionCount: number;
   plannedTransactionCount: number;
   recurringRuleCount: number;
+  categoryRuleCount: number;
 }
 
 @Injectable()
@@ -35,6 +36,7 @@ export class CategoriesService {
     @InjectRepository(Category) private readonly categories: Repository<Category>,
     @InjectRepository(Transaction) private readonly transactions: Repository<Transaction>,
     @InjectRepository(RecurringRule) private readonly recurringRules: Repository<RecurringRule>,
+    @InjectRepository(CategoryRule) private readonly categoryRules: Repository<CategoryRule>,
     private readonly abilities: AbilityFactory,
     private readonly realtime: RealtimeEmitterService,
   ) {}
@@ -178,7 +180,8 @@ export class CategoriesService {
         { groupId, subcategoryId: categoryId },
       ],
     });
-    return { subcategoryCount: subcategoryIds.length, transactionCount, plannedTransactionCount, recurringRuleCount };
+    const categoryRuleCount = await this.categoryRules.count({ where: { groupId, categoryId: In([categoryId, ...subcategoryIds]) } });
+    return { subcategoryCount: subcategoryIds.length, transactionCount, plannedTransactionCount, recurringRuleCount, categoryRuleCount };
   }
 
   /**
@@ -205,6 +208,8 @@ export class CategoriesService {
       await this.transactions.update({ groupId, subcategoryId: categoryId, deletedAt: IsNull() }, { subcategoryId: null });
       await this.recurringRules.update({ groupId, subcategoryId: categoryId }, { subcategoryId: null });
     }
+    // A rule filing into a deleted category has nowhere left to file.
+    await this.categoryRules.delete({ groupId, categoryId: In(ids) });
     await this.categories.softDelete({ groupId, id: In(ids) });
     this.realtime.emitToGroup(groupId, { resourceType: 'Category', resourceId: categoryId, action: 'deleted', groupId });
     return category;

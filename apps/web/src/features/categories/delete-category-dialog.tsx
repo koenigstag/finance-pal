@@ -79,6 +79,9 @@ export function DeleteCategoryDialog({
                   })}
                 </span>
               )}
+              {usage.data && usage.data.categoryRuleCount > 0 && (
+                <span>{t('categories.delete.categoryRules', { count: usage.data.categoryRuleCount })}</span>
+              )}
               {usage.isPending ? (
                 <Spinner className="size-5" />
               ) : usage.isError ? (

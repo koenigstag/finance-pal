@@ -3,6 +3,7 @@ import { CurrencyCodes, type ExternalLookupService } from '../external-lookup.se
 import type { ExternalTransactionsService } from '../external-transactions.service';
 import { ExternalNotificationsService, notificationKey } from './external-notifications.service';
 import { NOTIFICATION_PARSERS } from './notification-parsers';
+import type { RuleCategoryLike, RuleLike } from './category-by-rules';
 import type { ReceivingAccountLike } from './receiving-account';
 
 jest.mock('./notification-parsers', () => ({ NOTIFICATION_PARSERS: { abank: jest.fn() } }));
@@ -11,10 +12,12 @@ const parse = NOTIFICATION_PARSERS.abank as jest.Mock;
 const apiKey = { id: 'key-1', userId: 'user-1', groupId: 'group-1', scopes: ['transactions:create'] };
 const card: ReceivingAccountLike = { id: 'card', archived: false, currencyId: 1, notificationBank: 'abank' };
 
-function serviceWith(accounts: ReceivingAccountLike[] = [card]) {
+function serviceWith(accounts: ReceivingAccountLike[] = [card], rules: RuleLike[] = [], categories: RuleCategoryLike[] = []) {
   const create = jest.fn().mockResolvedValue({ transaction: { id: 'transaction-1' }, replayed: false });
   const lookup = {
     accountsOf: jest.fn().mockResolvedValue(accounts),
+    categoryRulesOf: jest.fn().mockResolvedValue(rules),
+    categoriesOf: jest.fn().mockResolvedValue(categories),
     currencyCodes: jest.fn().mockResolvedValue(new CurrencyCodes(new Map([[1, 'UAH']]))),
   };
   const service = new ExternalNotificationsService(
@@ -46,6 +49,24 @@ describe('ExternalNotificationsService', () => {
       { type: 'expense', amount: '125.50', accountId: 'card', note: 'Сільпо' },
       notificationKey('abank', 'Покупка 125,50 UAH Сільпо'),
     );
+  });
+
+  it("files the payment by the group's category rules, going by the shop's name", async () => {
+    parse.mockReturnValue({ kind: 'movement', type: 'expense', amount: '120.00', currency: 'UAH', counterparty: 'UKLON' });
+    const transport = { id: 'transport', type: 'expense', parentId: null, archived: false };
+    const taxi = { id: 'taxi', type: 'expense', parentId: 'transport', archived: false };
+    const { service, create } = serviceWith([card], [{ pattern: 'Uklon', categoryId: 'taxi', createdAt: new Date(0) }], [transport, taxi]);
+
+    await service.forward(apiKey, { type: 'abank', text: '-120.00 ₴ UKLON' });
+
+    expect(create.mock.calls[0][1]).toEqual({
+      type: 'expense',
+      amount: '120.00',
+      accountId: 'card',
+      note: 'UKLON',
+      categoryId: 'transport',
+      subcategoryId: 'taxi',
+    });
   });
 
   it('leaves the note out when the bank names nobody', async () => {
