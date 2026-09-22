@@ -13,6 +13,7 @@ export * from './lib/onboarding/onboarding.contract.js';
 export * from './lib/ledger/currencies.contract.js';
 export * from './lib/ledger/accounts.contract.js';
 export * from './lib/ledger/categories.contract.js';
+export * from './lib/ledger/category-rules.contract.js';
 export * from './lib/ledger/tags.contract.js';
 export * from './lib/ledger/transactions.contract.js';
 export * from './lib/ledger/recurring-rules.contract.js';

@@ -63,6 +63,9 @@ export const categoryUsageSchema = z.object({
   plannedTransactionCount: z.number().int(),
   // Recurring rules using it or its subcategories; also kept, without a category.
   recurringRuleCount: z.number().int(),
+  // Category rules filing into it or its subcategories: deleted along with it, having nowhere left
+  // to file.
+  categoryRuleCount: z.number().int(),
 });
 
 const groupPathParams = z.object({ groupId: z.string().uuid() });

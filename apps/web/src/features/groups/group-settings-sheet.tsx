@@ -6,6 +6,7 @@ import {
   PencilIcon,
   Trash2Icon,
   UsersIcon,
+  WandSparklesIcon,
   type LucideIcon,
 } from 'lucide-react';
 import { useEffect, useState } from 'react';
@@ -14,6 +15,7 @@ import { defineAbilityFor } from '@ft/shared-contracts';
 import { Button } from '@/components/ui/button';
 import { Dialog, DialogContent, DialogDescription, DialogHeader, DialogTitle } from '@/components/ui/dialog';
 import { GroupApiKeys } from '@/features/api-keys/group-api-keys';
+import { GroupCategoryRules } from '@/features/category-rules/group-category-rules';
 import { GroupScheduledNotifications } from '@/features/push/group-scheduled-notifications';
 import { cn } from '@/lib/utils';
 import { DeleteGroupDialog } from './delete-group-dialog';
@@ -21,7 +23,7 @@ import { GroupDetailsForm } from './group-details-form';
 import { GroupMembers } from './group-members';
 import type { Group } from './queries';
 
-type View = 'menu' | 'details' | 'members' | 'scheduled' | 'api-keys';
+type View = 'menu' | 'details' | 'members' | 'scheduled' | 'category-rules' | 'api-keys';
 
 interface GroupSettingsSheetProps {
   group?: Group;
@@ -58,6 +60,8 @@ export function GroupSettingsSheet({ group, open, onOpenChange }: GroupSettingsS
   actions.push({ view: 'members', label: t('groups.settings.members'), icon: UsersIcon });
   // Everyone sees what the group has scheduled; only a member who may record money adds one.
   actions.push({ view: 'scheduled', label: t('groups.settings.scheduled'), icon: AlarmClockIcon });
+  // Everyone sees how notifications are filed; only a member who may record money changes it.
+  actions.push({ view: 'category-rules', label: t('groups.settings.categoryRules'), icon: WandSparklesIcon });
   // Every member may have keys; a viewer's only read.
   actions.push({ view: 'api-keys', label: t('groups.settings.apiKeys'), icon: KeyRoundIcon });
 
@@ -117,6 +121,8 @@ export function GroupSettingsSheet({ group, open, onOpenChange }: GroupSettingsS
                 <GroupMembers group={group} open={open} />
               ) : view === 'scheduled' ? (
                 <GroupScheduledNotifications group={group} open={open} />
+              ) : view === 'category-rules' ? (
+                <GroupCategoryRules group={group} open={open} />
               ) : (
                 <GroupApiKeys group={group} open={open} />
               )}

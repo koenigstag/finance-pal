@@ -6,7 +6,7 @@ export type MemberRole = (typeof MEMBER_ROLES)[number];
 // Ledger resources all share one rule: writable by anyone except a viewer, in a group that
 // isn't archived. Listed explicitly rather than using 'all' so adding a subject is a
 // deliberate act, not something that silently inherits write access.
-export const LEDGER_SUBJECTS = ['Account', 'AccountTarget', 'Category', 'Tag', 'Transaction', 'RecurringRule'] as const;
+export const LEDGER_SUBJECTS = ['Account', 'AccountTarget', 'Category', 'CategoryRule', 'Tag', 'Transaction', 'RecurringRule'] as const;
 
 export type Subject =
   | (typeof LEDGER_SUBJECTS)[number]

@@ -209,6 +209,10 @@ that can't escape a notification's quotes and line breaks into JSON.
 - The account is the one set to receive that bank's notifications. In the app, edit the account
   and choose the bank under **Bank notifications**. A bank with accounts in several currencies
   has one receiving each, and the currency in the notification picks it.
+- The category comes from the group's category rules, set in the app under the group's settings,
+  **Category rules**. A rule pairs a piece of text with a category. The rule whose text is in the
+  shop's name decides, ignoring case, and the longest such text wins when several are. With no
+  rule that fits, the transaction has no category.
 
 | Status | Means                                                                                         |
 | ------ | --------------------------------------------------------------------------------------------- |

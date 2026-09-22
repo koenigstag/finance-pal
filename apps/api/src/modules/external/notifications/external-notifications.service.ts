@@ -5,6 +5,7 @@ import { NOTIFICATION_BANK_NAMES, type externalContract } from '@ft/shared-contr
 import type { RequestApiKey } from '../../_core/authn/request-user';
 import { ExternalLookupService } from '../external-lookup.service';
 import { ExternalTransactionsService } from '../external-transactions.service';
+import { categoryByRules } from './category-by-rules';
 import { NOTIFICATION_PARSERS } from './notification-parsers';
 import { receivingAccount } from './receiving-account';
 
@@ -17,8 +18,8 @@ export type ForwardedNotification =
 
 /**
  * Records what a forwarded bank notification says. The phone knows only which bank's app posted
- * it; the rest comes from here — the bank's parser reads the text, and the group's settings say
- * which account receives that bank's notifications. The recording itself is the external API's
+ * it; the rest comes from here — the bank's parser reads the text, the group's settings say which
+ * account receives that bank's notifications, and its category rules which category it goes in. The recording itself is the external API's
  * POST /transactions, idempotency included, so permissions, validation and balances are the same.
  */
 @Injectable()
@@ -61,6 +62,18 @@ export class ExternalNotificationsService {
       throw error;
     }
 
+    // The group's category rules decide the category, by the shop's name; without a rule that
+    // fits, the transaction waits uncategorized for someone to file it.
+    const filed =
+      parsed.counterparty === null
+        ? null
+        : categoryByRules(
+            await this.lookup.categoryRulesOf(apiKey.groupId),
+            await this.lookup.categoriesOf(apiKey.groupId),
+            parsed.type,
+            parsed.counterparty,
+          );
+
     const { transaction, replayed } = await this.transactions.create(
       apiKey,
       {
@@ -68,6 +81,8 @@ export class ExternalNotificationsService {
         amount: parsed.amount,
         accountId: account.id,
         note: parsed.counterparty ?? undefined,
+        ...(filed && { categoryId: filed.categoryId }),
+        ...(filed?.subcategoryId && { subcategoryId: filed.subcategoryId }),
       },
       notificationKey(bank, text),
     );
