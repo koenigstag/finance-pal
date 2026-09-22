@@ -2,6 +2,7 @@ import { Module } from '@nestjs/common';
 import { CoreModule } from './modules/_core/core.module';
 import { ApiKeysModule } from './modules/api-keys/api-keys.module';
 import { AuthModule } from './modules/auth/auth.module';
+import { ExportModule } from './modules/export/export.module';
 import { ExternalModule } from './modules/external/external.module';
 import { GroupsModule } from './modules/groups/groups.module';
 import { ImportModule } from './modules/import/import.module';
@@ -16,6 +17,7 @@ import { ScheduledNotificationsModule } from './modules/scheduled-notifications/
     CoreModule,
     AuthModule,
     ApiKeysModule,
+    ExportModule,
     ExternalModule,
     GroupsModule,
     ImportModule,
