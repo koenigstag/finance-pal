@@ -199,6 +199,10 @@ const updateTransactionBodySchema = createTransactionBodySchema
 // else: which bank sent it, and its text. The API reads the text the way that bank writes them —
 // which way the money went, how much, who to — and records it on the account that receives the
 // bank's notifications.
+//
+// An automation that can't build JSON safely may send the bare text instead, as a text/plain
+// body with the bank in the query string (POST /notifications?type=abank). The API turns that
+// into this shape before validating it, so the rules are the same.
 const forwardNotificationBodySchema = z.object({
   type: notificationBankSchema,
   // Line breaks may stay. Only its digest is kept, as the idempotency key: a notification the

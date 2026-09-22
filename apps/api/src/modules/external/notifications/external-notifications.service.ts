@@ -1,4 +1,4 @@
-import { Injectable, UnprocessableEntityException } from '@nestjs/common';
+import { Injectable, Logger, UnprocessableEntityException } from '@nestjs/common';
 import type { ServerInferRequest } from '@ts-rest/core';
 import type { Transaction } from '@ft/api-database';
 import { NOTIFICATION_BANK_NAMES, type externalContract } from '@ft/shared-contracts';
@@ -22,6 +22,8 @@ export type ForwardedNotification =
  */
 @Injectable()
 export class ExternalNotificationsService {
+  private readonly logger = new Logger(ExternalNotificationsService.name);
+
   constructor(
     private readonly transactions: ExternalTransactionsService,
     private readonly lookup: ExternalLookupService,
@@ -30,6 +32,10 @@ export class ExternalNotificationsService {
   async forward(apiKey: RequestApiKey, { type: bank, text }: ForwardBody): Promise<ForwardedNotification> {
     const parsed = NOTIFICATION_PARSERS[bank](text);
     if (!parsed) {
+      // Only a text the parser couldn't read reaches the log, and whole: its wording is what it
+      // takes to teach the parser, whether the bank's wording is new to it or a bank reworded its
+      // notifications. Texts it reads are never logged.
+      this.logger.warn(`Unread ${bank} notification (key ${apiKey.id}): ${JSON.stringify(text)}`);
       throw new UnprocessableEntityException(
         `This isn't worded like any ${NOTIFICATION_BANK_NAMES[bank]} notification the API knows how to read`,
       );

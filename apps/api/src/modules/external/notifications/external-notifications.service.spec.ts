@@ -1,4 +1,4 @@
-import { UnprocessableEntityException } from '@nestjs/common';
+import { Logger, UnprocessableEntityException } from '@nestjs/common';
 import { CurrencyCodes, type ExternalLookupService } from '../external-lookup.service';
 import type { ExternalTransactionsService } from '../external-transactions.service';
 import { ExternalNotificationsService, notificationKey } from './external-notifications.service';
@@ -25,7 +25,14 @@ function serviceWith(accounts: ReceivingAccountLike[] = [card]) {
 }
 
 describe('ExternalNotificationsService', () => {
-  beforeEach(() => parse.mockReset());
+  let warn: jest.SpyInstance;
+
+  beforeEach(() => {
+    parse.mockReset();
+    warn = jest.spyOn(Logger.prototype, 'warn').mockImplementation(() => undefined);
+  });
+
+  afterEach(() => warn.mockRestore());
 
   it('records a payment on the account receiving the bank, keyed by the text', async () => {
     parse.mockReturnValue({ kind: 'movement', type: 'expense', amount: '125.50', currency: 'UAH', counterparty: 'Сільпо' });
@@ -70,6 +77,22 @@ describe('ExternalNotificationsService', () => {
     await expect(forwarding).rejects.toThrow(UnprocessableEntityException);
     await expect(forwarding).rejects.toThrow(/A-Bank notification/);
     expect(create).not.toHaveBeenCalled();
+  });
+
+  it('logs the whole text it cannot read, line breaks visible, so the parser can be taught it', async () => {
+    parse.mockReturnValue(null);
+    const { service } = serviceWith();
+
+    await expect(service.forward(apiKey, { type: 'abank', text: '🛒 -1 ₴\nАТБ' })).rejects.toThrow();
+    expect(warn).toHaveBeenCalledWith('Unread abank notification (key key-1): "🛒 -1 ₴\\nАТБ"');
+  });
+
+  it('never logs a text it reads', async () => {
+    parse.mockReturnValue({ kind: 'movement', type: 'expense', amount: '1', currency: 'UAH', counterparty: null });
+    const { service } = serviceWith();
+
+    await service.forward(apiKey, { type: 'abank', text: 'Покупка 1 UAH' });
+    expect(warn).not.toHaveBeenCalled();
   });
 
   it('refuses a payment when no account receives the bank', async () => {

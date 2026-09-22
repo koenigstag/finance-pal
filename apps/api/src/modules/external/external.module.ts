@@ -1,6 +1,7 @@
-import { Module } from '@nestjs/common';
+import { Module, RequestMethod, type MiddlewareConsumer, type NestModule } from '@nestjs/common';
 import { TypeOrmModule } from '@nestjs/typeorm';
 import { Account, ApiKey, Category, Currency, Group, Transaction } from '@ft/api-database';
+import { externalContract } from '@ft/shared-contracts';
 import { AuthzModule } from '../_core/authz/authz.module';
 import { AccountsModule } from '../ledger/accounts/accounts.module';
 import { CategoriesModule } from '../ledger/categories/categories.module';
@@ -13,6 +14,7 @@ import { ExternalTransactionsController } from './external-transactions.controll
 import { ExternalTransactionsService } from './external-transactions.service';
 import { ExternalNotificationsController } from './notifications/external-notifications.controller';
 import { ExternalNotificationsService } from './notifications/external-notifications.service';
+import { PlainTextNotificationMiddleware } from './notifications/plain-text-notification.middleware';
 
 /**
  * The external API (/api/external/v1): what other apps reach with an API key. It holds no ledger
@@ -36,4 +38,10 @@ import { ExternalNotificationsService } from './notifications/external-notificat
   ],
   providers: [ExternalLookupService, ExternalTransactionsService, ExternalNotificationsService],
 })
-export class ExternalModule {}
+export class ExternalModule implements NestModule {
+  configure(consumer: MiddlewareConsumer): void {
+    consumer
+      .apply(PlainTextNotificationMiddleware)
+      .forRoutes({ path: externalContract.notifications.forward.path.replace(/^\//, ''), method: RequestMethod.POST });
+  }
+}
