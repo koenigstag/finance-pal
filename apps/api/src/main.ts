@@ -6,6 +6,7 @@ import { DatabaseModule } from './modules/_core/database/database.module';
 
 import { Logger } from '@nestjs/common';
 import { NestFactory } from '@nestjs/core';
+import type { NestExpressApplication } from '@nestjs/platform-express';
 import { createMigrationDataSource, migrateUp, migrations } from '@ft/api-database';
 import { AppModule } from './app.module';
 
@@ -34,7 +35,11 @@ async function bootstrap() {
   // Must run before NestFactory.create() — see DatabaseModule.init() for why.
   DatabaseModule.init();
 
-  const app = await NestFactory.create(AppModule);
+  const app = await NestFactory.create<NestExpressApplication>(AppModule);
+
+  // text/plain bodies arrive as strings, for the external API's forwarded notifications, which may
+  // come as their bare text (see PlainTextNotificationMiddleware). Any other route still refuses one.
+  app.useBodyParser('text', { limit: '16kb' });
 
   // The web app is served from another origin in production (GitHub Pages), so browsers need
   // CORS. Development doesn't: the Vite dev server proxies /api on the app's own origin.
