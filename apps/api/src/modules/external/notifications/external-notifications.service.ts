@@ -9,6 +9,7 @@ import { NOTIFICATION_PARSERS } from './notification-parsers';
 import { receivingAccount } from './receiving-account';
 
 type ForwardBody = ServerInferRequest<typeof externalContract.notifications.forward>['body'];
+type ReceivingAccount = Awaited<ReturnType<ExternalLookupService['accountsOf']>>[number];
 
 export type ForwardedNotification =
   | { recorded: true; transaction: Transaction; replayed: boolean }
@@ -41,12 +42,24 @@ export class ExternalNotificationsService {
       );
     }
     if (parsed.kind === 'skip') {
+      // Why, but not the text: a skip that shouldn't have been one shows up as a payment missing
+      // from the app, and the log then says which kind of notification took it.
+      this.logger.log(`Skipped ${bank} notification (key ${apiKey.id}): ${parsed.reason}`);
       return { recorded: false, reason: parsed.reason };
     }
 
     const accounts = await this.lookup.accountsOf(apiKey.groupId);
     const currencies = await this.lookup.currencyCodes();
-    const account = receivingAccount(accounts, bank, parsed.currency, (currencyId) => currencies.of(currencyId));
+    let account: ReceivingAccount;
+    try {
+      account = receivingAccount(accounts, bank, parsed.currency, (currencyId) => currencies.of(currencyId));
+    } catch (error) {
+      // A payment read but not recorded — no account set to receive the bank, one abroad in a
+      // currency none is in — is otherwise missed until the balances disagree. The reason says
+      // which; the text stays out, as for every notification that was read.
+      this.logger.warn(`Unrecorded ${bank} notification (key ${apiKey.id}): ${(error as Error).message}`);
+      throw error;
+    }
 
     const { transaction, replayed } = await this.transactions.create(
       apiKey,
