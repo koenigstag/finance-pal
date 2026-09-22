@@ -8,6 +8,7 @@ import { moneySchema, parseMoneyInput, signedMoneySchema } from '../common/money
 import { accountTypeSchema } from '../ledger/accounts.contract.js';
 import { categoryTypeSchema } from '../ledger/categories.contract.js';
 import { transactionTypeSchema } from '../ledger/transactions.contract.js';
+import { notificationBankSchema } from './notification-banks.js';
 
 const c = initContract();
 
@@ -194,6 +195,23 @@ const updateTransactionBodySchema = createTransactionBodySchema
   })
   .partial();
 
+// A bank's notification, forwarded as the phone shows it by an automation that knows nothing
+// else: which bank sent it, and its text. The API reads the text the way that bank writes them —
+// which way the money went, how much, who to — and records it on the account that receives the
+// bank's notifications.
+const forwardNotificationBodySchema = z.object({
+  type: notificationBankSchema,
+  // Line breaks may stay. Only its digest is kept, as the idempotency key: a notification the
+  // bank posts twice records one transaction.
+  text: z.string().trim().min(1).max(2000),
+});
+
+// A notification that moves no money — a code, an ad, a declined payment — records nothing.
+export const skippedNotificationSchema = z.object({
+  recorded: z.literal(false),
+  reason: z.string(),
+});
+
 const errors = { 400: errorSchema, 401: errorSchema, 403: errorSchema, 404: errorSchema } as const;
 const readErrors = { 401: errorSchema, 403: errorSchema, 404: errorSchema } as const;
 
@@ -339,6 +357,27 @@ export const externalContract = c.router(
         responses: { 200: externalTransactionSchema, ...errors },
         summary: 'Update a transaction',
         ...needs('transactions:update'),
+      },
+    }),
+    notifications: c.router({
+      forward: {
+        method: 'POST',
+        path: '/notifications',
+        body: forwardNotificationBodySchema,
+        responses: {
+          // What the notification recorded. Forwarded again, it records nothing and gets the same
+          // transaction, with an Idempotent-Replayed: true header.
+          201: externalTransactionSchema,
+          200: skippedNotificationSchema,
+          400: errorSchema,
+          401: errorSchema,
+          403: errorSchema,
+          // The text isn't worded the way the bank's notifications are known to be, or no account
+          // receives the bank's notifications.
+          422: errorSchema,
+        },
+        summary: "Record what a bank's notification says, read the way that bank words them",
+        ...needs('transactions:create'),
       },
     }),
   },

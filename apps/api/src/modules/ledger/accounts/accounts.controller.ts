@@ -1,6 +1,6 @@
 import { Controller } from '@nestjs/common';
 import { TsRestHandler, tsRestHandler } from '@ts-rest/nest';
-import { accountsContract } from '@ft/shared-contracts';
+import { accountsContract, type NotificationBank } from '@ft/shared-contracts';
 import { AccountTarget } from '@ft/api-database';
 import { CurrentUser, type RequestUser } from '../../_core/authn/request-user';
 import { requireUser } from '../../_core/authn/require-user';
@@ -18,6 +18,8 @@ function toAccountDto({ account, balance }: AccountWithBalance) {
     color: account.color,
     description: account.description,
     isIncludedInBalance: account.isIncludedInBalance,
+    // Written only through this contract's enum, so it's always one of the banks.
+    notificationBank: account.notificationBank as NotificationBank | null,
     sortOrder: account.sortOrder,
     archived: account.archived,
     archivedAt: account.archivedAt?.toISOString() ?? null,

@@ -55,6 +55,11 @@ export class Account {
   @Column({ type: 'boolean', name: 'is_included_in_balance', default: true })
   isIncludedInBalance!: boolean;
 
+  // The bank whose forwarded notifications are recorded here (see POST /notifications in the
+  // external API), by its id there; null for none.
+  @Column({ type: 'text', name: 'notification_bank', nullable: true })
+  notificationBank!: string | null;
+
   @Column({ type: 'int', name: 'sort_order', default: 0 })
   sortOrder!: number;
 

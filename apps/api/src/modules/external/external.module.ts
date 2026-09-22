@@ -11,6 +11,8 @@ import { ExternalKeyController } from './external-key.controller';
 import { ExternalLookupService } from './external-lookup.service';
 import { ExternalTransactionsController } from './external-transactions.controller';
 import { ExternalTransactionsService } from './external-transactions.service';
+import { ExternalNotificationsController } from './notifications/external-notifications.controller';
+import { ExternalNotificationsService } from './notifications/external-notifications.service';
 
 /**
  * The external API (/api/external/v1): what other apps reach with an API key. It holds no ledger
@@ -25,7 +27,13 @@ import { ExternalTransactionsService } from './external-transactions.service';
     CategoriesModule,
     TransactionsModule,
   ],
-  controllers: [ExternalKeyController, ExternalAccountsController, ExternalCategoriesController, ExternalTransactionsController],
-  providers: [ExternalLookupService, ExternalTransactionsService],
+  controllers: [
+    ExternalKeyController,
+    ExternalAccountsController,
+    ExternalCategoriesController,
+    ExternalTransactionsController,
+    ExternalNotificationsController,
+  ],
+  providers: [ExternalLookupService, ExternalTransactionsService, ExternalNotificationsService],
 })
 export class ExternalModule {}

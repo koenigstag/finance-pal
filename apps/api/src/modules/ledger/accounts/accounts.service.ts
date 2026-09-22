@@ -3,7 +3,7 @@ import { InjectRepository } from '@nestjs/typeorm';
 import { Not, Repository } from 'typeorm';
 import { Transactional } from 'typeorm-transactional';
 import { Account, AccountTarget, AccountType, RecurringRule, Transaction } from '@ft/api-database';
-import { ACCOUNT_TYPES, type Action, type AppAbility, type Subject } from '@ft/shared-contracts';
+import { ACCOUNT_TYPES, type Action, type AppAbility, type NotificationBank, type Subject } from '@ft/shared-contracts';
 import { AbilityFactory } from '../../_core/authz/ability.factory';
 import { RealtimeEmitterService } from '../../realtime/realtime-emitter.service';
 
@@ -18,6 +18,7 @@ export interface CreateAccountInput {
   color?: string | null;
   description?: string;
   isIncludedInBalance?: boolean;
+  notificationBank?: NotificationBank | null;
   sortOrder?: number;
 }
 

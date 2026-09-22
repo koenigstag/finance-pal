@@ -22,6 +22,7 @@ import { addExchangeRatesCache } from './20260919160000-add-exchange-rates-cache
 import { addTransactionDestAmountAsOf } from './20260919170000-add-transaction-dest-amount-as-of.js';
 import { createPushSubscriptions } from './20260919160000-create-push-subscriptions.js';
 import { createScheduledNotifications } from './20260919170000-create-scheduled-notifications.js';
+import { addAccountNotificationBank } from './20260922120000-add-account-notification-bank.js';
 
 export const migrations: readonly Migration[] = [
   createAuthTables,
@@ -52,6 +53,7 @@ export const migrations: readonly Migration[] = [
   // they come last, so on a database that already has those, these are the ones still pending.
   createPushSubscriptions,
   createScheduledNotifications,
+  addAccountNotificationBank,
 ];
 
 export * from './migration.interface.js';
