@@ -69,6 +69,17 @@ export const en = {
     favouriteDescription: 'Preselected when you add a transaction.',
     markFavourite: 'Make favourite',
     unmarkFavourite: 'Remove from favourites',
+    archive: {
+      action: 'Archive',
+      title: 'Archive “{{name}}”?',
+      description:
+        'It leaves the lists and the account pickers, and stops counting toward your balance. What was recorded on it stays as it is, and you can restore it whenever.',
+    },
+    restore: {
+      action: 'Restore',
+      title: 'Restore “{{name}}”?',
+      description: 'It comes back to the lists and the account pickers, and counts toward your balance again.',
+    },
     delete: {
       title: 'Delete “{{name}}”?',
       alsoDeletes: 'This also deletes:',

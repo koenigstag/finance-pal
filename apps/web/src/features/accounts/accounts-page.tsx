@@ -16,6 +16,7 @@ import { AccountActionsSheet, type AccountAction } from './account-actions-sheet
 import { AccountDialog } from './account-dialog';
 import { AccountList, AccountRows } from './account-list';
 import { AccountsSummary } from './accounts-summary';
+import { ArchiveAccountDialog } from './archive-account-dialog';
 import { useAccounts, type Account } from './queries';
 import { cn } from '@/lib/utils';
 
@@ -44,6 +45,9 @@ export function AccountsPage() {
   // In the URL, so a reload or the back button returns to the same tab.
   const tab: AccountsTab = TAB_ORDER.find((option) => option === params.get('tab')) ?? 'balance';
   const [dialog, setDialog] = useState<{ open: boolean; account?: Account }>({ open: false });
+  // Archiving an account and restoring one are the same confirmation, which way round following
+  // the account it was opened for.
+  const [archiving, setArchiving] = useState<{ open: boolean; account?: Account }>({ open: false });
   // By id, so the sheet shows the account as the cache has it now (a star or balance just changed).
   const [sheet, setSheet] = useState<{ open: boolean; accountId?: string }>({ open: false });
   const [newTransaction, setNewTransaction] = useState<{
@@ -83,6 +87,8 @@ export function AccountsPage() {
     setSheet((current) => ({ ...current, open: false }));
     if (action === 'edit') {
       setDialog({ open: true, account });
+    } else if (action === 'archive' || action === 'restore') {
+      setArchiving({ open: true, account });
     } else if (action === 'transactions') {
       void navigate(`/g/${group.id}/transactions?account=${account.id}`);
     } else if (action === 'give' || action === 'receive') {
@@ -224,6 +230,15 @@ export function AccountsPage() {
         open={dialog.open}
         onOpenChange={(open) => setDialog((current) => ({ ...current, open }))}
       />
+
+      {archiving.account && (
+        <ArchiveAccountDialog
+          groupId={group.id}
+          account={archiving.account}
+          open={archiving.open}
+          onOpenChange={(open) => setArchiving((current) => ({ ...current, open }))}
+        />
+      )}
     </section>
   );
 }

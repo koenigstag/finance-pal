@@ -104,8 +104,9 @@ function AccountRow({ account, onSelect }: { account: Account; onSelect: (accoun
       <AppearanceIcon icon={account.icon} color={account.color} fallbackIcon="wallet" />
       <p className="flex min-w-0 flex-1 items-center gap-1.5 font-medium">
         <span className="truncate">{account.name}</span>
-        {/* Just a marker: favourites are set in the account's sheet. */}
-        {account.isFavourite && (
+        {/* Just a marker: favourites are set in the account's sheet. Not on an archived account,
+            which no longer starts a new transaction whatever its flag says. */}
+        {account.isFavourite && !account.archived && (
           <StarIcon className="size-3.5 shrink-0 fill-amber-400 text-amber-400" aria-label={t('accounts.favourite')} />
         )}
       </p>

@@ -80,3 +80,23 @@ export function useSaveAccount(groupId: string) {
     onSuccess: () => queryClient.invalidateQueries({ queryKey: queryKeys.accounts(groupId) }),
   });
 }
+
+/**
+ * Puts an account away, or brings it back. Archiving keeps everything recorded on the account and
+ * only takes it out of the default listings, the pickers and the total balance, so the two
+ * directions are one mutation with a flag rather than two hooks.
+ *
+ * Invalidating the accounts prefix covers both cached lists — the live one the pickers read and the
+ * one the accounts page reads, which includes archived accounts — since either changes shape here.
+ */
+export function useSetAccountArchived(groupId: string) {
+  const queryClient = useQueryClient();
+
+  return useMutation({
+    mutationFn: ({ accountId, archived }: { accountId: string; archived: boolean }) =>
+      archived
+        ? unwrap(api.accounts.archive({ params: { groupId, accountId }, body: {} }), 200)
+        : unwrap(api.accounts.restore({ params: { groupId, accountId }, body: {} }), 200),
+    onSuccess: () => queryClient.invalidateQueries({ queryKey: queryKeys.accounts(groupId) }),
+  });
+}
