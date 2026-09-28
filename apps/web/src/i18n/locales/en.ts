@@ -65,6 +65,9 @@ export const en = {
     notificationBank: 'Bank notifications',
     notificationBankNone: 'None',
     notificationBankDescription: "Payments from this bank's notifications, forwarded by your phone, are recorded here.",
+    archivedAccount: 'Archived account',
+    archivedAccountDescription:
+      'Kept for what is recorded on it, out of the lists, the account pickers and the total balance.',
     favourite: 'Favourite',
     favouriteDescription: 'Preselected when you add a transaction.',
     markFavourite: 'Make favourite',

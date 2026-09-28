@@ -24,6 +24,7 @@ const account = (id: string, overrides: Partial<Account> = {}): Account => ({
   color: null,
   description: null,
   isIncludedInBalance: true,
+  notificationBank: null,
   sortOrder: 0,
   archived: false,
   archivedAt: null,

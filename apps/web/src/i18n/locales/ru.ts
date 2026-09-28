@@ -68,6 +68,9 @@ export const ru: Catalog<typeof en> = {
     notificationBank: 'Уведомления банка',
     notificationBankNone: 'Нет',
     notificationBankDescription: 'Сюда записываются платежи из уведомлений этого банка, которые пересылает телефон.',
+    archivedAccount: 'Архивный счёт',
+    archivedAccountDescription:
+      'Хранится ради записанных на нём операций: не показывается в списках и в выборе счёта и не учитывается в общем балансе.',
     favourite: 'Избранный',
     favouriteDescription: 'Выбирается по умолчанию при добавлении операции.',
     markFavourite: 'Сделать избранным',
