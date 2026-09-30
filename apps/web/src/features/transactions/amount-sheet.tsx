@@ -208,6 +208,8 @@ export function AmountSheet({
   // Any percentage typed, even one still wrong, or a step picked, takes the amount over: it's what
   // the amount comes from, and a figure typed beside it would be overwritten by the next change.
   const derived = percentage.trim() !== '' || roundBalanceTo !== '';
+  // Two amounts to ask for, rather than one: a transfer whose sides are in different currencies.
+  const twoSided = needsDestAmount(sides, accounts);
   const validPercentage = parsePercentageInput(percentage);
   const stepLabel = (step: number) =>
     t('transactions.roundBalanceStep', { step: new Intl.NumberFormat(i18n.language).format(step) });
@@ -248,15 +250,15 @@ export function AmountSheet({
         </DialogHeader>
         <form onSubmit={onSubmit} noValidate>
           <FieldGroup className="gap-4">
-            {sides.type === 'transfer' ? (
-              // Each amount in its own side's currency.
+            {twoSided ? (
+              // Each amount in its own side's currency, side by side.
               <div className="grid grid-cols-2 gap-3">
                 {amountInput('amount', withCurrency(t('transactions.amountWithdrawn'), sides.accountId))}
-                {/* The same currency on both sides means the same amount arrives: nothing to ask. */}
-                {needsDestAmount(sides, accounts) &&
-                  amountInput('destAmount', withCurrency(t('transactions.destAmount'), sides.toAccountId))}
+                {amountInput('destAmount', withCurrency(t('transactions.destAmount'), sides.toAccountId))}
               </div>
             ) : (
+              // One figure, so it takes the row: a transfer within a currency arrives as what left,
+              // which is nothing to ask twice or to name as one side of two.
               amountInput('amount', withCurrency(t('transactions.amount'), sides.accountId))
             )}
 
