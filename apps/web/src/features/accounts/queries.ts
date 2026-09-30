@@ -24,14 +24,18 @@ export interface AccountGroup {
  * The accounts under the sections a picker offers them in, sections with nothing in them left out
  * and the order the accounts came in kept within each.
  *
+ * Archived ones are never among them, however the list was fetched: nothing new is recorded on an
+ * account that has been put away.
+ *
  * Debts come last. A debt account is money owed to or by someone rather than money to spend with,
  * so it is seldom the account a transfer is headed for, and a handful of them among the rest push
  * the accounts that usually are down out of reach.
  */
 export function accountGroups(accounts: Account[]): AccountGroup[] {
+  const live = accounts.filter((account) => !account.archived);
   return (Object.keys(GROUP_RANK) as Account['type'][])
     .sort((a, b) => GROUP_RANK[a] - GROUP_RANK[b])
-    .map((type) => ({ type, accounts: accounts.filter((account) => account.type === type) }))
+    .map((type) => ({ type, accounts: live.filter((account) => account.type === type) }))
     .filter((group) => group.accounts.length > 0);
 }
 

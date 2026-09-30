@@ -37,7 +37,9 @@ export function TransactionsPage() {
   const { t, i18n } = useTranslation();
   const { group, ability } = useGroupScope();
   const [params, setParams] = useSearchParams();
-  const accounts = useAccounts(group.id);
+  // Archived ones too, as with the categories: a transaction on an account that has since been put
+  // away still says which one, here and in its sheet, and keeps the currency its amounts are in.
+  const accounts = useAccounts(group.id, true);
   // Archived ones too: a transaction filed under a category that has since been put away still
   // says which one, here and in its sheet, and the filters can still go looking through it.
   const categories = useCategories(group.id, true);

@@ -510,6 +510,17 @@ describe('pickDefaultAccountId', () => {
     expect(pickDefaultAccountId(list.map((account) => ({ ...account, isFavourite: false })))).toBe(usd.id);
     expect(pickDefaultAccountId([])).toBeUndefined();
   });
+
+  it('never lands on an archived account, starred or asked for by name', () => {
+    const away = [
+      { ...usd, isFavourite: false, archived: true },
+      { ...usd2, isFavourite: true, archived: true },
+      { ...eur, isFavourite: false, archived: false },
+    ];
+    expect(pickDefaultAccountId(away)).toBe(eur.id);
+    expect(pickDefaultAccountId(away, usd2.id)).toBe(eur.id);
+    expect(pickDefaultAccountId(away.map((account) => ({ ...account, archived: true })))).toBeUndefined();
+  });
 });
 
 describe('derivedAmount', () => {
