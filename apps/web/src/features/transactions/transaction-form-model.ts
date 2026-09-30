@@ -31,17 +31,21 @@ export type ConversionLookup = (fromCurrencyId: number, toCurrencyId: number) =>
  * of the accounts page, which lists regular accounts first), otherwise the first at all. Without a
  * request this is also the account the UI shows as favourite, starred or not. Accounts come in list
  * order, so should several ever be marked, the first one listed wins.
+ *
+ * An archived account is never the answer, whichever list this is given and even when it is the one
+ * asked for: a new transaction never starts on one that has been put away.
  */
 export function pickDefaultAccountId(
-  accounts: (AccountLike & { isFavourite: boolean; type?: string })[],
+  accounts: (AccountLike & { isFavourite: boolean; type?: string; archived?: boolean })[],
   requestedId?: string,
 ): string | undefined {
-  const requested = requestedId ? accounts.find((account) => account.id === requestedId) : undefined;
+  const live = accounts.filter((account) => !account.archived);
+  const requested = requestedId ? live.find((account) => account.id === requestedId) : undefined;
   return (
     requested ??
-    accounts.find((account) => account.isFavourite) ??
-    accounts.find((account) => account.type === 'regular') ??
-    accounts[0]
+    live.find((account) => account.isFavourite) ??
+    live.find((account) => account.type === 'regular') ??
+    live[0]
   )?.id;
 }
 

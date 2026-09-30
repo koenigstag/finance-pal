@@ -65,13 +65,28 @@ export const ru: Catalog<typeof en> = {
     icon: 'Иконка',
     includedInBalance: 'Учитывать в общем балансе',
     includedInBalanceDescription: 'Отключите для счетов, которые нужно только отслеживать, например кредита.',
+    includedInBalanceArchived: 'Архивный счёт в общем балансе не учитывается в любом случае.',
     notificationBank: 'Уведомления банка',
     notificationBankNone: 'Нет',
     notificationBankDescription: 'Сюда записываются платежи из уведомлений этого банка, которые пересылает телефон.',
+    archivedAccount: 'Архивный счёт',
+    archivedAccountDescription:
+      'Хранится ради записанных на нём операций: не показывается в списках и в выборе счёта и не учитывается в общем балансе.',
     favourite: 'Избранный',
     favouriteDescription: 'Выбирается по умолчанию при добавлении операции.',
     markFavourite: 'Сделать избранным',
     unmarkFavourite: 'Убрать из избранного',
+    archive: {
+      action: 'Архивировать',
+      title: 'Архивировать «{{name}}»?',
+      description:
+        'Счёт исчезнет из списков и из выбора счёта и перестанет учитываться в балансе. Всё записанное на нём останется, а вернуть счёт из архива можно в любой момент.',
+    },
+    restore: {
+      action: 'Вернуть из архива',
+      title: 'Вернуть «{{name}}» из архива?',
+      description: 'Счёт снова появится в списках и в выборе счёта и будет учитываться в балансе.',
+    },
     delete: {
       title: 'Удалить «{{name}}»?',
       alsoDeletes: 'Вместе со счётом будут удалены:',
@@ -148,6 +163,28 @@ export const ru: Catalog<typeof en> = {
     subcategoryCount_many: '{{count}} подкатегорий',
     subcategoryCount_other: '{{count}} подкатегории',
     subcategoriesOf: 'Подкатегории «{{name}}»',
+    archived: 'В архиве',
+    archivedCategory: 'Категория в архиве',
+    archivedCategoryDescription: 'Хранится ради записанных в неё операций: не показывается в списках и в выборе категории.',
+    archive: {
+      action: 'Архивировать',
+      title: 'Архивировать «{{name}}»?',
+      description:
+        'Категория исчезнет из списков и из выбора категории. Всё записанное в неё останется, а вернуть категорию из архива можно в любой момент.',
+      subcategories_one: 'Вместе с ней уйдёт и её подкатегория.',
+      subcategories_few: 'Вместе с ней уйдут и {{count}} её подкатегории.',
+      subcategories_many: 'Вместе с ней уйдут и {{count}} её подкатегорий.',
+      subcategories_other: 'Вместе с ней уйдут и {{count}} её подкатегории.',
+    },
+    restore: {
+      action: 'Вернуть из архива',
+      title: 'Вернуть «{{name}}» из архива?',
+      description: 'Категория снова появится в списках и в выборе категории.',
+      subcategories_one: 'Её подкатегория вернётся вместе с ней.',
+      subcategories_few: 'Вместе с ней вернутся и {{count}} её подкатегории.',
+      subcategories_many: 'Вместе с ней вернутся и {{count}} её подкатегорий.',
+      subcategories_other: 'Вместе с ней вернутся и {{count}} её подкатегории.',
+    },
     reorder: {
       start: 'Изменить порядок',
       save: 'Сохранить порядок',

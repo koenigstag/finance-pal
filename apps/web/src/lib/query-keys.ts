@@ -17,6 +17,7 @@ export const queryKeys = {
   allAccounts: (groupId: string) => ['group', groupId, 'accounts', 'all'] as const,
   accountUsage: (groupId: string, accountId: string) => ['group', groupId, 'accounts', accountId, 'usage'] as const,
   categories: (groupId: string) => ['group', groupId, 'categories'] as const,
+  allCategories: (groupId: string) => ['group', groupId, 'categories', 'all'] as const,
   categoryUsage: (groupId: string, categoryId: string) =>
     ['group', groupId, 'categories', categoryId, 'usage'] as const,
   transactions: (groupId: string) => ['group', groupId, 'transactions'] as const,

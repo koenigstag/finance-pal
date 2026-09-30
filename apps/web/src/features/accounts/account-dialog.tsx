@@ -17,8 +17,9 @@ import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@
 import { useCurrencies } from '@/features/currencies/queries';
 import { useProfile } from '@/features/profile/queries';
 import { DeleteAccountDialog } from './delete-account-dialog';
-import { useSaveAccount, type Account } from './queries';
+import { useSaveAccount, useSetAccountArchived, type Account } from './queries';
 
+// archived is the form's own, not the body's: archiving is a route of its own, and saved as one.
 const accountFormSchema = accountsContract.create.body.extend({
   name: z.string().trim().min(1).max(120),
   type: z.enum(ACCOUNT_TYPES),
@@ -26,6 +27,7 @@ const accountFormSchema = accountsContract.create.body.extend({
   notificationBank: z.enum(NOTIFICATION_BANKS).nullable(),
   icon: z.string().nullable(),
   color: z.string().nullable(),
+  archived: z.boolean(),
 });
 
 type AccountFormValues = z.infer<typeof accountFormSchema>;
@@ -58,9 +60,13 @@ export function AccountDialog({
   const currencies = useCurrencies();
   const profile = useProfile();
   const saveAccount = useSaveAccount(groupId);
+  const setArchived = useSetAccountArchived(groupId);
   const form = useForm<AccountFormValues>({ resolver: zodResolver(accountFormSchema) });
   const errors = form.formState.errors;
-  const [previewName, previewIcon, previewColor] = useWatch({ control: form.control, name: ['name', 'icon', 'color'] });
+  const [previewName, previewIcon, previewColor, archived] = useWatch({
+    control: form.control,
+    name: ['name', 'icon', 'color', 'archived'],
+  });
 
   // Reset on every open, so the form never shows what was typed into a previous, cancelled one.
   useEffect(() => {
@@ -75,6 +81,7 @@ export function AccountDialog({
               notificationBank: account.notificationBank,
               icon: account.icon,
               color: account.color,
+              archived: account.archived,
             }
           : {
               name: '',
@@ -82,15 +89,21 @@ export function AccountDialog({
               currencyId: profile.data?.mainCurrencyId ?? currencies.data?.[0]?.id ?? 1,
               isIncludedInBalance: true,
               notificationBank: null,
+              archived: false,
               ...defaultAppearance(undefined, accountCount, 'wallet'),
             },
       );
     }
   }, [open, account, accountCount, form, profile.data, currencies.data]);
 
-  const onSubmit = form.handleSubmit(async (values) => {
+  const onSubmit = form.handleSubmit(async ({ archived, ...body }) => {
     try {
-      await saveAccount.mutateAsync({ accountId: account?.id, body: values });
+      await saveAccount.mutateAsync({ accountId: account?.id, body });
+      // Its own request, after the fields and only when the checkbox moved: the account has to
+      // exist to be put away, and saving the rest is what the dialog is mostly for.
+      if (account && archived !== account.archived) {
+        await setArchived.mutateAsync({ accountId: account.id, archived });
+      }
       onOpenChange(false);
     } catch {
       form.setError('root', { message: t('errors.generic') });
@@ -172,19 +185,44 @@ export function AccountDialog({
                 control={form.control}
                 name="isIncludedInBalance"
                 render={({ field }) => (
+                  // An archived account is out of the total whatever this says, so while the box
+                  // below is ticked this one shows that and stops taking answers. The stored value
+                  // is left alone underneath, to be what it was when the account comes back.
                   <Field orientation="horizontal">
                     <Checkbox
                       id="account-included"
-                      checked={field.value}
+                      checked={field.value && !archived}
+                      disabled={archived}
                       onCheckedChange={(checked) => field.onChange(checked === true)}
                     />
                     <FieldContent>
                       <FieldLabel htmlFor="account-included">{t('accounts.includedInBalance')}</FieldLabel>
-                      <FieldDescription>{t('accounts.includedInBalanceDescription')}</FieldDescription>
+                      <FieldDescription>
+                        {t(archived ? 'accounts.includedInBalanceArchived' : 'accounts.includedInBalanceDescription')}
+                      </FieldDescription>
                     </FieldContent>
                   </Field>
                 )}
               />
+              {account && (
+                <Controller
+                  control={form.control}
+                  name="archived"
+                  render={({ field }) => (
+                    <Field orientation="horizontal">
+                      <Checkbox
+                        id="account-archived"
+                        checked={field.value}
+                        onCheckedChange={(checked) => field.onChange(checked === true)}
+                      />
+                      <FieldContent>
+                        <FieldLabel htmlFor="account-archived">{t('accounts.archivedAccount')}</FieldLabel>
+                        <FieldDescription>{t('accounts.archivedAccountDescription')}</FieldDescription>
+                      </FieldContent>
+                    </Field>
+                  )}
+                />
+              )}
               <Field>
                 <FieldLabel htmlFor="account-notification-bank">{t('accounts.notificationBank')}</FieldLabel>
                 <Controller

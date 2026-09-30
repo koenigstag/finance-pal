@@ -24,14 +24,18 @@ export interface AccountGroup {
  * The accounts under the sections a picker offers them in, sections with nothing in them left out
  * and the order the accounts came in kept within each.
  *
+ * Archived ones are never among them, however the list was fetched: nothing new is recorded on an
+ * account that has been put away.
+ *
  * Debts come last. A debt account is money owed to or by someone rather than money to spend with,
  * so it is seldom the account a transfer is headed for, and a handful of them among the rest push
  * the accounts that usually are down out of reach.
  */
 export function accountGroups(accounts: Account[]): AccountGroup[] {
+  const live = accounts.filter((account) => !account.archived);
   return (Object.keys(GROUP_RANK) as Account['type'][])
     .sort((a, b) => GROUP_RANK[a] - GROUP_RANK[b])
-    .map((type) => ({ type, accounts: accounts.filter((account) => account.type === type) }))
+    .map((type) => ({ type, accounts: live.filter((account) => account.type === type) }))
     .filter((group) => group.accounts.length > 0);
 }
 
@@ -77,6 +81,26 @@ export function useSaveAccount(groupId: string) {
       accountId
         ? unwrap(api.accounts.update({ params: { groupId, accountId }, body }), 200)
         : unwrap(api.accounts.create({ params: { groupId }, body }), 201),
+    onSuccess: () => queryClient.invalidateQueries({ queryKey: queryKeys.accounts(groupId) }),
+  });
+}
+
+/**
+ * Puts an account away, or brings it back. Archiving keeps everything recorded on the account and
+ * only takes it out of the default listings, the pickers and the total balance, so the two
+ * directions are one mutation with a flag rather than two hooks.
+ *
+ * Invalidating the accounts prefix covers both cached lists — the live one the pickers read and the
+ * one the accounts page reads, which includes archived accounts — since either changes shape here.
+ */
+export function useSetAccountArchived(groupId: string) {
+  const queryClient = useQueryClient();
+
+  return useMutation({
+    mutationFn: ({ accountId, archived }: { accountId: string; archived: boolean }) =>
+      archived
+        ? unwrap(api.accounts.archive({ params: { groupId, accountId }, body: {} }), 200)
+        : unwrap(api.accounts.restore({ params: { groupId, accountId }, body: {} }), 200),
     onSuccess: () => queryClient.invalidateQueries({ queryKey: queryKeys.accounts(groupId) }),
   });
 }

@@ -1,4 +1,6 @@
 import {
+  ArchiveIcon,
+  ArchiveRestoreIcon,
   ArrowDownLeftIcon,
   ArrowLeftRightIcon,
   ArrowUpRightIcon,
@@ -11,6 +13,7 @@ import {
 } from 'lucide-react';
 import { useTranslation } from 'react-i18next';
 import { AppearanceIcon } from '@/components/appearance/appearance-icon';
+import { Badge } from '@/components/ui/badge';
 import { Dialog, DialogContent, DialogDescription, DialogHeader, DialogTitle } from '@/components/ui/dialog';
 import { useCurrencyCodes } from '@/features/currencies/queries';
 import { pickDefaultAccountId } from '@/features/transactions/transaction-form-model';
@@ -22,7 +25,16 @@ import type { Account } from './queries';
 import { useFavouriteToggle } from './use-favourite-toggle';
 
 // give and receive are a debt account's: money from you to the person, and from them to you.
-export type AccountAction = 'edit' | 'transactions' | 'income' | 'expense' | 'transfer' | 'give' | 'receive';
+export type AccountAction =
+  | 'edit'
+  | 'transactions'
+  | 'income'
+  | 'expense'
+  | 'transfer'
+  | 'give'
+  | 'receive'
+  | 'archive'
+  | 'restore';
 
 interface AccountActionsSheetProps {
   groupId: string;
@@ -68,20 +80,29 @@ export function AccountActionsSheet({
   const currencyCodes = useCurrencyCodes();
   const toggleFavourite = useFavouriteToggle(groupId);
   const account = accounts.find((candidate) => candidate.id === accountId);
-  // The favourite is the starred account, or the first one when none is.
-  const favouriteId = pickDefaultAccountId(accounts);
+  // The favourite is the starred account, or the first one when none is — among those a picker
+  // would offer, since that is all the star decides. An archived account is not one of them, even
+  // while its own flag is still set, so archiving the favourite moves the star to what a new
+  // transaction will actually start on.
+  const live = accounts.filter((candidate) => !candidate.archived);
+  const favouriteId = pickDefaultAccountId(live);
   const isFavourite = !!account && account.id === favouriteId;
   // Unstarring the account that's the default anyway (when none is starred) would change nothing,
   // so its filled star stays put.
-  const fallbackId = pickDefaultAccountId(accounts.map((candidate) => ({ ...candidate, isFavourite: false })));
-  const canToggleFavourite = canEdit && !(isFavourite && account?.id === fallbackId);
+  const fallbackId = pickDefaultAccountId(live.map((candidate) => ({ ...candidate, isFavourite: false })));
+  const archived = !!account?.archived;
+  // Starring picks the account a new transaction starts on, and an archived one is never offered.
+  const canToggleFavourite = canEdit && !archived && !(isFavourite && account?.id === fallbackId);
+  // An archived account is kept for what is already on it; nothing new is recorded on one until it
+  // is restored.
+  const canRecord = canAddTransactions && !archived;
 
   const actions: ActionItem[] = [];
   if (canEdit) {
     actions.push({ action: 'edit', label: t('common.edit'), icon: PencilIcon });
   }
   actions.push({ action: 'transactions', label: t('nav.transactions'), icon: ReceiptTextIcon });
-  if (canAddTransactions && account?.type === 'debt') {
+  if (canRecord && account?.type === 'debt') {
     // Money changing hands with a person, as a transfer between them and one of your accounts, so
     // your side moves too. Each action always goes the same way, out from you or in to you, and
     // only its name follows the balance: out is lending while they owe you, paying back while you
@@ -98,7 +119,7 @@ export function AccountActionsSheet({
         tone: 'text-emerald-600 dark:text-emerald-400',
       },
     );
-  } else if (canAddTransactions) {
+  } else if (canRecord) {
     actions.push(
       { action: 'income', label: t('transactions.types.income'), icon: PlusIcon, tone: 'text-emerald-600 dark:text-emerald-400' },
       { action: 'expense', label: t('transactions.types.expense'), icon: MinusIcon, tone: 'text-destructive' },
@@ -108,6 +129,14 @@ export function AccountActionsSheet({
     if (account?.type === 'regular') {
       actions.push({ action: 'transfer', label: t('transactions.types.transfer'), icon: ArrowLeftRightIcon });
     }
+  }
+  // Last, below what the account is used for: putting it away, or taking it back out.
+  if (canEdit) {
+    actions.push(
+      archived
+        ? { action: 'restore', label: t('accounts.restore.action'), icon: ArchiveRestoreIcon }
+        : { action: 'archive', label: t('accounts.archive.action'), icon: ArchiveIcon },
+    );
   }
 
   return (
@@ -119,7 +148,10 @@ export function AccountActionsSheet({
               <div className="flex items-center gap-3 pr-8">
                 <AppearanceIcon icon={account.icon} color={account.color} fallbackIcon="wallet" size="lg" />
                 <div className="min-w-0 flex-1 text-left">
-                  <DialogTitle className="truncate">{account.name}</DialogTitle>
+                  <div className="flex items-center gap-2">
+                    <DialogTitle className="truncate">{account.name}</DialogTitle>
+                    {account.archived && <Badge variant="secondary">{t('accounts.groups.archived')}</Badge>}
+                  </div>
                   {/* What kind of account on one line — for a debt, which way it runs — and what it
                       holds on the next, colored like the list. */}
                   <DialogDescription asChild>

@@ -62,13 +62,28 @@ export const en = {
     icon: 'Icon',
     includedInBalance: 'Include in total balance',
     includedInBalanceDescription: 'Turn off for accounts you only want to track, like a loan.',
+    includedInBalanceArchived: 'An archived account is out of the total either way.',
     notificationBank: 'Bank notifications',
     notificationBankNone: 'None',
     notificationBankDescription: "Payments from this bank's notifications, forwarded by your phone, are recorded here.",
+    archivedAccount: 'Archived account',
+    archivedAccountDescription:
+      'Kept for what is recorded on it, out of the lists, the account pickers and the total balance.',
     favourite: 'Favourite',
     favouriteDescription: 'Preselected when you add a transaction.',
     markFavourite: 'Make favourite',
     unmarkFavourite: 'Remove from favourites',
+    archive: {
+      action: 'Archive',
+      title: 'Archive “{{name}}”?',
+      description:
+        'It leaves the lists and the account pickers, and stops counting toward your balance. What was recorded on it stays as it is, and you can restore it whenever.',
+    },
+    restore: {
+      action: 'Restore',
+      title: 'Restore “{{name}}”?',
+      description: 'It comes back to the lists and the account pickers, and counts toward your balance again.',
+    },
     delete: {
       title: 'Delete “{{name}}”?',
       alsoDeletes: 'This also deletes:',
@@ -146,6 +161,28 @@ export const en = {
     subcategoryCount_many: '{{count}} subcategories',
     subcategoryCount_other: '{{count}} subcategories',
     subcategoriesOf: 'Subcategories of “{{name}}”',
+    archived: 'Archived',
+    archivedCategory: 'Archived category',
+    archivedCategoryDescription: 'Kept for what is filed under it, out of the lists and the category pickers.',
+    archive: {
+      action: 'Archive',
+      title: 'Archive “{{name}}”?',
+      description:
+        'It leaves the lists and the category pickers. What is filed under it stays as it is, and you can restore it whenever.',
+      subcategories_one: 'Its subcategory goes with it.',
+      subcategories_few: 'Its {{count}} subcategories go with it.',
+      subcategories_many: 'Its {{count}} subcategories go with it.',
+      subcategories_other: 'Its {{count}} subcategories go with it.',
+    },
+    restore: {
+      action: 'Restore',
+      title: 'Restore “{{name}}”?',
+      description: 'It comes back to the lists and the category pickers.',
+      subcategories_one: 'Its subcategory comes back too.',
+      subcategories_few: 'Its {{count}} subcategories come back too.',
+      subcategories_many: 'Its {{count}} subcategories come back too.',
+      subcategories_other: 'Its {{count}} subcategories come back too.',
+    },
     reorder: {
       start: 'Reorder',
       save: 'Save order',

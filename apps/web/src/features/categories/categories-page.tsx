@@ -26,6 +26,7 @@ import { useGroupScope } from '@/features/groups/group-context';
 import { useDragReorder, type ReorderHandleProps } from '@/lib/drag-reorder';
 import { useSwipeTrack } from '@/lib/swipe';
 import { cn } from '@/lib/utils';
+import { ArchiveCategoryDialog } from './archive-category-dialog';
 import { CategoryActionsSheet, type CategoryAction } from './category-actions-sheet';
 import { CategoryDialog } from './category-dialog';
 import { buildTree, move, moveSubcategory, orderedIds, type CategoryTree } from './category-order';
@@ -47,12 +48,16 @@ interface DialogState {
 export function CategoriesPage() {
   const { t } = useTranslation();
   const { group, ability } = useGroupScope();
-  const categories = useCategories(group.id);
+  // Archived ones too: they're kept out of the lists and put away in a fold of their own.
+  const categories = useCategories(group.id, true);
   const reorder = useReorderCategories(group.id);
   const [params, setParams] = useSearchParams();
   const navigate = useNavigate();
   const [dialog, setDialog] = useState<DialogState>({ open: false });
   const [sheet, setSheet] = useState<{ open: boolean; category?: Category }>({ open: false });
+  // Putting a category away and taking it back out are the same confirmation, which way round
+  // following the category it was opened for.
+  const [archiving, setArchiving] = useState<{ open: boolean; category?: Category }>({ open: false });
   // Parents whose subcategories are showing; each list starts folded away under its parent.
   const [expanded, setExpanded] = useState<ReadonlySet<string>>(new Set());
   // The list as it is being rearranged, kept apart from the fetched one until it is saved — so a
@@ -79,17 +84,53 @@ export function CategoriesPage() {
     setSheet((current) => ({ ...current, open: false }));
     if (action === 'edit') {
       setDialog({ open: true, category });
+    } else if (action === 'archive' || action === 'restore') {
+      setArchiving({ open: true, category });
     } else {
       void navigate(`/g/${group.id}/transactions?category=${category.id}`);
     }
   };
 
   // A tree per tab rather than just the one on screen: the other is rendered while the strip is
-  // being dragged, and both come out of the categories already fetched.
-  const trees = useMemo(
-    () => Object.fromEntries(TYPE_ORDER.map((option) => [option, buildTree(categories.data ?? [], option)])),
+  // being dragged, and both come out of the categories already fetched — the ones still in use,
+  // that is; what has been put away is listed on its own below.
+  const trees = useMemo(() => {
+    const live = (categories.data ?? []).filter((category) => !category.archived);
+    return Object.fromEntries(TYPE_ORDER.map((option) => [option, buildTree(live, option)])) as Record<
+      CategoryType,
+      CategoryTree[]
+    >;
+  }, [categories.data]);
+
+  /*
+    What has been put away, per tab. A subcategory archived along with its parent is not listed
+    apart: archiving carries a branch off whole, so the parent's row stands for all of it and says
+    how many came along. One archived on its own, under a parent still in use, is its own row.
+  */
+  const archived = useMemo(() => {
+    const all = categories.data ?? [];
+    const archivedIds = new Set(all.filter((category) => category.archived).map((category) => category.id));
+    return Object.fromEntries(
+      TYPE_ORDER.map((option) => [
+        option,
+        all
+          .filter(
+            (category) =>
+              category.type === option &&
+              category.archived &&
+              !(category.parentId !== null && archivedIds.has(category.parentId)),
+          )
+          .sort((a, b) => a.sortOrder - b.sortOrder || a.name.localeCompare(b.name))
+          .map((category) => ({ category, children: all.filter((child) => child.parentId === category.id) })),
+      ]),
+    ) as Record<CategoryType, CategoryTree[]>;
+  }, [categories.data]);
+
+  // Names by id, for saying which category an archived subcategory came out of.
+  const parentNames = useMemo(
+    () => new Map((categories.data ?? []).map((category) => [category.id, category.name])),
     [categories.data],
-  ) as Record<CategoryType, CategoryTree[]>;
+  );
 
   // Income and expense side by side, in the order the picker lists them: dragging the strip left
   // moves to the next along, right to the one before, and a drag towards nothing gives a little
@@ -126,7 +167,8 @@ export function CategoriesPage() {
   };
 
   const tabContent = (option: CategoryType) => {
-    if (trees[option].length === 0) {
+    const putAway = archived[option];
+    if (trees[option].length === 0 && putAway.length === 0) {
       return (
         <Empty className="border">
           <EmptyHeader>
@@ -140,46 +182,79 @@ export function CategoriesPage() {
       );
     }
     return (
-      <ul className="divide-y rounded-xl border">
-        {trees[option].map(({ category, children }) => {
-          const isExpanded = children.length > 0 && expanded.has(category.id);
-          const listId = `subcategories-${category.id}`;
-          return (
-            <li key={category.id}>
-              <div className="flex">
-                <CategoryRow
-                  category={category}
-                  detail={children.length > 0 ? t('categories.subcategoryCount', { count: children.length }) : undefined}
-                  onSelect={() => setSheet({ open: true, category })}
-                  className="flex-1"
-                />
-                {/* Its own button: the row itself opens the category's actions, as every row does. */}
-                {children.length > 0 && (
-                  <ExpandButton
-                    expanded={isExpanded}
-                    listId={listId}
-                    label={t('categories.subcategoriesOf', { name: category.name })}
-                    onClick={() => toggle(category.id)}
-                  />
-                )}
-              </div>
-              {isExpanded && (
-                <ul id={listId} className="divide-y border-t">
-                  {children.map((child) => (
-                    <li key={child.id}>
-                      <CategoryRow
-                        category={child}
-                        nested
-                        onSelect={() => setSheet({ open: true, category: child })}
+      <div className="flex flex-col gap-4">
+        {trees[option].length > 0 && (
+          <ul className="divide-y rounded-xl border">
+            {trees[option].map(({ category, children }) => {
+              const isExpanded = children.length > 0 && expanded.has(category.id);
+              const listId = `subcategories-${category.id}`;
+              return (
+                <li key={category.id}>
+                  <div className="flex">
+                    <CategoryRow
+                      category={category}
+                      detail={
+                        children.length > 0 ? t('categories.subcategoryCount', { count: children.length }) : undefined
+                      }
+                      onSelect={() => setSheet({ open: true, category })}
+                      className="flex-1"
+                    />
+                    {/* Its own button: the row itself opens the category's actions, as every row does. */}
+                    {children.length > 0 && (
+                      <ExpandButton
+                        expanded={isExpanded}
+                        listId={listId}
+                        label={t('categories.subcategoriesOf', { name: category.name })}
+                        onClick={() => toggle(category.id)}
                       />
-                    </li>
-                  ))}
-                </ul>
-              )}
-            </li>
-          );
-        })}
-      </ul>
+                    )}
+                  </div>
+                  {isExpanded && (
+                    <ul id={listId} className="divide-y border-t">
+                      {children.map((child) => (
+                        <li key={child.id}>
+                          <CategoryRow
+                            category={child}
+                            nested
+                            onSelect={() => setSheet({ open: true, category: child })}
+                          />
+                        </li>
+                      ))}
+                    </ul>
+                  )}
+                </li>
+              );
+            })}
+          </ul>
+        )}
+        {/* Closed to begin with: an archived category is there to be looked up, not looked at. */}
+        {putAway.length > 0 && (
+          <details className="group flex flex-col gap-1">
+            <summary className="flex cursor-pointer list-none items-center gap-1 px-1 text-sm font-medium text-muted-foreground marker:content-none">
+              {t('categories.archived')}
+              <span className="tabular-nums">({putAway.length})</span>
+              <ChevronDownIcon className="size-4 transition-transform group-open:rotate-180" />
+            </summary>
+            <ul className="mt-1 divide-y rounded-xl border">
+              {putAway.map(({ category, children }) => (
+                <li key={category.id}>
+                  <CategoryRow
+                    category={category}
+                    // What came along with it, or — for one put away on its own — the category it
+                    // sits under, which its row is no longer shown beneath.
+                    detail={
+                      children.length > 0
+                        ? t('categories.subcategoryCount', { count: children.length })
+                        : parentNames.get(category.parentId ?? '')
+                    }
+                    onSelect={() => setSheet({ open: true, category })}
+                  />
+                </li>
+              ))}
+            </ul>
+          </details>
+        )}
+      </div>
     );
   };
 
@@ -307,6 +382,23 @@ export function CategoriesPage() {
         canEdit={canUpdate}
         onAction={onAction}
       />
+
+      {archiving.category && (
+        <ArchiveCategoryDialog
+          groupId={group.id}
+          category={archiving.category}
+          // The subcategories the confirmation is about: the ones still in use, which go away with
+          // it, or — for a category being brought back — the ones that went away with it.
+          subcategoryCount={
+            (categories.data ?? []).filter(
+              (candidate) =>
+                candidate.parentId === archiving.category?.id && candidate.archived === archiving.category?.archived,
+            ).length
+          }
+          open={archiving.open}
+          onOpenChange={(open) => setArchiving((current) => ({ ...current, open }))}
+        />
+      )}
 
       <CategoryDialog
         groupId={group.id}

@@ -1,7 +1,7 @@
 import { describe, expect, it } from 'vitest';
 import { accountGroups, type Account } from './queries';
 
-const account = (id: string, type: Account['type']) => ({ id, type }) as Account;
+const account = (id: string, type: Account['type'], archived = false) => ({ id, type, archived }) as Account;
 const shape = (accounts: Account[]) =>
   accountGroups(accounts).map(({ type, accounts: inGroup }) => [type, inGroup.map((a) => a.id)]);
 
@@ -18,6 +18,16 @@ describe('accountGroups', () => {
       ['savings', ['rainy-day']],
       ['debt', ['owed-by-sam']],
     ]);
+  });
+
+  it('leaves out what has been put away: a picker never offers one', () => {
+    const accounts = [
+      account('wallet', 'regular'),
+      account('old-card', 'regular', true),
+      account('rainy-day', 'savings', true),
+    ];
+
+    expect(shape(accounts)).toEqual([['regular', ['wallet']]]);
   });
 
   it('keeps the order the accounts came in within a section', () => {

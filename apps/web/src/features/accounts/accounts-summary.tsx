@@ -38,7 +38,8 @@ export function AccountsSummary({ accounts }: { accounts: Account[] }) {
 
   const rows = useMemo(() => {
     const byCurrency = new Map<number, Account[]>();
-    for (const account of accounts) {
+    // Archived ones are out of every total here too, whichever list this was handed.
+    for (const account of accounts.filter((account) => !account.archived)) {
       byCurrency.set(account.currencyId, [...(byCurrency.get(account.currencyId) ?? []), account]);
     }
     const sumOf = (list: Account[]) => sumMoney(list.map((account) => account.balance));

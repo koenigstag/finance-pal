@@ -25,7 +25,10 @@ export function AccountsTotal({ groupId, className }: { groupId: string; classNa
   if (!accounts.data || currencyId === undefined) {
     return null;
   }
-  const counted = accounts.data.filter((account) => account.isIncludedInBalance);
+  // Archived ones never count, whatever their own flag still says and whichever list this is
+  // reading: an account that has been put away is out of the total, which is half of what putting
+  // one away means.
+  const counted = accounts.data.filter((account) => account.isIncludedInBalance && !account.archived);
   const rateOf = (id: number) => {
     const code = currencyCodes.get(id);
     return code ? rates[code]?.rate : undefined;
