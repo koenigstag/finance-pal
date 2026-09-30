@@ -63,7 +63,10 @@ export function AccountDialog({
   const setArchived = useSetAccountArchived(groupId);
   const form = useForm<AccountFormValues>({ resolver: zodResolver(accountFormSchema) });
   const errors = form.formState.errors;
-  const [previewName, previewIcon, previewColor] = useWatch({ control: form.control, name: ['name', 'icon', 'color'] });
+  const [previewName, previewIcon, previewColor, archived] = useWatch({
+    control: form.control,
+    name: ['name', 'icon', 'color', 'archived'],
+  });
 
   // Reset on every open, so the form never shows what was typed into a previous, cancelled one.
   useEffect(() => {
@@ -182,15 +185,21 @@ export function AccountDialog({
                 control={form.control}
                 name="isIncludedInBalance"
                 render={({ field }) => (
+                  // An archived account is out of the total whatever this says, so while the box
+                  // below is ticked this one shows that and stops taking answers. The stored value
+                  // is left alone underneath, to be what it was when the account comes back.
                   <Field orientation="horizontal">
                     <Checkbox
                       id="account-included"
-                      checked={field.value}
+                      checked={field.value && !archived}
+                      disabled={archived}
                       onCheckedChange={(checked) => field.onChange(checked === true)}
                     />
                     <FieldContent>
                       <FieldLabel htmlFor="account-included">{t('accounts.includedInBalance')}</FieldLabel>
-                      <FieldDescription>{t('accounts.includedInBalanceDescription')}</FieldDescription>
+                      <FieldDescription>
+                        {t(archived ? 'accounts.includedInBalanceArchived' : 'accounts.includedInBalanceDescription')}
+                      </FieldDescription>
                     </FieldContent>
                   </Field>
                 )}

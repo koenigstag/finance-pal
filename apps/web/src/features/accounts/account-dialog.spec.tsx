@@ -115,6 +115,16 @@ describe('AccountDialog archiving', () => {
     expect(restore).not.toHaveBeenCalled();
   });
 
+  it('shows an archived account as out of the total, and stops taking answers about it', () => {
+    open({ ...wallet, archived: true, archivedAt: '2026-02-01T00:00:00.000Z' });
+
+    // The account still asks to be counted; being put away is what decides it.
+    const counted = screen.getByRole('checkbox', { name: 'Include in total balance' });
+    expect(counted.getAttribute('aria-checked')).toBe('false');
+    expect(counted.getAttribute('data-disabled')).not.toBeNull();
+    expect(screen.getByText('An archived account is out of the total either way.')).toBeTruthy();
+  });
+
   it('does not offer the box for an account that does not exist yet', () => {
     open();
 

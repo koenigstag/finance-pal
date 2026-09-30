@@ -12,6 +12,10 @@ export type UpdateCategoryBody = ClientInferRequest<typeof categoriesContract.up
  * The group's categories. Archived ones are left out unless asked for — they belong to what is
  * already recorded, not to a picker — and are cached apart, so a screen that wants them doesn't
  * push them at the rest.
+ *
+ * Whatever reports on what has already happened asks for them: a category that took money in a
+ * month gone by still has to carry its name and its share there, however long ago it was put
+ * away. The categories page and the transactions page read that list; the forms read the other.
  */
 export function useCategories(groupId: string, includeArchived = false) {
   return useQuery({
@@ -134,10 +138,17 @@ export function categoryOptions(categories: Category[], type: Category['type']):
   return result;
 }
 
-/** One level of the tree: the categories of a type directly under parentId (null: the top level). */
+/**
+ * One level of the tree, as a picker offers it: the categories of a type directly under parentId
+ * (null: the top level).
+ *
+ * Archived ones are never among them, however the list was fetched. This is what the transaction
+ * form reads, for the category and for the subcategory chips under it, so a category that has been
+ * put away can't be filed under — not on a new transaction, and not on one being edited.
+ */
 export function categoriesUnder(categories: Category[], type: Category['type'], parentId: string | null): Category[] {
   return categories
-    .filter((category) => category.type === type && category.parentId === parentId)
+    .filter((category) => category.type === type && category.parentId === parentId && !category.archived)
     .sort((a, b) => a.sortOrder - b.sortOrder || a.name.localeCompare(b.name));
 }
 

@@ -65,6 +65,7 @@ export const ru: Catalog<typeof en> = {
     icon: 'Иконка',
     includedInBalance: 'Учитывать в общем балансе',
     includedInBalanceDescription: 'Отключите для счетов, которые нужно только отслеживать, например кредита.',
+    includedInBalanceArchived: 'Архивный счёт в общем балансе не учитывается в любом случае.',
     notificationBank: 'Уведомления банка',
     notificationBankNone: 'Нет',
     notificationBankDescription: 'Сюда записываются платежи из уведомлений этого банка, которые пересылает телефон.',

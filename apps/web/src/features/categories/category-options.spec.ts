@@ -52,4 +52,14 @@ describe('categoriesUnder', () => {
     expect(categoriesUnder(categories, 'expense', 'food').map((c) => c.id)).toEqual(['bread', 'lunch']);
     expect(categoriesUnder(categories, 'income', null).map((c) => c.id)).toEqual(['salary']);
   });
+
+  it('leaves out what has been put away, at either level: a picker never offers one', () => {
+    const withArchived = [
+      ...categories,
+      category('taxi', { archived: true }),
+      category('coffee', { parentId: 'food', archived: true }),
+    ];
+    expect(categoriesUnder(withArchived, 'expense', null).map((c) => c.id)).toEqual(['rent', 'food']);
+    expect(categoriesUnder(withArchived, 'expense', 'food').map((c) => c.id)).toEqual(['bread', 'lunch']);
+  });
 });
