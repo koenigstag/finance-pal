@@ -3,7 +3,14 @@
   <head>
     <meta charset="utf-8" />
     <title>Finance Pal</title>
-    <meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover" />
+    <!-- interactive-widget: the on-screen keyboard takes its room out of the page rather than
+         covering it, so the bottom sheet a field sits in stays above the keyboard instead of
+         behind it, and svh follows suit. Without it a phone keyboard hides whatever is being
+         typed into any sheet anchored to the bottom of the screen. -->
+    <meta
+      name="viewport"
+      content="width=device-width, initial-scale=1, viewport-fit=cover, interactive-widget=resizes-content"
+    />
     <!-- Browser chrome (address bar, status bar) follows the system theme. -->
     <meta name="theme-color" media="(prefers-color-scheme: light)" content="#ffffff" />
     <meta name="theme-color" media="(prefers-color-scheme: dark)" content="#0a0a0a" />
