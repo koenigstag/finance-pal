@@ -38,7 +38,9 @@ export function TransactionsPage() {
   const { group, ability } = useGroupScope();
   const [params, setParams] = useSearchParams();
   const accounts = useAccounts(group.id);
-  const categories = useCategories(group.id);
+  // Archived ones too: a transaction filed under a category that has since been put away still
+  // says which one, here and in its sheet, and the filters can still go looking through it.
+  const categories = useCategories(group.id, true);
   const rules = useRecurringRules(group.id);
   const rulesById = useMemo(() => new Map((rules.data ?? []).map((rule) => [rule.id, rule])), [rules.data]);
   const [dialog, setDialog] = useState<{

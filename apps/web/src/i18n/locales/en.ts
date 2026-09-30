@@ -160,6 +160,28 @@ export const en = {
     subcategoryCount_many: '{{count}} subcategories',
     subcategoryCount_other: '{{count}} subcategories',
     subcategoriesOf: 'Subcategories of “{{name}}”',
+    archived: 'Archived',
+    archivedCategory: 'Archived category',
+    archivedCategoryDescription: 'Kept for what is filed under it, out of the lists and the category pickers.',
+    archive: {
+      action: 'Archive',
+      title: 'Archive “{{name}}”?',
+      description:
+        'It leaves the lists and the category pickers. What is filed under it stays as it is, and you can restore it whenever.',
+      subcategories_one: 'Its subcategory goes with it.',
+      subcategories_few: 'Its {{count}} subcategories go with it.',
+      subcategories_many: 'Its {{count}} subcategories go with it.',
+      subcategories_other: 'Its {{count}} subcategories go with it.',
+    },
+    restore: {
+      action: 'Restore',
+      title: 'Restore “{{name}}”?',
+      description: 'It comes back to the lists and the category pickers.',
+      subcategories_one: 'Its subcategory comes back too.',
+      subcategories_few: 'Its {{count}} subcategories come back too.',
+      subcategories_many: 'Its {{count}} subcategories come back too.',
+      subcategories_other: 'Its {{count}} subcategories come back too.',
+    },
     reorder: {
       start: 'Reorder',
       save: 'Save order',

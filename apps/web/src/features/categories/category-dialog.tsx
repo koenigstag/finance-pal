@@ -8,21 +8,24 @@ import { AppearanceIcon } from '@/components/appearance/appearance-icon';
 import { ColorPicker, IconPicker } from '@/components/appearance/appearance-picker';
 import { Alert, AlertDescription } from '@/components/ui/alert';
 import { Button } from '@/components/ui/button';
+import { Checkbox } from '@/components/ui/checkbox';
 import { Dialog, DialogContent, DialogDescription, DialogFooter, DialogHeader, DialogTitle } from '@/components/ui/dialog';
-import { Field, FieldDescription, FieldError, FieldGroup, FieldLabel } from '@/components/ui/field';
+import { Field, FieldContent, FieldDescription, FieldError, FieldGroup, FieldLabel } from '@/components/ui/field';
 import { Input } from '@/components/ui/input';
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select';
 import { DeleteCategoryDialog } from './delete-category-dialog';
-import { nextSortOrder, useSaveCategory, type Category } from './queries';
+import { nextSortOrder, useSaveCategory, useSetCategoryArchived, type Category } from './queries';
 
 // Radix Select can't hold an empty value, so "no parent" needs a stand-in.
 const TOP_LEVEL = 'top';
 
+// archived is the form's own, not the body's: archiving is a route of its own, and saved as one.
 const categoryFormSchema = z.object({
   name: z.string().trim().min(1).max(120),
   parentId: z.string(),
   icon: z.string().nullable(),
   color: z.string().nullable(),
+  archived: z.boolean(),
 });
 
 type CategoryFormValues = z.infer<typeof categoryFormSchema>;
@@ -53,18 +56,27 @@ export function CategoryDialog({
 }: CategoryDialogProps) {
   const { t } = useTranslation();
   const saveCategory = useSaveCategory(groupId);
+  const setArchived = useSetCategoryArchived(groupId);
   const [confirmingDelete, setConfirmingDelete] = useState(false);
   const form = useForm<CategoryFormValues>({ resolver: zodResolver(categoryFormSchema) });
   const errors = form.formState.errors;
 
   // Categories are two levels deep: parents are top-level categories of the same type, and one
-  // that has subcategories of its own can't become a subcategory.
+  // that has subcategories of its own can't become a subcategory. Archived ones are not offered —
+  // nothing new is filed under one — except the parent this category already sits under, so that
+  // editing a subcategory put away with its parent still says where it belongs.
   const parentOptions = useMemo(
     () =>
       categories
-        .filter((candidate) => candidate.type === type && candidate.parentId === null && candidate.id !== category?.id)
+        .filter(
+          (candidate) =>
+            candidate.type === type &&
+            candidate.parentId === null &&
+            candidate.id !== category?.id &&
+            (!candidate.archived || candidate.id === category?.parentId),
+        )
         .sort((a, b) => a.sortOrder - b.sortOrder || a.name.localeCompare(b.name)),
-    [categories, type, category?.id],
+    [categories, type, category?.id, category?.parentId],
   );
   const subcategories = category ? categories.filter((candidate) => candidate.parentId === category.id) : [];
   const canHaveParent = subcategories.length === 0;
@@ -83,6 +95,7 @@ export function CategoryDialog({
         parentId: parentId ?? TOP_LEVEL,
         icon: category ? category.icon : suggested.icon,
         color: category ? category.color : suggested.color,
+        archived: category?.archived ?? false,
       });
     }
     // Only on opening: the categories list refetching must not overwrite a pick in progress.
@@ -99,6 +112,11 @@ export function CategoryDialog({
       await (category
         ? saveCategory.mutateAsync({ categoryId: category.id, body: { name: values.name, parentId, sortOrder, ...appearance } })
         : saveCategory.mutateAsync({ body: { type, name: values.name, parentId, sortOrder, ...appearance } }));
+      // Its own request, after the fields and only when the checkbox moved: the category has to
+      // exist to be put away, and saving the rest is what the dialog is mostly for.
+      if (category && values.archived !== category.archived) {
+        await setArchived.mutateAsync({ categoryId: category.id, archived: values.archived });
+      }
       onOpenChange(false);
     } catch {
       form.setError('root', { message: t('errors.generic') });
@@ -153,6 +171,26 @@ export function CategoryDialog({
                 />
                 {!canHaveParent && <FieldDescription>{t('categories.hasSubcategories')}</FieldDescription>}
               </Field>
+              {/* Only for a category that exists: there is nothing to put away until it does. */}
+              {category && (
+                <Controller
+                  control={form.control}
+                  name="archived"
+                  render={({ field }) => (
+                    <Field orientation="horizontal">
+                      <Checkbox
+                        id="category-archived"
+                        checked={field.value}
+                        onCheckedChange={(checked) => field.onChange(checked === true)}
+                      />
+                      <FieldContent>
+                        <FieldLabel htmlFor="category-archived">{t('categories.archivedCategory')}</FieldLabel>
+                        <FieldDescription>{t('categories.archivedCategoryDescription')}</FieldDescription>
+                      </FieldContent>
+                    </Field>
+                  )}
+                />
+              )}
               <Field>
                 <FieldLabel htmlFor="category-color">{t('categories.color')}</FieldLabel>
                 <Controller

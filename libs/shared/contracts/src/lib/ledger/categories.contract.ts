@@ -110,7 +110,7 @@ export const categoriesContract = c.router(
       pathParams: categoryPathParams,
       body: z.object({}),
       responses: { 200: categorySchema, 403: errorSchema, 404: errorSchema },
-      summary: 'Archive a category',
+      summary: 'Archive a category, and its subcategories with it',
     },
     restore: {
       method: 'POST',
@@ -118,7 +118,7 @@ export const categoriesContract = c.router(
       pathParams: categoryPathParams,
       body: z.object({}),
       responses: { 200: categorySchema, 403: errorSchema, 404: errorSchema },
-      summary: 'Restore an archived category',
+      summary: 'Restore an archived category with the subcategories archived alongside it; a subcategory also brings back an archived parent',
     },
     reorder: {
       method: 'POST',

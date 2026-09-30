@@ -1,10 +1,18 @@
-import { ChevronRightIcon, PencilIcon, ReceiptTextIcon, type LucideIcon } from 'lucide-react';
+import {
+  ArchiveIcon,
+  ArchiveRestoreIcon,
+  ChevronRightIcon,
+  PencilIcon,
+  ReceiptTextIcon,
+  type LucideIcon,
+} from 'lucide-react';
 import { useTranslation } from 'react-i18next';
 import { AppearanceIcon } from '@/components/appearance/appearance-icon';
+import { Badge } from '@/components/ui/badge';
 import { Dialog, DialogContent, DialogDescription, DialogHeader, DialogTitle } from '@/components/ui/dialog';
 import type { Category } from './queries';
 
-export type CategoryAction = 'edit' | 'transactions';
+export type CategoryAction = 'edit' | 'transactions' | 'archive' | 'restore';
 
 interface CategoryActionsSheetProps {
   category?: Category;
@@ -29,6 +37,14 @@ export function CategoryActionsSheet({ category, parent, open, onOpenChange, can
     actions.push({ action: 'edit', label: t('common.edit'), icon: PencilIcon });
   }
   actions.push({ action: 'transactions', label: t('nav.transactions'), icon: ReceiptTextIcon });
+  // Last, below what the category is used for: putting it away, or taking it back out.
+  if (canEdit) {
+    actions.push(
+      category?.archived
+        ? { action: 'restore', label: t('categories.restore.action'), icon: ArchiveRestoreIcon }
+        : { action: 'archive', label: t('categories.archive.action'), icon: ArchiveIcon },
+    );
+  }
 
   return (
     <Dialog open={open} onOpenChange={onOpenChange}>
@@ -39,7 +55,10 @@ export function CategoryActionsSheet({ category, parent, open, onOpenChange, can
               <div className="flex items-center gap-3 pr-8">
                 <AppearanceIcon icon={category.icon} color={category.color} size="lg" />
                 <div className="min-w-0 flex-1 text-left">
-                  <DialogTitle className="truncate">{category.name}</DialogTitle>
+                  <div className="flex items-center gap-2">
+                    <DialogTitle className="truncate">{category.name}</DialogTitle>
+                    {category.archived && <Badge variant="secondary">{t('categories.archived')}</Badge>}
+                  </div>
                   <DialogDescription className="truncate">{t(`categories.types.${category.type}`)}</DialogDescription>
                   {parent && <p className="truncate text-sm text-muted-foreground">{parent.name}</p>}
                 </div>

@@ -145,24 +145,42 @@ export class CategoriesService {
     return ordered.map((category) => updatedById.get(category.id) ?? category);
   }
 
+  /**
+   * Puts the category away, and its subcategories with it. Archiving only decides what the lists
+   * and the pickers offer — everything filed under it stays as it is — and a subcategory left
+   * behind would be offered on its own, under a parent nothing else shows any more.
+   */
   @Transactional()
   async archive(userId: string, groupId: string, categoryId: string): Promise<Category> {
     await this.authorize(userId, groupId, 'update', 'Category');
     await this.findOrFail(groupId, categoryId);
-    await this.categories.update({ id: categoryId, groupId }, { archived: true, archivedAt: new Date() });
+    const ids = [categoryId, ...(await this.subcategoryIds(groupId, categoryId))];
+    await this.categories.update({ id: In(ids), groupId }, { archived: true, archivedAt: new Date() });
     const category = await this.findOrFail(groupId, categoryId);
     this.realtime.emitToGroup(groupId, { resourceType: 'Category', resourceId: categoryId, action: 'archived', groupId });
     return category;
   }
 
+  /**
+   * Brings the category back, with the subcategories that went away with it, so it comes back the
+   * shape it left. A subcategory restored on its own brings back the parent it sits under, where
+   * that was archived too — the other subcategories stay away, only this one was asked for.
+   */
   @Transactional()
   async restore(userId: string, groupId: string, categoryId: string): Promise<Category> {
     await this.authorize(userId, groupId, 'update', 'Category');
-    await this.findOrFail(groupId, categoryId);
-    await this.categories.update({ id: categoryId, groupId }, { archived: false, archivedAt: null });
     const category = await this.findOrFail(groupId, categoryId);
+    const ids = [categoryId, ...(await this.subcategoryIds(groupId, categoryId))];
+    if (category.parentId !== null) {
+      const parent = await this.findOrFail(groupId, category.parentId);
+      if (parent.archived) {
+        ids.push(parent.id);
+      }
+    }
+    await this.categories.update({ id: In(ids), groupId }, { archived: false, archivedAt: null });
+    const restored = await this.findOrFail(groupId, categoryId);
     this.realtime.emitToGroup(groupId, { resourceType: 'Category', resourceId: categoryId, action: 'restored', groupId });
-    return category;
+    return restored;
   }
 
   async usage(userId: string, groupId: string, categoryId: string): Promise<CategoryUsage> {
