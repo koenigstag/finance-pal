@@ -86,6 +86,27 @@ const DETACH_FUTURE_OCCURRENCES_SQL = `
     AND deleted_at IS NULL
 `;
 
+// Claims the old schedule still holds on dates from the frontier on, once the series is moved to a
+// new one: a date the user skipped (its soft-deleted row), and an occurrence recorded ahead of its
+// date with Add now. Through the unique index either would make the new schedule step over that
+// date — moving a series whose next date was skipped back to that same date would quietly land it
+// on the one after. The skip was of the old schedule and goes; what was recorded early stays as the
+// transaction it is, out of the series like a detached one.
+const RELEASE_SKIPPED_DATES_SQL = `
+  DELETE FROM transactions
+  WHERE recurring_rule_id = $1
+    AND recurrence_date >= $2
+    AND deleted_at IS NOT NULL
+`;
+
+const RELEASE_LANDED_DATES_SQL = `
+  UPDATE transactions SET recurring_rule_id = NULL, recurrence_date = NULL, is_customized = false
+  WHERE recurring_rule_id = $1
+    AND recurrence_date >= $2
+    AND date <= $3
+    AND deleted_at IS NULL
+`;
+
 interface OccurrenceAmount {
   amount: string;
   // See transactions.percentage_as_of: set for an amount that comes from the balance.
@@ -251,17 +272,27 @@ export async function detachFutureOccurrences(manager: EntityManager, ruleId: st
  * it still owns and writes its next one afresh. A change applies from today on — the frontier goes
  * back to the start of today and no further, so a new schedule is never written into the past — and
  * rows the user edited or deleted survive, the unique index making the refill step over their dates.
+ *
+ * `rescheduled` is for a new schedule (start, repeat or time zone), which starts afresh: the dates
+ * the old one skipped or recorded early, from today on, no longer hold it back (see
+ * RELEASE_SKIPPED_DATES_SQL). A planned occurrence the user edited still stays.
  */
 export async function regenerateOccurrences(
   manager: EntityManager,
   rule: RecurringRule,
   now: Date,
   rateBetween: RateLookup,
+  rescheduled = false,
 ): Promise<number> {
   await removeFutureOccurrences(manager, rule.id, now);
+  const frontier = startOfLocalDay(now, rule.timezone);
+  if (rescheduled) {
+    await manager.query(RELEASE_SKIPPED_DATES_SQL, [rule.id, frontier]);
+    await manager.query(RELEASE_LANDED_DATES_SQL, [rule.id, frontier, now]);
+  }
   // Saved even if nothing gets written now (an occurrence the user edited is still the planned
   // one): the series must carry on from the new schedule once that one lands, not from the old.
-  await moveFrontier(manager, rule, startOfLocalDay(now, rule.timezone));
+  await moveFrontier(manager, rule, frontier);
   return materializeOccurrences(manager, rule, now, rateBetween);
 }
 

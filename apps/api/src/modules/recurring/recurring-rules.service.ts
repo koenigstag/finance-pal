@@ -103,6 +103,16 @@ function occurrencesAffected(before: RecurringRule, after: RecurringRule): boole
   );
 }
 
+// A new schedule rather than a new template: the series starts afresh from it.
+function scheduleChanged(before: RecurringRule, after: RecurringRule): boolean {
+  return (
+    before.intervalUnit !== after.intervalUnit ||
+    before.intervalValue !== after.intervalValue ||
+    before.startsAt.getTime() !== after.startsAt.getTime() ||
+    before.timezone !== after.timezone
+  );
+}
+
 @Injectable()
 export class RecurringRulesService {
   constructor(
@@ -229,7 +239,7 @@ export class RecurringRulesService {
         await removeFutureOccurrences(manager, ruleId, now);
       }
     } else if (!before.active || occurrencesAffected(before, after)) {
-      await regenerateOccurrences(manager, after, now, this.rates.lookup);
+      await regenerateOccurrences(manager, after, now, this.rates.lookup, scheduleChanged(before, after));
     }
     await this.reworkBalanceAmounts(after, now, before);
 
