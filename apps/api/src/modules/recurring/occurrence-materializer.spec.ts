@@ -25,6 +25,8 @@ const days = (list: Occurrence[]) => list.map((row) => row.date.toISOString().sl
  */
 class FakeSeries {
   occurrences: Occurrence[] = [];
+  // Rows taken out of the series, kept as transactions of their own.
+  detached: Occurrence[] = [];
   frontier: Date | null = null;
   // The account's balance as of a moment, which a percentage or a rounding is worked out from.
   balanceAt: (asOf: Date) => string = () => '0.00';
@@ -70,6 +72,18 @@ class FakeSeries {
     }
     if (sql.includes('UPDATE recurring_rules')) {
       this.frontier = params[1] as Date;
+      return [];
+    }
+    if (sql.includes('deleted_at IS NOT NULL')) {
+      const from = params[1] as Date;
+      this.occurrences = this.occurrences.filter((row) => !(row.deleted && row.recurrenceDate >= from));
+      return [];
+    }
+    if (sql.includes('UPDATE transactions SET recurring_rule_id = NULL')) {
+      const [from, now] = [params[1] as Date, params[2] as Date];
+      const released = (row: Occurrence) => !row.deleted && row.recurrenceDate >= from && row.date <= now;
+      this.detached.push(...this.occurrences.filter(released));
+      this.occurrences = this.occurrences.filter((row) => !released(row));
       return [];
     }
     if (sql.includes('DELETE FROM transactions')) {
@@ -350,6 +364,53 @@ describe('regenerateOccurrences', () => {
 
     await materializeOccurrences(series.manager, rule, at('2027-03-11T00:00:00Z'), noRate);
     expect(days(series.live())).toEqual(['2027-03-10', '2027-03-25']);
+  });
+
+  it('moves a series back to a date it skipped', async () => {
+    const series = new FakeSeries();
+    const rule = monthlyRule('2027-03-27T12:00:00Z');
+    const now = at('2027-03-01T00:00:00Z');
+    await materializeOccurrences(series.manager, rule, now, noRate);
+    // Skipped: the series carries on with the date after.
+    series.occurrences[0].deleted = true;
+    await materializeOccurrences(series.manager, rule, now, noRate);
+    expect(days(series.live())).toEqual(['2027-04-27']);
+
+    rule.startsAt = at('2027-03-27T12:00:00Z');
+    await regenerateOccurrences(series.manager, rule, now, noRate, true);
+
+    expect(days(series.live())).toEqual(['2027-03-27']);
+  });
+
+  it('moves a series back to a date it recorded early, which stays as a transaction of its own', async () => {
+    const series = new FakeSeries();
+    const rule = monthlyRule('2027-03-27T12:00:00Z');
+    await materializeOccurrences(series.manager, rule, at('2027-03-01T00:00:00Z'), noRate);
+    // Add now.
+    series.occurrences[0].date = at('2027-03-01T09:00:00Z');
+    series.occurrences[0].customized = true;
+    const now = at('2027-03-01T10:00:00Z');
+    await materializeOccurrences(series.manager, rule, now, noRate);
+    expect(days(series.live())).toEqual(['2027-03-01', '2027-04-27']);
+
+    await regenerateOccurrences(series.manager, rule, now, noRate, true);
+
+    expect(days(series.live())).toEqual(['2027-03-27']);
+    expect(days(series.detached)).toEqual(['2027-03-01']);
+  });
+
+  it('keeps skipped dates when only what the series records changes', async () => {
+    const series = new FakeSeries();
+    const rule = monthlyRule('2027-03-27T12:00:00Z');
+    const now = at('2027-03-01T00:00:00Z');
+    await materializeOccurrences(series.manager, rule, now, noRate);
+    series.occurrences[0].deleted = true;
+    await materializeOccurrences(series.manager, rule, now, noRate);
+
+    rule.amount = '150.00';
+    await regenerateOccurrences(series.manager, rule, now, noRate);
+
+    expect(days(series.live())).toEqual(['2027-04-27']);
   });
 });
 
