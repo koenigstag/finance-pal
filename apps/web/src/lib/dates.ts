@@ -1,4 +1,4 @@
-import { addMonths, endOfMonth, format, isSameDay, isValid, parse, set, startOfMonth } from 'date-fns';
+import { addMonths, endOfDay, endOfMonth, format, isSameDay, isValid, parse, set, startOfMonth } from 'date-fns';
 
 // A calendar day as <input type="date"> reads and writes it, in the user's local time zone.
 const DAY_FORMAT = 'yyyy-MM-dd';
@@ -14,12 +14,29 @@ export function todayInput(now = new Date()): string {
 
 /**
  * The instant to store for a transaction the user dated `day`. The form only picks a day, but
- * the API keeps a timestamp, and balances treat anything after "now" as planned:
+ * the API keeps a timestamp, lists by it newest first, and treats anything after "now" as planned:
  * - the day it already had keeps its original time, so an edit elsewhere doesn't reorder it;
  * - today is "now", so a new entry counts toward the balance immediately and sorts on top;
- * - any other day is local noon, safely inside that day whatever the offset to UTC.
+ * - a day gone by is its very end, so an entry added to it late sorts on top of that day too,
+ *   after everything recorded on it, rather than somewhere in among it;
+ * - a day still to come is local noon, safely inside that day whatever the offset to UTC.
  */
 export function fromDayInput(day: string, previousIso?: string, now = new Date()): string {
+  // Today is settled before this is asked, so a day starting before now has gone by.
+  return instantOnDay(day, previousIso, now, (date) => (date < now ? endOfDay(date) : noon(date)));
+}
+
+/**
+ * The instant a series starts at, for the first date the user picked, `day`. Its time of day is
+ * the one each of its transactions comes at, so any day but today is local noon, gone by or still
+ * to come: at a day's very end, each would stay planned all through its day. Otherwise as
+ * fromDayInput: the day it already had keeps its time, and today is "now".
+ */
+export function seriesStartFromDayInput(day: string, previousIso?: string, now = new Date()): string {
+  return instantOnDay(day, previousIso, now, noon);
+}
+
+function instantOnDay(day: string, previousIso: string | undefined, now: Date, otherDay: (date: Date) => Date): string {
   const date = parse(day, DAY_FORMAT, now);
   if (previousIso && isSameDay(new Date(previousIso), date)) {
     return previousIso;
@@ -27,7 +44,11 @@ export function fromDayInput(day: string, previousIso?: string, now = new Date()
   if (isSameDay(date, now)) {
     return now.toISOString();
   }
-  return set(date, { hours: 12, minutes: 0, seconds: 0, milliseconds: 0 }).toISOString();
+  return otherDay(date).toISOString();
+}
+
+function noon(date: Date): Date {
+  return set(date, { hours: 12, minutes: 0, seconds: 0, milliseconds: 0 });
 }
 
 /** The device's IANA time zone, e.g. "Europe/Kyiv": the one a new series keeps its dates in. */

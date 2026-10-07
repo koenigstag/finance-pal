@@ -1,5 +1,13 @@
 import { describe, expect, it } from 'vitest';
-import { fromDayInput, monthRange, parseMonthParam, shiftMonth, toDayInput, toMonthParam } from './dates';
+import {
+  fromDayInput,
+  monthRange,
+  parseMonthParam,
+  seriesStartFromDayInput,
+  shiftMonth,
+  toDayInput,
+  toMonthParam,
+} from './dates';
 
 // Local-time constructors throughout: these helpers are about the user's calendar, not UTC.
 const now = new Date(2026, 8, 17, 15, 30);
@@ -14,14 +22,35 @@ describe('fromDayInput', () => {
     expect(fromDayInput('2026-09-17', undefined, now)).toBe(now.toISOString());
   });
 
-  it('uses local noon for any other day', () => {
+  it('uses the very end of a day gone by, so what is added to it late sorts on top of it', () => {
+    expect(fromDayInput('2026-09-16', undefined, now)).toBe(new Date(2026, 8, 16, 23, 59, 59, 999).toISOString());
+    // Moved there from another day, too.
+    const previous = new Date(2026, 8, 3, 8, 15).toISOString();
+    expect(fromDayInput('2026-09-04', previous, now)).toBe(new Date(2026, 8, 4, 23, 59, 59, 999).toISOString());
+  });
+
+  it('uses local noon for a day still to come', () => {
     expect(fromDayInput('2026-10-01', undefined, now)).toBe(new Date(2026, 9, 1, 12).toISOString());
     const previous = new Date(2026, 8, 3, 8, 15).toISOString();
-    expect(fromDayInput('2026-09-04', previous, now)).toBe(new Date(2026, 8, 4, 12).toISOString());
+    expect(fromDayInput('2026-09-18', previous, now)).toBe(new Date(2026, 8, 18, 12).toISOString());
   });
 
   it('round-trips through toDayInput', () => {
     expect(toDayInput(fromDayInput('2026-12-31', undefined, now))).toBe('2026-12-31');
+    expect(toDayInput(fromDayInput('2026-01-31', undefined, now))).toBe('2026-01-31');
+  });
+});
+
+describe('seriesStartFromDayInput', () => {
+  it('starts at local noon on any day but today, gone by or still to come', () => {
+    expect(seriesStartFromDayInput('2026-09-16', undefined, now)).toBe(new Date(2026, 8, 16, 12).toISOString());
+    expect(seriesStartFromDayInput('2026-10-01', undefined, now)).toBe(new Date(2026, 9, 1, 12).toISOString());
+  });
+
+  it('starts today right now, and keeps the time of the day it already had', () => {
+    expect(seriesStartFromDayInput('2026-09-17', undefined, now)).toBe(now.toISOString());
+    const previous = new Date(2026, 8, 3, 8, 15).toISOString();
+    expect(seriesStartFromDayInput('2026-09-03', previous, now)).toBe(previous);
   });
 });
 

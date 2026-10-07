@@ -1,6 +1,6 @@
 import { z } from 'zod';
 import { TRANSACTION_TYPES, isRoundBalanceStep, type RoundBalanceStep } from '@ft/shared-contracts';
-import { deviceTimezone, fromDayInput, toDayInput, todayInput } from '@/lib/dates';
+import { deviceTimezone, fromDayInput, seriesStartFromDayInput, toDayInput, todayInput } from '@/lib/dates';
 import type { Conversion } from '@/features/currencies/rates';
 import {
   convertMoney,
@@ -413,7 +413,7 @@ export function toRecurringRuleBody(
     intervalUnit: repeat.unit,
     intervalValue: repeat.value,
     // A planned transaction keeps its time of day when it stays on its day.
-    startsAt: fromDayInput(values.day, replaces?.date, now),
+    startsAt: seriesStartFromDayInput(values.day, replaces?.date, now),
     timezone,
     ...(replaces ? { replacesTransactionId: replaces.id } : {}),
   };
@@ -450,7 +450,7 @@ export function schedulePatch(
   return {
     intervalUnit: repeat.unit,
     intervalValue: repeat.value,
-    ...(rescheduled ? { startsAt: fromDayInput(choice.day, nextDateOf(rule), now), timezone } : {}),
+    ...(rescheduled ? { startsAt: seriesStartFromDayInput(choice.day, nextDateOf(rule), now), timezone } : {}),
   };
 }
 
@@ -479,7 +479,7 @@ export function plannedToRecurringRuleBody(
     roundBalanceTo: transaction.roundBalanceTo,
     intervalUnit: repeat.unit,
     intervalValue: repeat.value,
-    startsAt: fromDayInput(choice.day, transaction.date, now),
+    startsAt: seriesStartFromDayInput(choice.day, transaction.date, now),
     timezone,
     replacesTransactionId: transaction.id,
   };
