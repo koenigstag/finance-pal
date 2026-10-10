@@ -38,7 +38,8 @@ interface MonthTransactionsProps {
  * Three of these sit side by side on the transactions page — the month on screen and the ones
  * either side of it — so a swipe reveals a month that has already loaded and found its place,
  * rather than an empty panel that starts fetching when it comes into view. Each keeps its own
- * scroll position, its own pages of history and its own anchor on today.
+ * scroll position, its own pages of history and its own anchor on today — and finds its scroll
+ * position again after leaving the page for another tab, while its pages are still loaded.
  */
 export function MonthTransactions({
   groupId,
@@ -67,7 +68,8 @@ export function MonthTransactions({
   const transactions = useMemo(() => (upcomingMonth ? [...loaded].reverse() : loaded), [loaded, upcomingMonth]);
   const scrollerRef = useRef<HTMLDivElement>(null);
   // The panel opens on the separator before what already happened; planned transactions wait
-  // above it, a scroll up. Nothing outside this panel moves with it.
+  // above it, a scroll up. Nothing outside this panel moves with it. Back from another tab, it
+  // opens where it was left instead.
   const anchorSpacer = useTodayAnchor(scrollerRef, JSON.stringify([groupId, filters]), pages.isSuccess);
 
   return (

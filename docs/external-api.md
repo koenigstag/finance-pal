@@ -180,10 +180,10 @@ What a request leaves out stays as it was. A new category drops a subcategory th
 doesn't name again, `null` clears a category or a subcategory, and an empty `note` clears the
 note.
 
-`GET /transactions` lists them newest first, 50 at a time (`limit` up to 200). Pass the
-response's `nextCursor` as `cursor` for the next page. It filters by `accountId`, `categoryId` (a
-category takes in its subcategories' transactions), `type`, `dateFrom`, `dateTo` and `search`,
-which looks in notes.
+`GET /transactions` lists them newest first, 50 at a time (`limit` up to 200); of two dated the
+same moment, the one recorded later comes first. Pass the response's `nextCursor` as `cursor` for
+the next page. It filters by `accountId`, `categoryId` (a category takes in its subcategories'
+transactions), `type`, `dateFrom`, `dateTo` and `search`, which looks in notes.
 
 ## Forwarding a bank's notification
 

@@ -104,7 +104,13 @@ export class TransactionsService {
       if (!cursor) {
         throw new BadRequestException('Invalid cursor');
       }
-      qb.andWhere('(t.date, t.id) < (:cursorDate, :cursorId)', { cursorDate: cursor.date, cursorId: cursor.id });
+      // Whatever comes after the cursor's transaction in the order below. When that one was recorded
+      // is read from its row rather than carried in the cursor: it never changes, and the database
+      // keeps it to the microsecond, finer than a cursor's timestamp could say it.
+      qb.andWhere(
+        '(t.date, t.created_at, t.id) < (:cursorDate, (SELECT c.created_at FROM transactions c WHERE c.id = :cursorId), :cursorId)',
+        { cursorDate: cursor.date, cursorId: cursor.id },
+      );
     }
     if (filter.accountId) {
       qb.andWhere('t.account_id = :accountId', { accountId: filter.accountId });
@@ -132,7 +138,15 @@ export class TransactionsService {
       );
     }
 
-    const rows = await qb.orderBy('t.date', 'DESC').addOrderBy('t.id', 'DESC').take(limit + 1).getMany();
+    // Newest first, and of two at the same moment, the one recorded later. Those are no rarity: the
+    // app dates whatever is added to a day gone by at that day's very end, so that it lands on top
+    // of the day, and the next one added to it has to land on top of that.
+    const rows = await qb
+      .orderBy('t.date', 'DESC')
+      .addOrderBy('t.created_at', 'DESC')
+      .addOrderBy('t.id', 'DESC')
+      .take(limit + 1)
+      .getMany();
 
     let nextCursor: string | null = null;
     if (rows.length > limit) {

@@ -229,6 +229,14 @@ describe('toTransactionBody', () => {
     });
     expect(toTransactionBody(values({}), accounts, undefined, now).note).toBeUndefined();
   });
+
+  it('dates one added to a day gone by at its very end, after everything already on that day', () => {
+    const endOfYesterday = new Date(2026, 8, 16, 23, 59, 59, 999).toISOString();
+    expect(toTransactionBody(values({ day: '2026-09-16' }), accounts, undefined, now).date).toBe(endOfYesterday);
+    // Moved there, the same.
+    const existing = { date: new Date(2026, 8, 1, 9).toISOString() };
+    expect(toTransactionBody(values({ day: '2026-09-16' }), accounts, existing, now).date).toBe(endOfYesterday);
+  });
 });
 
 const rule = (overrides: Partial<RecurringRule>): RecurringRule => ({
@@ -319,7 +327,7 @@ describe('toRecurringRuleBody', () => {
       roundBalanceTo: null,
       intervalUnit: 'week',
       intervalValue: 2,
-      // Local noon, as for a transaction dated on a day other than today.
+      // Local noon: the time of day each of its transactions comes at.
       startsAt: new Date(2026, 9, 5, 12).toISOString(),
       timezone: 'Europe/Kyiv',
     });
@@ -335,6 +343,11 @@ describe('toRecurringRuleBody', () => {
 
   it('starts one dated today right now, so its first transaction counts at once', () => {
     expect(toRecurringRuleBody(values({ repeat: 'month:1' }), accounts, now, 'UTC').startsAt).toBe(now.toISOString());
+  });
+
+  it('starts one dated in the past at noon too, unlike a transaction: its transactions all come at that time', () => {
+    const body = toRecurringRuleBody(values({ day: '2026-09-05', repeat: 'month:1' }), accounts, now, 'UTC');
+    expect(body.startsAt).toBe(new Date(2026, 8, 5, 12).toISOString());
   });
 
   it('takes the place of the planned transaction it was, keeping its time of day', () => {
