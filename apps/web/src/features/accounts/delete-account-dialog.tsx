@@ -32,7 +32,7 @@ export function DeleteAccountDialog({ groupId, account, open, onOpenChange, onDe
 
   const consequences: string[] = [];
   if (usage.data) {
-    const { transactionCount, plannedTransactionCount, recurringRuleCount } = usage.data;
+    const { transactionCount, plannedTransactionCount, recurringRuleCount, budgetCount } = usage.data;
     if (transactionCount > 0) {
       consequences.push(t('accounts.delete.transactions', { count: transactionCount }));
     }
@@ -41,6 +41,9 @@ export function DeleteAccountDialog({ groupId, account, open, onOpenChange, onDe
     }
     if (recurringRuleCount > 0) {
       consequences.push(t('accounts.delete.recurringRules', { count: recurringRuleCount }));
+    }
+    if (budgetCount > 0) {
+      consequences.push(t('accounts.delete.budgets', { count: budgetCount }));
     }
   }
 

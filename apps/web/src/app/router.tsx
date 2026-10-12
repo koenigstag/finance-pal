@@ -1,8 +1,9 @@
-import { ChartPieIcon, PiggyBankIcon } from 'lucide-react';
+import { ChartPieIcon } from 'lucide-react';
 import { createBrowserRouter, Navigate } from 'react-router';
 import { ComingSoon } from '@/components/coming-soon';
 import { AccountsPage } from '@/features/accounts/accounts-page';
 import { AuthPage } from '@/features/auth/auth-page';
+import { BudgetPage } from '@/features/budget/budget-page';
 import { CategoriesPage } from '@/features/categories/categories-page';
 import { RequireSession } from '@/features/auth/require-session';
 import { CreateGroupPage } from '@/features/groups/create-group-page';
@@ -40,7 +41,7 @@ export const router = createBrowserRouter(
                 { path: 'accounts', element: <AccountsPage /> },
                 { path: 'categories', element: <CategoriesPage /> },
                 { path: 'transactions', element: <TransactionsPage /> },
-                { path: 'budget', element: <ComingSoonRoute titleKey="nav.budget" icon={PiggyBankIcon} /> },
+                { path: 'budget', element: <BudgetPage /> },
                 { path: 'overview', element: <ComingSoonRoute titleKey="nav.overview" icon={ChartPieIcon} /> },
               ],
             },
@@ -54,8 +55,8 @@ export const router = createBrowserRouter(
   { basename: import.meta.env.BASE_URL },
 );
 
-// Budget and Overview have their tabs already; the pages come later.
-function ComingSoonRoute({ titleKey, icon }: { titleKey: 'nav.budget' | 'nav.overview'; icon: typeof PiggyBankIcon }) {
+// Overview has its tab already; the page comes later.
+function ComingSoonRoute({ titleKey, icon }: { titleKey: 'nav.overview'; icon: typeof ChartPieIcon }) {
   const { t } = useTranslation();
   return <ComingSoon title={t(titleKey)} icon={icon} />;
 }
