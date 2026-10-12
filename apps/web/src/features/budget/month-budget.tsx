@@ -13,7 +13,7 @@ import type { Category } from '@/features/categories/queries';
 import { useCurrencyCodes } from '@/features/currencies/queries';
 import { toMonthParam } from '@/lib/dates';
 import { formatMoney, moneySign } from '@/lib/money';
-import { MONEY_COLORS } from '@/lib/money-colors';
+import { MONEY_COLORS, signColor } from '@/lib/money-colors';
 import { cn } from '@/lib/utils';
 import { BudgetBar } from './budget-bar';
 import {
@@ -107,6 +107,9 @@ export function MonthBudget({
               )}
             </Empty>
           )}
+          {view.available !== null && (
+            <Available amount={view.available} mainCurrencyCode={currencyCodes.get(mainCurrencyId ?? -1)} />
+          )}
           {view.sections.map((section) => (
             <BudgetSectionView
               key={section.kind}
@@ -127,6 +130,21 @@ export function MonthBudget({
           )}
         </div>
       )}
+    </div>
+  );
+}
+
+// The budgeted income less the rest of the budget: green while some is still free, red past it.
+function Available({ amount, mainCurrencyCode }: { amount: string; mainCurrencyCode: string | undefined }) {
+  const { t, i18n } = useTranslation();
+
+  return (
+    // Wraps the figure under the label in a narrow window rather than squeezing either.
+    <div className="flex flex-wrap items-baseline justify-between gap-x-3 rounded-xl border bg-muted/40 px-4 py-3">
+      <p className="font-medium">{t('budget.available')}</p>
+      <p className={cn('font-medium whitespace-nowrap tabular-nums', signColor(moneySign(amount)))}>
+        {formatMoney(amount, mainCurrencyCode, i18n.language, { currencyDisplay: 'narrowSymbol' })}
+      </p>
     </div>
   );
 }

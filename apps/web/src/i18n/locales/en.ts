@@ -789,6 +789,8 @@ export const en = {
       savings: 'Savings',
       debt: 'Debts',
     },
+    // The budgeted income less the budgeted expenses, savings and debt payments.
+    available: 'Available to budget',
     // A section's money so far against what it budgeted: "12 300 ₴ of 30 000 ₴".
     sectionTotal: '{{done}} of {{amount}}',
     of: 'of {{amount}}',
