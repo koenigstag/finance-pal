@@ -11,6 +11,7 @@ import { useAccounts } from '@/features/accounts/queries';
 import { useCategories } from '@/features/categories/queries';
 import { useGroupScope } from '@/features/groups/group-context';
 import { parseMonthParam, shiftMonth, toMonthParam } from '@/lib/dates';
+import { usePageMonth } from '@/lib/page-month';
 import { useSwipeTrack } from '@/lib/swipe';
 import { capitalizeFirst } from '@/lib/text';
 import { useRecurringRules, type RecurringRule, type Transaction } from './queries';
@@ -61,9 +62,9 @@ export function TransactionsPage() {
   });
   const [filtersOpen, setFiltersOpen] = useState(false);
 
-  // Filters live in the URL, so a reload, the back button or a shared link keep them.
-  const month = parseMonthParam(params.get('month'));
-  const monthKey = toMonthParam(month);
+  // Filters live in the URL, so a reload, the back button or a shared link keep them. The month
+  // does too, and is the one the budget and the overview are on.
+  const { monthKey, goToMonth } = usePageMonth();
   const accountId = params.get('account') ?? undefined;
   const categoryId = params.get('category') ?? undefined;
   const typeParam = params.get('type');
@@ -86,15 +87,13 @@ export function TransactionsPage() {
       },
       { replace: true },
     );
-  const setParam = (name: string, value: string | undefined) => updateParams({ [name]: value });
 
   // A month at a time, back or forward. The three months sit side by side in the order they
   // happened, so dragging the strip left brings the month after into view and dragging it right
   // the month before — the same way round as the chevrons either side of the month's name, which
-  // step to a neighbour already on the strip and so have nothing to wait for.
-  const goToMonth = (delta: number) => setParam('month', toMonthParam(shiftMonth(month, delta)));
-  // Always resting on the middle of three: a move shifts which months those are, rather than
-  // running off the end of a strip, so there is no first or last month to stop at.
+  // step to a neighbour already on the strip and so have nothing to wait for. Always resting on
+  // the middle of three: a move shifts which months those are, rather than running off the end of
+  // a strip, so there is no first or last month to stop at.
   const strip = useSwipeTrack({ count: 3, index: 1, position: monthKey, onCommit: goToMonth });
 
   const filterValues: TransactionFilterValues = { search, accountId, type, categoryId };

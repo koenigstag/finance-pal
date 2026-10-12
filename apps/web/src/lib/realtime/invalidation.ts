@@ -34,12 +34,13 @@ export function invalidationFor({ resourceType, resourceId, action, groupId }: R
     case 'Transaction':
       // Money moved: the list, and the balances (and usage counts) under accounts. A planned
       // occurrence skipped or moved also changes when its series next produces one. The budget is
-      // measured against the same money.
+      // measured against the same money, and the overview charts it.
       return refresh(
         queryKeys.transactions(groupId),
         queryKeys.accounts(groupId),
         queryKeys.recurringRules(groupId),
         queryKeys.budgets(groupId),
+        queryKeys.overview(groupId),
       );
     case 'RecurringRule':
       // The rules themselves, and whatever occurrences one added or dropped: one event for them all.
@@ -48,14 +49,16 @@ export function invalidationFor({ resourceType, resourceId, action, groupId }: R
         queryKeys.accounts(groupId),
         queryKeys.recurringRules(groupId),
         queryKeys.budgets(groupId),
+        queryKeys.overview(groupId),
       );
     case 'Account':
       // A deleted account takes its transactions and recurring rules with it, and its transfers out
       // of other accounts' balances; any other change to one stays among the accounts — and the
-      // budget, which drops an account turned regular and follows one's currency.
+      // budget, which drops an account turned regular and follows one's currency, and the overview,
+      // which counts transfers by whether an account is a debt.
       return action === 'deleted'
         ? afterDelete(groupId, queryKeys.accountUsage(groupId, resourceId))
-        : refresh(queryKeys.accounts(groupId), queryKeys.budgets(groupId));
+        : refresh(queryKeys.accounts(groupId), queryKeys.budgets(groupId), queryKeys.overview(groupId));
     case 'AccountTarget':
       // Nothing caches targets yet; they would sit with their account.
       return refresh(queryKeys.accounts(groupId));
@@ -67,7 +70,12 @@ export function invalidationFor({ resourceType, resourceId, action, groupId }: R
       // An update may have moved it under another parent, which re-files its transactions and
       // drops its budget lines; a reorder only changes where the list puts them.
       return action === 'updated'
-        ? refresh(queryKeys.categories(groupId), queryKeys.transactions(groupId), queryKeys.budgets(groupId))
+        ? refresh(
+            queryKeys.categories(groupId),
+            queryKeys.transactions(groupId),
+            queryKeys.budgets(groupId),
+            queryKeys.overview(groupId),
+          )
         : refresh(queryKeys.categories(groupId));
     case 'CategoryRule':
       // Only the rules list: what a rule filed stays where it is.

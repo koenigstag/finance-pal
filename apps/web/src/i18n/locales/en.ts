@@ -37,10 +37,6 @@ export const en = {
     delete: 'Delete',
     edit: 'Edit',
     ratesPublished: 'Rates published {{date}}',
-    comingSoon: {
-      title: 'Coming soon',
-      description: 'This section is being built.',
-    },
   },
   nav: {
     account: 'Account',
@@ -751,6 +747,36 @@ export const en = {
     archivedCategory: 'Archived category',
     readOnly: 'You are a viewer here, so you can see the rules but not change them.',
     archivedGroup: "The group is archived, so its rules can't be changed.",
+  },
+  overview: {
+    title: 'Overview',
+    previousMonth: 'Previous month',
+    nextMonth: 'Next month',
+    tabs: {
+      expense: 'Expenses',
+      income: 'Income',
+    },
+    chartLabel: {
+      expense: 'Expenses by day, {{month}}',
+      income: 'Income by day, {{month}}',
+    },
+    // Under the chart: the averages, over the days of the month so far, and what the month adds up to.
+    perDay: 'Per day',
+    perWeek: 'Per week',
+    month: 'This month',
+    // The row the smaller categories and debts fold into.
+    more: 'More',
+    noCategory: 'No category',
+    // Under a debt account's name, which is in the list for what was lent, borrowed or paid back.
+    debt: 'Debt',
+    // At the end of a day's breakdown, for what didn't fit.
+    dayMore: 'and {{count}} more',
+    missingRates: 'No exchange rate for {{codes}}, so amounts in it are left out. Rates can be set in Settings.',
+    empty: {
+      expense: 'Nothing spent this month',
+      income: 'Nothing received this month',
+      description: 'Only what has already happened counts: a planned transaction shows up here once its day comes.',
+    },
   },
   budget: {
     title: 'Budget',

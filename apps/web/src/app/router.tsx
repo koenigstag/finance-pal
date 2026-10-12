@@ -1,6 +1,4 @@
-import { ChartPieIcon } from 'lucide-react';
 import { createBrowserRouter, Navigate } from 'react-router';
-import { ComingSoon } from '@/components/coming-soon';
 import { AccountsPage } from '@/features/accounts/accounts-page';
 import { AuthPage } from '@/features/auth/auth-page';
 import { BudgetPage } from '@/features/budget/budget-page';
@@ -9,9 +7,9 @@ import { RequireSession } from '@/features/auth/require-session';
 import { CreateGroupPage } from '@/features/groups/create-group-page';
 import { GroupIndexRedirect } from '@/features/groups/group-index-redirect';
 import { GroupLayout } from '@/features/groups/group-layout';
-import { useTranslation } from 'react-i18next';
 import { NotificationsPage } from '@/features/push/notifications-page';
 import { OnboardingPage } from '@/features/profile/onboarding-page';
+import { OverviewPage } from '@/features/overview/overview-page';
 import { RequireOnboarded } from '@/features/profile/require-onboarded';
 import { SettingsPage } from '@/features/profile/settings-page';
 import { TransactionsPage } from '@/features/transactions/transactions-page';
@@ -42,7 +40,7 @@ export const router = createBrowserRouter(
                 { path: 'categories', element: <CategoriesPage /> },
                 { path: 'transactions', element: <TransactionsPage /> },
                 { path: 'budget', element: <BudgetPage /> },
-                { path: 'overview', element: <ComingSoonRoute titleKey="nav.overview" icon={ChartPieIcon} /> },
+                { path: 'overview', element: <OverviewPage /> },
               ],
             },
           ],
@@ -54,9 +52,3 @@ export const router = createBrowserRouter(
   // GitHub Pages project site. Routes and links stay written from the app's root either way.
   { basename: import.meta.env.BASE_URL },
 );
-
-// Overview has its tab already; the page comes later.
-function ComingSoonRoute({ titleKey, icon }: { titleKey: 'nav.overview'; icon: typeof ChartPieIcon }) {
-  const { t } = useTranslation();
-  return <ComingSoon title={t(titleKey)} icon={icon} />;
-}

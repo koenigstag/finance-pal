@@ -1,7 +1,10 @@
 import { ChartPieIcon, PiggyBankIcon, ReceiptTextIcon, ShapesIcon, WalletIcon, type LucideIcon } from 'lucide-react';
+import { observer } from 'mobx-react-lite';
 import { useTranslation } from 'react-i18next';
 import { NavLink } from 'react-router';
+import { monthSearch } from '@/lib/page-month';
 import { cn } from '@/lib/utils';
+import { useStores } from '@/stores/stores-context';
 
 interface NavItem {
   to: string;
@@ -9,19 +12,21 @@ interface NavItem {
   icon: LucideIcon;
 }
 
+// Read inside an observer: the pages that go a month at a time open on the month last shown on one.
 function useNavItems(groupId: string): NavItem[] {
   const { t } = useTranslation();
+  const month = monthSearch(useStores().month.month);
   return [
     { to: `/g/${groupId}/accounts`, label: t('nav.accounts'), icon: WalletIcon },
     { to: `/g/${groupId}/categories`, label: t('nav.categories'), icon: ShapesIcon },
-    { to: `/g/${groupId}/transactions`, label: t('nav.transactions'), icon: ReceiptTextIcon },
-    { to: `/g/${groupId}/budget`, label: t('nav.budget'), icon: PiggyBankIcon },
-    { to: `/g/${groupId}/overview`, label: t('nav.overview'), icon: ChartPieIcon },
+    { to: `/g/${groupId}/transactions${month}`, label: t('nav.transactions'), icon: ReceiptTextIcon },
+    { to: `/g/${groupId}/budget${month}`, label: t('nav.budget'), icon: PiggyBankIcon },
+    { to: `/g/${groupId}/overview${month}`, label: t('nav.overview'), icon: ChartPieIcon },
   ];
 }
 
 /** Tabs under the header, from md up. Phones get BottomNav instead. */
-export function TopNav({ groupId }: { groupId: string }) {
+export const TopNav = observer(function TopNav({ groupId }: { groupId: string }) {
   const items = useNavItems(groupId);
 
   return (
@@ -46,13 +51,13 @@ export function TopNav({ groupId }: { groupId: string }) {
       </div>
     </nav>
   );
-}
+});
 
 /**
  * A tab bar fixed to the bottom of the screen on phones, within thumb reach. Pads itself for the
  * home indicator (safe-area inset), which index.html's viewport-fit=cover exposes.
  */
-export function BottomNav({ groupId }: { groupId: string }) {
+export const BottomNav = observer(function BottomNav({ groupId }: { groupId: string }) {
   const items = useNavItems(groupId);
 
   return (
@@ -76,4 +81,4 @@ export function BottomNav({ groupId }: { groupId: string }) {
       </div>
     </nav>
   );
-}
+});
