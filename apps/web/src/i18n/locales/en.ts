@@ -661,6 +661,30 @@ export const en = {
       submit: 'Create group',
     },
   },
+  oauth: {
+    title: 'Connect {{name}}',
+    description: '{{name}} asks to see your money in Finance Pal.',
+    group: 'Group',
+    canView: 'It will be able to view:',
+    resources: {
+      transactions: 'Transactions',
+      accounts: 'Accounts and their balances',
+      categories: 'Categories',
+      budgets: 'Budgets',
+    },
+    readOnly: "It can't add, change or delete anything.",
+    redirect: 'Allowing sends you back to {{host}}.',
+    selfNamed: 'Apps choose their own names: allow only one you started connecting yourself.',
+    disconnect: 'To disconnect it later, delete its key, “{{name}}”, in the group’s settings under API keys.',
+    allow: 'Allow',
+    returning: 'Returning to {{host}}…',
+    noGroups: 'Create a group first: an app connects to one group.',
+    invalid: {
+      title: "Can't connect the app",
+      description: "The link that brought you here can't be used. Start connecting again from the app.",
+      unavailable: "Connecting other apps isn't set up on this server.",
+    },
+  },
   apiKeys: {
     description:
       'A key lets another app, such as a phone automation that logs your card payments, work in this group as you. It never does more than you may here.',
@@ -673,6 +697,7 @@ export const en = {
       transactions: 'Transactions',
       accounts: 'Accounts',
       categories: 'Categories',
+      budgets: 'Budgets',
     },
     columns: {
       read: 'View',

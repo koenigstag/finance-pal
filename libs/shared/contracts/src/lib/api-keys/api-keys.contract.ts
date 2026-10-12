@@ -1,6 +1,7 @@
 import { initContract } from '@ts-rest/core';
 import { z } from 'zod';
 import { errorSchema } from '../common/error.schema.js';
+import { timezoneSchema } from '../common/timezone.schema.js';
 import { apiKeyScopeSchema } from './api-key-scopes.js';
 
 const c = initContract();
@@ -29,6 +30,9 @@ const createApiKeyBodySchema = z.object({
   scopes: apiKeyScopesSchema,
   // Must lie ahead; left out, the key works until it's deleted.
   expiresAt: z.string().datetime({ offset: true }).optional(),
+  // Where the key's reports count their days (the MCP endpoint's month totals, say): the creating
+  // browser's own. Left out, they go by UTC unless a request names a zone.
+  timeZone: timezoneSchema.optional(),
 });
 
 // Changing what a key may do keeps the key itself, so the app holding it needn't be touched.

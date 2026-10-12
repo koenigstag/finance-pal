@@ -11,6 +11,8 @@ export interface CreateApiKeyInput {
   name: string;
   scopes: ApiKeyScope[];
   expiresAt?: string;
+  // IANA zone, already validated.
+  timeZone?: string;
 }
 
 export interface UpdateApiKeyInput {
@@ -56,6 +58,7 @@ export class ApiKeysService {
         tokenPrefix,
         scopes,
         expiresAt,
+        timeZone: input.timeZone ?? null,
         // Explicit rather than left to the column default: save() hands back this object.
         lastUsedAt: null,
       }),

@@ -274,6 +274,10 @@ function AccessGrid({
           <span className="truncate">{t(`apiKeys.resources.${resource}`)}</span>
           {API_KEY_ACCESS_LEVELS.map((level) => {
             const scope = apiKeyScope(resource, level);
+            // Budgets are only viewed: there is nothing to tick for adding or editing them.
+            if (!scope) {
+              return <span key={level} />;
+            }
             return (
               <div key={level} className="flex justify-center">
                 <Checkbox

@@ -9,7 +9,7 @@ import { Input } from '@/components/ui/input';
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select';
 import { Spinner } from '@/components/ui/spinner';
 import { useCurrencies, useExchangeRates } from '@/features/currencies/queries';
-import { manualRatesToKeep } from '@/features/currencies/rates';
+import { manualRatesToKeep } from '@ft/shared-contracts';
 import { RatesNote } from '@/features/currencies/rates-note';
 import { useProfile, useUpdateProfile } from './queries';
 

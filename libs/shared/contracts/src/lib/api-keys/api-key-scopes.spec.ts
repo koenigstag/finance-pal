@@ -1,5 +1,5 @@
 import { defineAbilityFor } from '../authz/ability.js';
-import { API_KEY_SCOPES, canGrantApiKeyScope } from './api-key-scopes.js';
+import { API_KEY_READ_SCOPES, API_KEY_SCOPES, apiKeyScope, canGrantApiKeyScope } from './api-key-scopes.js';
 
 describe('canGrantApiKeyScope', () => {
   it('lets a member grant every scope', () => {
@@ -10,12 +10,29 @@ describe('canGrantApiKeyScope', () => {
   it('lets a viewer grant reading only', () => {
     const ability = defineAbilityFor({ role: 'viewer', archived: false });
     const grantable = API_KEY_SCOPES.filter((scope) => canGrantApiKeyScope(ability, scope));
-    expect(grantable).toEqual(['transactions:read', 'accounts:read', 'categories:read']);
+    expect(grantable).toEqual(['transactions:read', 'accounts:read', 'categories:read', 'budgets:read']);
   });
 
   it('keeps an archived group read-only, for its owner too', () => {
     const ability = defineAbilityFor({ role: 'owner', archived: true });
     expect(canGrantApiKeyScope(ability, 'transactions:read')).toBe(true);
     expect(canGrantApiKeyScope(ability, 'transactions:create')).toBe(false);
+  });
+});
+
+describe('apiKeyScope', () => {
+  it('names the scope for an access a resource has', () => {
+    expect(apiKeyScope('budgets', 'read')).toBe('budgets:read');
+    expect(apiKeyScope('transactions', 'update')).toBe('transactions:update');
+  });
+
+  it("has none for an access a resource doesn't have", () => {
+    expect(apiKeyScope('budgets', 'create')).toBeNull();
+  });
+});
+
+describe('API_KEY_READ_SCOPES', () => {
+  it('is every way to view, and nothing else', () => {
+    expect(API_KEY_READ_SCOPES).toEqual(['transactions:read', 'accounts:read', 'categories:read', 'budgets:read']);
   });
 });

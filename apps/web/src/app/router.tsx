@@ -7,6 +7,7 @@ import { RequireSession } from '@/features/auth/require-session';
 import { CreateGroupPage } from '@/features/groups/create-group-page';
 import { GroupIndexRedirect } from '@/features/groups/group-index-redirect';
 import { GroupLayout } from '@/features/groups/group-layout';
+import { OauthConsentPage } from '@/features/oauth/oauth-consent-page';
 import { NotificationsPage } from '@/features/push/notifications-page';
 import { OnboardingPage } from '@/features/profile/onboarding-page';
 import { OverviewPage } from '@/features/overview/overview-page';
@@ -29,6 +30,8 @@ export const router = createBrowserRouter(
             { path: '/groups/new', element: <CreateGroupPage /> },
             { path: '/settings', element: <SettingsPage /> },
             { path: '/settings/notifications', element: <NotificationsPage /> },
+            // Where the API sends an app's sign-in (an AI assistant's, say) to be allowed.
+            { path: '/oauth/consent', element: <OauthConsentPage /> },
             // The active group lives in the URL, so a reload or a shared link keeps it.
             {
               path: '/g/:groupId',

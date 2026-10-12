@@ -55,4 +55,23 @@ describe('validateEnv', () => {
   it('rejects a contact that is neither an address nor a URL', () => {
     expect(() => validateEnv({ ...base, ...vapid, VAPID_SUBJECT: 'admin@example.com' })).toThrow(/mailto:/);
   });
+
+  describe('OAuth sign-in', () => {
+    const oauth = { PUBLIC_API_URL: 'https://api.example.com', WEB_APP_URL: 'https://example.github.io/finance-pal' };
+
+    it('accepts the API origin and the web app URL together', () => {
+      expect(validateEnv({ ...base, ...oauth })).toMatchObject(oauth);
+    });
+
+    it('rejects one without the other', () => {
+      expect(() => validateEnv({ ...base, PUBLIC_API_URL: oauth.PUBLIC_API_URL })).toThrow(/must be set together/);
+    });
+
+    it.each([
+      ['an API URL with a path', { PUBLIC_API_URL: 'https://api.example.com/api' }, /PUBLIC_API_URL/],
+      ['a web app URL ending in a slash', { WEB_APP_URL: 'https://example.github.io/finance-pal/' }, /WEB_APP_URL/],
+    ])('rejects %s', (_label, override, message) => {
+      expect(() => validateEnv({ ...base, ...oauth, ...override })).toThrow(message);
+    });
+  });
 });

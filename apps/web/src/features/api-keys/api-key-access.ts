@@ -12,7 +12,10 @@ import {
 export function accessByResource(scopes: readonly ApiKeyScope[]): { resource: ApiKeyResource; access: ApiKeyAccess[] }[] {
   return API_KEY_RESOURCES.map((resource) => ({
     resource,
-    access: API_KEY_ACCESS_LEVELS.filter((access) => scopes.includes(apiKeyScope(resource, access))),
+    access: API_KEY_ACCESS_LEVELS.filter((access) => {
+      const scope = apiKeyScope(resource, access);
+      return scope !== null && scopes.includes(scope);
+    }),
   })).filter(({ access }) => access.length > 0);
 }
 

@@ -1,5 +1,4 @@
-import { describe, expect, it } from 'vitest';
-import { conversionBetween, effectiveRates, manualRatesToKeep } from './rates';
+import { conversionBetween, effectiveRates, manualRatesToKeep } from './rates.js';
 
 const fetched = { base: 'UAH', rates: { UAH: '1', USD: '44.68', EUR: '51.34' } };
 

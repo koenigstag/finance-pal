@@ -37,6 +37,8 @@ export const queryKeys = {
   pushPublicKey: ['push', 'public-key'] as const,
   pushDevice: ['push', 'device'] as const,
   pushSubscriptions: ['push', 'subscriptions'] as const,
+  // What an app asking to connect would get, by the request it sent: not group data either.
+  oauthConsent: (request: string) => ['oauth', 'consent', request] as const,
 };
 
 export function startsWith(key: QueryKey, prefix: QueryKey): boolean {

@@ -27,7 +27,14 @@ module.exports = {
   // socket.io isn't dynamic-require or native like the above, but it has the same nested-under-
   // pnpm node_modules shape that already broke the 'all' scan once — external defensively rather
   // than find out the hard way again.
-  externals: [{ typeorm: 'commonjs typeorm', pg: 'commonjs pg', argon2: 'commonjs argon2', 'socket.io': 'commonjs socket.io' }],
+  // The MCP SDK is imported by subpath (@modelcontextprotocol/sdk/server/mcp.js), which an object
+  // key can't match, hence the function. Bundled, it also floods every build with warnings about
+  // source maps pointing at sources the package doesn't ship.
+  externals: [
+    { typeorm: 'commonjs typeorm', pg: 'commonjs pg', argon2: 'commonjs argon2', 'socket.io': 'commonjs socket.io' },
+    ({ request }, callback) =>
+      /^@modelcontextprotocol\/sdk(\/|$)/.test(request) ? callback(null, `commonjs ${request}`) : callback(),
+  ],
   plugins: [
     new NxAppWebpackPlugin({
       target: 'node',

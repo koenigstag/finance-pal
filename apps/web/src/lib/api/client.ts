@@ -9,6 +9,7 @@ import {
   currenciesContract,
   exchangeRatesContract,
   groupsContract,
+  oauthContract,
   onboardingContract,
   overviewContract,
   pushContract,
@@ -72,6 +73,7 @@ export const api = {
   apiKeys: clientFor(apiKeysContract),
   push: clientFor(pushContract),
   scheduledNotifications: clientFor(scheduledNotificationsContract),
+  oauth: clientFor(oauthContract),
 };
 
 type Response = { status: number; body: unknown };

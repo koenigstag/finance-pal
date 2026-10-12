@@ -9,5 +9,7 @@ import { OverviewService } from './overview.service';
   imports: [TypeOrmModule.forFeature([Transaction]), AuthzModule],
   controllers: [OverviewController],
   providers: [OverviewService],
+  // To the MCP endpoint, which totals a month the way the overview does.
+  exports: [OverviewService],
 })
 export class OverviewModule {}

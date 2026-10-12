@@ -2,6 +2,7 @@ import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
 import type { ClientInferRequest } from '@ts-rest/core';
 import type { apiKeysContract } from '@ft/shared-contracts';
 import { api, unwrap } from '@/lib/api/client';
+import { deviceTimezone } from '@/lib/dates';
 import { queryKeys } from '@/lib/query-keys';
 
 export function useApiKeys(groupId: string, enabled: boolean) {
@@ -22,7 +23,9 @@ export function useCreateApiKey(groupId: string) {
   const queryClient = useQueryClient();
 
   return useMutation({
-    mutationFn: (body: CreateBody) => unwrap(api.apiKeys.create({ params: { groupId }, body }), 201),
+    // The key's reports (an assistant's month totals, say) count days where its maker lives.
+    mutationFn: (body: CreateBody) =>
+      unwrap(api.apiKeys.create({ params: { groupId }, body: { timeZone: deviceTimezone(), ...body } }), 201),
     onSuccess: () => queryClient.invalidateQueries({ queryKey: queryKeys.apiKeys(groupId) }),
   });
 }
