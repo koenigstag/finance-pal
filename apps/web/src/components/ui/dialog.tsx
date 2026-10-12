@@ -5,6 +5,7 @@ import { cn } from "cn"
 import { Dialog as DialogPrimitive } from "radix-ui"
 
 import { Button } from "@/components/ui/button"
+import { useVisibleViewport } from "@/lib/visible-viewport"
 import { XIcon } from "lucide-react"
 
 function Dialog({
@@ -49,12 +50,17 @@ function DialogOverlay({
 
 function DialogContent({
   className,
+  style,
   children,
   showCloseButton = true,
   ...props
 }: React.ComponentProps<typeof DialogPrimitive.Content> & {
   showCloseButton?: boolean
 }) {
+  // On a phone the sheet sits on the bottom of what is left to see rather than of the layout
+  // viewport, which on iOS is under the keyboard; and is no taller than that. See
+  // useVisibleViewport.
+  const visible = useVisibleViewport()
   return (
     <DialogPortal>
       <DialogOverlay />
@@ -63,9 +69,18 @@ function DialogContent({
         className={cn(
           // [&>*]:min-w-0 — a grid item is as wide as its content unless told otherwise, so without it
           // one long name (an account, a category) stretches the whole dialog past the screen.
-          "fixed inset-x-0 bottom-0 z-50 grid max-h-[calc(100svh-2rem)] w-full gap-4 overflow-y-auto [&>*]:min-w-0 rounded-t-xl bg-popover p-4 pb-[calc(1rem+env(safe-area-inset-bottom))] text-sm text-popover-foreground ring-1 ring-foreground/10 duration-200 outline-none data-open:animate-in data-open:fade-in-0 data-closed:animate-out data-closed:fade-out-0 max-sm:data-open:slide-in-from-bottom-8 max-sm:data-closed:slide-out-to-bottom-8 sm:inset-x-auto sm:top-1/2 sm:bottom-auto sm:left-1/2 sm:max-w-sm sm:-translate-x-1/2 sm:-translate-y-1/2 sm:rounded-xl sm:pb-4 sm:duration-100 sm:data-open:zoom-in-95 sm:data-closed:zoom-out-95",
+          // The safe area at the bottom keeps clear of the home indicator, which isn't there to keep
+          // clear of while the sheet sits on a keyboard.
+          "fixed inset-x-0 bottom-[var(--keyboard-inset,0px)] z-50 grid max-h-[calc(min(100svh,var(--visible-height,100svh))-2rem)] w-full gap-4 overflow-y-auto [&>*]:min-w-0 rounded-t-xl bg-popover p-4 pb-[calc(1rem+max(0px,env(safe-area-inset-bottom)_-_var(--keyboard-inset,0px)))] text-sm text-popover-foreground ring-1 ring-foreground/10 duration-200 outline-none data-open:animate-in data-open:fade-in-0 data-closed:animate-out data-closed:fade-out-0 max-sm:data-open:slide-in-from-bottom-8 max-sm:data-closed:slide-out-to-bottom-8 sm:inset-x-auto sm:top-1/2 sm:bottom-auto sm:left-1/2 sm:max-w-sm sm:-translate-x-1/2 sm:-translate-y-1/2 sm:rounded-xl sm:pb-4 sm:duration-100 sm:data-open:zoom-in-95 sm:data-closed:zoom-out-95",
           className
         )}
+        style={
+          {
+            "--keyboard-inset": visible && `${visible.inset}px`,
+            "--visible-height": visible && `${visible.height}px`,
+            ...style,
+          } as React.CSSProperties
+        }
         {...props}
       >
         {children}

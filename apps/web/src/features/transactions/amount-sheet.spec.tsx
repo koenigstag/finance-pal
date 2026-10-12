@@ -1,7 +1,7 @@
 import { QueryClient, QueryClientProvider } from '@tanstack/react-query';
-import { fireEvent, render, screen } from '@testing-library/react';
+import { act, fireEvent, render, screen } from '@testing-library/react';
 import type { ReactNode } from 'react';
-import { describe, expect, it, vi } from 'vitest';
+import { afterEach, describe, expect, it, vi } from 'vitest';
 import '@/i18n';
 import type { Account } from '@/features/accounts/queries';
 import { queryKeys } from '@/lib/query-keys';
@@ -76,6 +76,10 @@ const amountFields = () =>
 const sideBySide = () => !!screen.getByRole('dialog').querySelector('.grid-cols-2');
 
 describe('AmountSheet', () => {
+  afterEach(() => {
+    vi.unstubAllGlobals();
+  });
+
   it('asks for one amount within a currency, and gives it the row', () => {
     open({ type: 'transfer', accountId: 'wallet', toAccountId: 'savings' });
 
@@ -108,5 +112,23 @@ describe('AmountSheet', () => {
 
     expect(screen.queryByRole('heading', { name: 'Calculator' })).toBeNull();
     expect(screen.getByRole<HTMLInputElement>('textbox', { name: 'Amount (USD)' }).value).toBe('30');
+  });
+
+  it('sits on a keyboard drawn over the page, as on iOS, rather than behind it', () => {
+    // The keyboard leaves 460px of an 800px screen to see, and the page keeps its height.
+    const viewport = Object.assign(new EventTarget(), { height: 800, offsetTop: 0 });
+    vi.stubGlobal('visualViewport', viewport);
+    vi.stubGlobal('innerHeight', 800);
+    open({ type: 'expense', accountId: 'wallet', toAccountId: '' });
+
+    act(() => {
+      viewport.height = 460;
+      viewport.dispatchEvent(new Event('resize'));
+    });
+
+    // jsdom has no layout, so what the sheet is told is what says where it goes.
+    const sheet = screen.getByRole('dialog');
+    expect(sheet.style.getPropertyValue('--keyboard-inset')).toBe('340px');
+    expect(sheet.style.getPropertyValue('--visible-height')).toBe('460px');
   });
 });
