@@ -15,6 +15,7 @@ function toCategoryDto(category: Category) {
     name: category.name,
     icon: category.icon,
     color: category.color,
+    currencyId: category.currencyId,
     sortOrder: category.sortOrder,
     archived: category.archived,
     archivedAt: category.archivedAt?.toISOString() ?? null,

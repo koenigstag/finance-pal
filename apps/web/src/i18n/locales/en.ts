@@ -156,6 +156,11 @@ export const en = {
     icon: 'Icon',
     topLevel: 'None (top level)',
     hasSubcategories: 'It has subcategories, so it stays at the top level.',
+    currency: 'Default currency',
+    noCurrency: 'None',
+    currencyDescription:
+      'From an account in another currency, a transaction records the amount in this currency too. Its subcategories use the same.',
+    currencyLocked: 'It has transactions, so its currency stays as it is.',
     subcategoryCount_one: '{{count}} subcategory',
     subcategoryCount_few: '{{count}} subcategories',
     subcategoryCount_many: '{{count}} subcategories',
@@ -256,6 +261,9 @@ export const en = {
     },
     amountWithdrawn: 'Amount withdrawn',
     destAmount: 'Amount received',
+    // Beside the account's amount, for a category in another currency.
+    categoryAmount: 'In category',
+    categoryAmountWithoutRate: "No exchange rate for these currencies: it's recorded only if you enter it",
     category: 'Category',
     noCategory: 'No category',
     subcategory: 'Subcategory',
@@ -278,6 +286,8 @@ export const en = {
     // Lines under the amount on the form's Amount card, and in a transaction's actions sheet.
     receivedAmount: 'Received {{amount}}',
     receivedAtRate: 'Received ≈ {{amount}}',
+    inCategoryAmount: 'In category {{amount}}',
+    inCategoryAtRate: 'In category ≈ {{amount}}',
     atTodaysRate: "At today's rate",
     atYourRate: 'At your own rate',
     convertsOnTheDay: "Converted on the day, at that day's rate",

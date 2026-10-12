@@ -25,7 +25,8 @@ import { createScheduledNotifications } from './20260919170000-create-scheduled-
 import { addAccountNotificationBank } from './20260922120000-add-account-notification-bank.js';
 import { createCategoryRules } from './20260922160000-create-category-rules.js';
 import { createBudgets } from './20261012120000-create-budgets.js';
-import { createOauthCodes } from './20261012180000-create-oauth-codes.js';
+import { addCategoryCurrency } from './20261012190000-add-category-currency.js';
+import { createOauthCodes } from './20261012200000-create-oauth-codes.js';
 
 export const migrations: readonly Migration[] = [
   createAuthTables,
@@ -59,6 +60,7 @@ export const migrations: readonly Migration[] = [
   addAccountNotificationBank,
   createCategoryRules,
   createBudgets,
+  addCategoryCurrency,
   createOauthCodes,
 ];
 

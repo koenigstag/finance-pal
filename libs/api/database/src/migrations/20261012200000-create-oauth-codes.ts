@@ -113,7 +113,7 @@ async function down(queryRunner: QueryRunner): Promise<void> {
 }
 
 export const createOauthCodes: Migration = {
-  name: '20261012180000-create-oauth-codes',
+  name: '20261012200000-create-oauth-codes',
 
   async up({ context: queryRunner }) {
     await up(queryRunner);

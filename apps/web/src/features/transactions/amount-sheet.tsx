@@ -20,6 +20,7 @@ import {
 import { Input } from '@/components/ui/input';
 import { ToggleGroup, ToggleGroupItem } from '@/components/ui/toggle-group';
 import type { Account } from '@/features/accounts/queries';
+import type { Category } from '@/features/categories/queries';
 import { useCurrencyCodes } from '@/features/currencies/queries';
 import { convertMoney, formatPercentage, isValidAmountInput, parseMoneyInput, parsePercentageInput } from '@/lib/money';
 import { CalculatorSheet } from './calculator-sheet';
@@ -29,6 +30,7 @@ import {
   balanceBase,
   derivedAmount,
   needsDestAmount,
+  otherSideCurrencyId,
   parseRoundBalanceTo,
   type AmountValues,
   type TransactionSides,
@@ -44,15 +46,18 @@ interface AmountSheetProps {
   // and whose balance a percentage is of.
   sides: TransactionSides;
   accounts: Account[];
+  // For the currency of the category an expense or an income is filed under.
+  categories: Category[];
   // The saved transaction being edited, if any: its own share stays out of that balance.
   editing?: Transaction;
   // Dated ahead or repeating: an amount from the balance may then be nothing for now, being worked
   // out again until its date.
   scheduled: boolean;
-  // Repeating: a series converts each occurrence on its day, so what arrives can't be typed for it.
+  // Repeating: a series converts each occurrence on its day, so the other side's amount can't be
+  // typed for it.
   repeats: boolean;
-  // How a transfer between two currencies converts, when there's a rate for the pair: what arrives
-  // is then worked out unless typed.
+  // How a transaction between two currencies converts, when there's a rate for the pair: the other
+  // side's amount is then worked out unless typed.
   conversion: Conversion | null;
   // The figures the sheet starts from. Read once, when it mounts: the form gives it a new key
   // for each opening.
@@ -63,7 +68,8 @@ interface AmountSheetProps {
 
 /**
  * A transaction's amounts, opened from the form's Amount card: the amount itself — a transfer
- * between currencies has two — and, under Advanced, two ways to have it worked out instead, each
+ * between currencies has two, and so does an expense or an income in a category of another
+ * currency than its account's — and, under Advanced, two ways to have it worked out instead, each
  * behind a checkbox and one at a time: as a percentage, of an optional base amount or else of the
  * account's balance, or as whatever leaves that balance on a round figure.
  */
@@ -72,6 +78,7 @@ export function AmountSheet({
   onOpenChange,
   sides,
   accounts,
+  categories,
   editing,
   scheduled,
   repeats,
@@ -104,8 +111,9 @@ export function AmountSheet({
         },
         scheduled,
         conversion,
+        categories,
       ),
-    [sides, accounts, t, scheduled, conversion],
+    [sides, accounts, t, scheduled, conversion, categories],
   );
   // As in the form: accounts can refetch while the sheet is open, and the resolver should check
   // against the current ones rather than those of the first render.
@@ -120,24 +128,30 @@ export function AmountSheet({
     control: form.control,
     name: ['percentage', 'roundBalanceTo', 'amount', 'destAmount'],
   });
-  // What arrives at the rate, shown in the received field until a figure is typed over it.
+  const transfer = sides.type === 'transfer';
+  // The other side's amount at the rate, shown in its field until a figure is typed over it.
   const sent = parseMoneyInput(amount);
   const atTheRate = conversion && sent !== null && isValidAmountInput(amount) ? convertMoney(sent, conversion.rate) : null;
-  // Where that figure comes from, under the field, while it's the rate's rather than typed.
-  const rateHint = !conversion || destAmount.trim()
-    ? null
-    : repeats
-      ? t('transactions.convertsEachTime')
-      : !conversion.fetched
-        ? t('transactions.atYourRate')
-        : scheduled
-          ? t('transactions.convertsOnTheDay')
-          : t('transactions.atTodaysRate');
+  // Where that figure comes from, under the field, while it's the rate's rather than typed. With no
+  // rate, a category's amount is only recorded when it's typed; a series' is up to the API's rates.
+  const rateHint =
+    destAmount.trim() || (!conversion && transfer)
+      ? null
+      : repeats
+        ? t('transactions.convertsEachTime')
+        : !conversion
+          ? t('transactions.categoryAmountWithoutRate')
+          : !conversion.fetched
+            ? t('transactions.atYourRate')
+            : scheduled
+              ? t('transactions.convertsOnTheDay')
+              : t('transactions.atTodaysRate');
 
   const accountOf = (id: string) => accounts.find((account) => account.id === id);
   const account = accountOf(sides.accountId);
-  const currencyOf = (id: string) => currencyCodes.get(accountOf(id)?.currencyId ?? -1);
-  const withCurrency = (label: string, id: string) => (currencyOf(id) ? `${label} (${currencyOf(id)})` : label);
+  const withCode = (label: string, code: string | undefined) => (code ? `${label} (${code})` : label);
+  const withCurrency = (label: string, id: string) => withCode(label, currencyCodes.get(accountOf(id)?.currencyId ?? -1));
+  const otherCode = currencyCodes.get(otherSideCurrencyId(sides, accounts, categories) ?? -1);
 
   // Works the amount out again whenever the percentage, its base or the step changes; the account
   // is the form's, fixed while the sheet is open.
@@ -213,17 +227,17 @@ export function AmountSheet({
   // Any percentage typed, even one still wrong, or a step picked, takes the amount over: it's what
   // the amount comes from, and a figure typed beside it would be overwritten by the next change.
   const derived = percentage.trim() !== '' || roundBalanceTo !== '';
-  // Two amounts to ask for, rather than one: a transfer whose sides are in different currencies.
-  const twoSided = needsDestAmount(sides, accounts);
+  // Two amounts to ask for, rather than one: the two sides are in different currencies.
+  const twoSided = needsDestAmount(sides, accounts, categories);
   const validPercentage = parsePercentageInput(percentage);
   const stepLabel = (step: number) =>
     t('transactions.roundBalanceStep', { step: new Intl.NumberFormat(i18n.language).format(step) });
 
   const amountInput = (name: 'amount' | 'destAmount', label: string) => {
-    // The amount taken from the account, while a percentage or a rounding works it out. What arrives
-    // across currencies, for a series: each occurrence converts on its day, so nothing typed here
-    // could be kept.
-    const disabled = name === 'amount' ? derived : repeats && !!conversion;
+    // The amount taken from the account, while a percentage or a rounding works it out. The other
+    // side's, for a series: each occurrence converts on its day, so nothing typed here could be
+    // kept — and a category's goes without on a day there's no rate.
+    const disabled = name === 'amount' ? derived : repeats && (!!conversion || !transfer);
     const received = name === 'destAmount';
     return (
       <Field data-invalid={!!errors[name]} data-disabled={disabled}>
@@ -278,8 +292,11 @@ export function AmountSheet({
               {twoSided ? (
                 // Each amount in its own side's currency, side by side.
                 <div className="grid grid-cols-2 gap-3">
-                  {amountInput('amount', withCurrency(t('transactions.amountWithdrawn'), sides.accountId))}
-                  {amountInput('destAmount', withCurrency(t('transactions.destAmount'), sides.toAccountId))}
+                  {amountInput(
+                    'amount',
+                    withCurrency(t(sides.type === 'income' ? 'transactions.amount' : 'transactions.amountWithdrawn'), sides.accountId),
+                  )}
+                  {amountInput('destAmount', withCode(t(transfer ? 'transactions.destAmount' : 'transactions.categoryAmount'), otherCode))}
                 </div>
               ) : (
                 // One figure, so it takes the row: a transfer within a currency arrives as what left,

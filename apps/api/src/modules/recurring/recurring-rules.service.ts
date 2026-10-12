@@ -310,20 +310,22 @@ export class RecurringRulesService {
    *
    * A transfer series between two currencies converts each occurrence at the rate of its day, so it
    * needs a rate for the pair to be had at all. That's checked here rather than left to the first
-   * occurrence, which would otherwise wait for a rate that never comes.
+   * occurrence, which would otherwise wait for a rate that never comes. An expense or an income in a
+   * category of another currency converts too, but does without its category's amount on a day
+   * there's no rate.
    */
   private async settle(rule: RecurringRule, validated: Validated): Promise<void> {
     rule.categoryId = validated.categoryId;
     rule.subcategoryId = validated.subcategoryId;
     rule.currencyId = validated.currencyId;
 
-    const { currencyId, toCurrencyId } = validated;
-    if (rule.type !== TransactionType.TRANSFER || toCurrencyId === null || toCurrencyId === currencyId) {
+    const { currencyId, destCurrencyId } = validated;
+    if (rule.type !== TransactionType.TRANSFER || destCurrencyId === null || destCurrencyId === currencyId) {
       return;
     }
-    const found = await this.currencies.findBy({ id: In([currencyId, toCurrencyId]) });
+    const found = await this.currencies.findBy({ id: In([currencyId, destCurrencyId]) });
     const codeOf = (id: number) => found.find((currency) => currency.id === id)?.code ?? '';
-    const [from, to] = [codeOf(currencyId), codeOf(toCurrencyId)];
+    const [from, to] = [codeOf(currencyId), codeOf(destCurrencyId)];
     if ((await this.rates.rateBetween(from, to)) === null) {
       throw new BadRequestException(
         `There's no exchange rate from ${from} to ${to}, so a repeating transfer between them can't be converted`,

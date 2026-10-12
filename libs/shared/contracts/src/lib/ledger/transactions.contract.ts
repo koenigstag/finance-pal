@@ -23,6 +23,10 @@ export const transactionSchema = z.object({
   // One of categoryId's subcategories, or null when the transaction is filed under the category itself.
   subcategoryId: z.string().uuid().nullable(),
   toAccountId: z.string().uuid().nullable(),
+  // The amount on the other side, in its currency, when that isn't the account's: for a transfer,
+  // what arrived in toAccountId; for an expense or an income, the amount in its category's currency
+  // (see the category's currencyId). Null otherwise, and for an expense or an income that has no
+  // rate to be converted at — only a transfer's moves a balance, so only a transfer needs one.
   destAmount: moneySchema.nullable(),
   // Set when the amount was worked out as this percentage — of percentageBase when there is one
   // (the income a tax is a share of, say), otherwise of the account's balance (a card's monthly
@@ -70,6 +74,9 @@ const createTransactionBodySchema = z.object({
   // does and is cleared when the category changes.
   subcategoryId: z.string().uuid().nullable().optional(),
   toAccountId: z.string().uuid().nullable().optional(),
+  // Between two currencies (see the response's destAmount): a figure stands as given; null, or
+  // left out of a create, has it converted at the rate. An expense or an income in one currency
+  // doesn't keep it.
   destAmount: moneySchema.nullable().optional(),
   // Above 0 and at most 100. Recorded as sent, beside the amount: it isn't checked against it.
   percentage: percentageSchema.nullable().optional(),
@@ -103,6 +110,12 @@ const transactionListResponseSchema = z.object({
   nextCursor: z.string().nullable(),
 });
 
+// Per category, the account its latest recorded transaction is on: where a new expense or income
+// under it starts. A category with none isn't listed.
+const lastAccountsResponseSchema = z.object({
+  items: z.array(z.object({ categoryId: z.string().uuid(), accountId: z.string().uuid() })),
+});
+
 const groupPathParams = z.object({ groupId: z.string().uuid() });
 const transactionPathParams = z.object({ groupId: z.string().uuid(), transactionId: z.string().uuid() });
 
@@ -115,6 +128,13 @@ export const transactionsContract = c.router(
       query: transactionListQuerySchema,
       responses: { 200: transactionListResponseSchema, 400: errorSchema, 404: errorSchema },
       summary: 'List transactions in a group, cursor-paginated by date desc, filterable',
+    },
+    lastAccounts: {
+      method: 'GET',
+      path: '/groups/:groupId/transactions/last-accounts',
+      pathParams: groupPathParams,
+      responses: { 200: lastAccountsResponseSchema, 404: errorSchema },
+      summary: "For each category, the account of its latest transaction that isn't planned",
     },
     create: {
       method: 'POST',

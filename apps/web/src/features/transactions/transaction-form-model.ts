@@ -18,6 +18,13 @@ interface AccountLike {
   currencyId: number;
 }
 
+// A top-level category's currency, or null for one without: a subcategory is in its parent's, and
+// a transaction names its top-level category anyway.
+interface CategoryLike {
+  id: string;
+  currencyId: number | null;
+}
+
 /**
  * How the app converts from one currency to another, by their ids, or null when it has no rate for
  * the pair. Handed in by whoever knows the rates (see conversionBetween); the model only reads it.
@@ -76,7 +83,7 @@ export type AmountValues = Pick<
   TransactionFormValues,
   'amount' | 'destAmount' | 'percentage' | 'percentageBase' | 'roundBalanceTo'
 >;
-export type TransactionSides = Pick<TransactionFormValues, 'type' | 'accountId' | 'toAccountId'>;
+export type TransactionSides = Pick<TransactionFormValues, 'type' | 'accountId' | 'toAccountId' | 'categoryId'>;
 
 export interface TransactionFormMessages {
   required: string;
@@ -99,35 +106,54 @@ export interface TransactionFormContext {
   today?: string;
   // Without it, what arrives across currencies has to be typed, as before rates were fetched.
   conversionOf?: ConversionLookup;
+  // For the currency of the category an expense or an income is filed under; without them, none has one.
+  categories?: CategoryLike[];
 }
 
 type AmountMessages = Pick<TransactionFormMessages, 'amount' | 'percentage' | 'percentageAmount' | 'roundBalanceAmount'>;
 
-/** A transfer between accounts in different currencies records what arrived, too. */
-export function needsDestAmount(values: TransactionSides, accounts: AccountLike[]): boolean {
-  if (values.type !== 'transfer' || !values.accountId || !values.toAccountId) {
-    return false;
+/**
+ * The currency of a transaction's other side, where it has one of its own: the account a transfer
+ * arrives in, or the category an expense or an income is filed under, when that category has one.
+ */
+export function otherSideCurrencyId(
+  values: TransactionSides,
+  accounts: AccountLike[],
+  categories: CategoryLike[] = [],
+): number | null {
+  if (values.type === 'transfer') {
+    return accounts.find((account) => account.id === values.toAccountId)?.currencyId ?? null;
   }
-  const from = accounts.find((account) => account.id === values.accountId);
-  const to = accounts.find((account) => account.id === values.toAccountId);
-  return !!from && !!to && from.currencyId !== to.currencyId;
+  return categories.find((category) => category.id === values.categoryId)?.currencyId ?? null;
 }
 
 /**
- * How a transfer between these accounts converts what it sends into what arrives: null when it
- * doesn't cross currencies, or when the app has no rate for the pair and what arrives must be typed.
+ * Whether a transaction records a second amount, in its other side's currency: a transfer between
+ * accounts in different currencies records what arrived, and an expense or an income in a category
+ * of another currency than its account's records the amount in the category's, too.
  */
-export function transferConversion(
+export function needsDestAmount(values: TransactionSides, accounts: AccountLike[], categories: CategoryLike[] = []): boolean {
+  const from = accounts.find((account) => account.id === values.accountId);
+  const to = otherSideCurrencyId(values, accounts, categories);
+  return !!from && to !== null && from.currencyId !== to;
+}
+
+/**
+ * How a transaction between two currencies converts its account's amount into the other side's:
+ * null when it doesn't cross currencies, or when the app has no rate for the pair — and then what
+ * a transfer receives must be typed, while a category's amount may simply go unrecorded.
+ */
+export function crossConversion(
   values: TransactionSides,
   accounts: AccountLike[],
+  categories: CategoryLike[],
   conversionOf: ConversionLookup | undefined,
 ): Conversion | null {
-  if (!conversionOf || !needsDestAmount(values, accounts)) {
+  if (!conversionOf || !needsDestAmount(values, accounts, categories)) {
     return null;
   }
   const from = accounts.find((account) => account.id === values.accountId) as AccountLike;
-  const to = accounts.find((account) => account.id === values.toAccountId) as AccountLike;
-  return conversionOf(from.currencyId, to.currencyId);
+  return conversionOf(from.currencyId, otherSideCurrencyId(values, accounts, categories) as number);
 }
 
 // What's wrong with the amounts, for the form and the Amount sheet alike. Worked out from a
@@ -139,10 +165,12 @@ export function transferConversion(
 // as things stand, worked out again until its date, so nothing for now is no mistake.
 //
 // What arrives across currencies is typed only to override the rate: left empty, it's converted,
-// so it's only missing when there's no rate to convert by.
+// so it's only missing when there's no rate to convert by. A category's amount is never missing:
+// it moves no balance, and without a rate it simply isn't recorded.
 function checkAmounts(
   values: AmountValues & TransactionSides,
   accounts: AccountLike[],
+  categories: CategoryLike[],
   messages: AmountMessages,
   scheduled: boolean,
   conversion: Conversion | null,
@@ -160,7 +188,8 @@ function checkAmounts(
     ctx.addIssue({ code: z.ZodIssueCode.custom, path: ['amount'], message });
   }
   const typedDest = values.destAmount.trim();
-  if (needsDestAmount(values, accounts) && (typedDest ? !isValidAmountInput(typedDest) : !conversion)) {
+  const missing = values.type === 'transfer' && !conversion;
+  if (needsDestAmount(values, accounts, categories) && (typedDest ? !isValidAmountInput(typedDest) : missing)) {
     ctx.addIssue({ code: z.ZodIssueCode.custom, path: ['destAmount'], message: messages.amount });
   }
 }
@@ -189,10 +218,10 @@ export function transactionFormSchema(
       repeat: z.string(),
     })
     .superRefine((values, ctx) => {
-      const { seriesNextDay, today = todayInput(), conversionOf } = context;
-      const conversion = transferConversion(values, accounts, conversionOf);
+      const { seriesNextDay, today = todayInput(), conversionOf, categories = [] } = context;
+      const conversion = crossConversion(values, accounts, categories, conversionOf);
       // Dates as yyyy-MM-dd compare as text.
-      checkAmounts(values, accounts, messages, !!values.repeat || values.day > today, conversion, ctx);
+      checkAmounts(values, accounts, categories, messages, !!values.repeat || values.day > today, conversion, ctx);
       if (values.type === 'transfer') {
         if (!values.toAccountId) {
           ctx.addIssue({ code: z.ZodIssueCode.custom, path: ['toAccountId'], message: messages.required });
@@ -221,6 +250,7 @@ export function amountFormSchema(
   messages: AmountMessages,
   scheduled = false,
   conversion: Conversion | null = null,
+  categories: CategoryLike[] = [],
 ) {
   return z
     .object({
@@ -230,14 +260,14 @@ export function amountFormSchema(
       percentageBase: z.string(),
       roundBalanceTo: z.string(),
     })
-    .superRefine((values, ctx) => checkAmounts({ ...values, ...sides }, accounts, messages, scheduled, conversion, ctx));
+    .superRefine((values, ctx) => checkAmounts({ ...values, ...sides }, accounts, categories, messages, scheduled, conversion, ctx));
 }
 
 // Amounts start at "0" rather than empty, so the field always shows a number; the inputs select
 // their content on focus, so typing replaces the zero instead of appending to it.
 const EMPTY_AMOUNT = '0';
-// Except what arrives across currencies: empty there means "at the rate", whose figure the field
-// shows in its place, and a zero would read as nothing arriving.
+// Except the amount on the other side of two currencies: empty there means "at the rate", whose
+// figure the field shows in its place, and a zero would read as nothing arriving.
 const AT_THE_RATE = '';
 
 export function defaultTransactionFormValues(defaults: {
@@ -358,6 +388,7 @@ export function toTransactionBody(
   existing?: Pick<Transaction, 'date'> & Partial<Pick<Transaction, 'destAmountAsOf'>>,
   now = new Date(),
   conversionOf?: ConversionLookup,
+  categories: CategoryLike[] = [],
 ): TransactionBody {
   const account = accounts.find((candidate) => candidate.id === values.accountId);
   if (!account) {
@@ -378,7 +409,7 @@ export function toTransactionBody(
     // Only ever with its category: on its own it would say nothing the API could file.
     subcategoryId: isTransfer || !values.categoryId ? null : values.subcategoryId || null,
     toAccountId: isTransfer ? values.toAccountId : null,
-    destAmount: destAmountFor(values, accounts, existing, conversionOf),
+    destAmount: destAmountFor(values, accounts, categories, existing, conversionOf),
     // Null, not left out, once cleared: an edit keeps what it doesn't mention.
     percentage,
     // Only ever with its percentage, which without one is of the account's balance.
@@ -570,24 +601,26 @@ export function balanceBase(account: BalanceLike, editing?: Contribution, now = 
 }
 
 /**
- * What a transfer sends as received. A figure typed stands, and no rate overrides it. Otherwise it's
- * converted: by the API for a pair whose rates were fetched — null asks it to, and on an edit of an
- * amount it converted, leaving it out lets it keep that, or follow the rate while it's planned — and
- * by the app for a pair only the user's own rates cover, which the API has no rate for.
+ * What a transfer sends as received, or an expense or an income as its amount in its category's
+ * currency. A figure typed stands, and no rate overrides it. Otherwise it's converted: by the API
+ * for a pair whose rates were fetched — null asks it to, and on an edit of an amount it converted,
+ * leaving it out lets it keep that, or follow the rate while it's planned — and by the app for a
+ * pair only the user's own rates cover, which the API has no rate for.
  */
 function destAmountFor(
   values: TransactionFormValues,
   accounts: AccountLike[],
+  categories: CategoryLike[],
   existing: Partial<Pick<Transaction, 'destAmountAsOf'>> | undefined,
   conversionOf: ConversionLookup | undefined,
 ): string | null | undefined {
-  if (!needsDestAmount(values, accounts)) {
+  if (!needsDestAmount(values, accounts, categories)) {
     return null;
   }
   if (isValidAmountInput(values.destAmount)) {
     return requireMoney(values.destAmount);
   }
-  const conversion = transferConversion(values, accounts, conversionOf);
+  const conversion = crossConversion(values, accounts, categories, conversionOf);
   if (conversion && !conversion.fetched) {
     const figure = convertMoney(requireMoney(values.amount), conversion.rate);
     return isValidAmountInput(figure) ? figure : null;

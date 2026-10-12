@@ -22,7 +22,9 @@ import { Button } from '@/components/ui/button';
 import { Empty, EmptyDescription, EmptyHeader, EmptyMedia, EmptyTitle } from '@/components/ui/empty';
 import { Spinner } from '@/components/ui/spinner';
 import { ToggleGroup, ToggleGroupItem } from '@/components/ui/toggle-group';
+import { useCurrencyCodes } from '@/features/currencies/queries';
 import { useGroupScope } from '@/features/groups/group-context';
+import { useProfile } from '@/features/profile/queries';
 import { useDragReorder, type ReorderHandleProps } from '@/lib/drag-reorder';
 import { useSwipeTrack } from '@/lib/swipe';
 import { cn } from '@/lib/utils';
@@ -550,6 +552,13 @@ interface CategoryRowProps {
 }
 
 function CategoryRow({ category, nested = false, detail, onSelect, className }: CategoryRowProps) {
+  const currencyCodes = useCurrencyCodes();
+  const profile = useProfile();
+  // Its currency, where that isn't the main one: the one its transactions record a second amount in.
+  const currency =
+    category.currencyId !== null && profile.data && category.currencyId !== profile.data.mainCurrencyId
+      ? currencyCodes.get(category.currencyId)
+      : undefined;
   // Subcategories line their smaller icon up under the parent's name.
   const layout = cn(
     'flex min-h-12 w-full min-w-0 items-center gap-3 px-4 py-2 text-left',
@@ -563,6 +572,7 @@ function CategoryRow({ category, nested = false, detail, onSelect, className }: 
         <p className={cn('truncate', nested ? 'text-sm' : 'font-medium')}>{category.name}</p>
         {detail && <p className="text-sm text-muted-foreground">{detail}</p>}
       </div>
+      {currency && <span className="shrink-0 text-sm text-muted-foreground">{currency}</span>}
     </>
   );
 

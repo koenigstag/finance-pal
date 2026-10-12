@@ -2,7 +2,7 @@ import { BadRequestException, ForbiddenException, Injectable, NotFoundException 
 import { InjectRepository } from '@nestjs/typeorm';
 import { In, Repository } from 'typeorm';
 import { Transactional } from 'typeorm-transactional';
-import { Account, Currency, RecurringRule, Tag, Transaction, TransactionTag, TransactionType } from '@ft/api-database';
+import { Account, Category, Currency, RecurringRule, Tag, Transaction, TransactionTag, TransactionType } from '@ft/api-database';
 import { TRANSACTION_TYPES, type Action, type AppAbility, type Subject } from '@ft/shared-contracts';
 import { AbilityFactory, type GroupAuthzContext } from '../../_core/authz/ability.factory';
 import { PushNotificationsService } from '../../push/push-notifications.service';
@@ -85,6 +85,7 @@ export class TransactionsService {
     @InjectRepository(Tag) private readonly tags: Repository<Tag>,
     @InjectRepository(RecurringRule) private readonly rules: Repository<RecurringRule>,
     @InjectRepository(Account) private readonly accounts: Repository<Account>,
+    @InjectRepository(Category) private readonly categories: Repository<Category>,
     @InjectRepository(Currency) private readonly currencies: Repository<Currency>,
     private readonly abilities: AbilityFactory,
     private readonly realtime: RealtimeEmitterService,
@@ -157,6 +158,32 @@ export class TransactionsService {
     }
 
     return { items: rows, tagsByTransactionId: await this.loadTagIds(rows.map((r) => r.id)), nextCursor };
+  }
+
+  /**
+   * For each category, the account its latest transaction is on, a subcategory's counting toward
+   * its category: where a new expense or income under it starts. Latest by the order list() keeps,
+   * among those that have happened: a planned one doesn't say where the money goes these days.
+   */
+  async lastAccounts(
+    userId: string,
+    groupId: string,
+    now = new Date(),
+  ): Promise<{ categoryId: string; accountId: string }[]> {
+    await this.authorize(userId, groupId, 'read', 'Transaction');
+    return this.transactions
+      .createQueryBuilder('t')
+      .select('t.category_id', 'categoryId')
+      .addSelect('t.account_id', 'accountId')
+      .distinctOn(['t.category_id'])
+      .where('t.group_id = :groupId', { groupId })
+      .andWhere('t.category_id IS NOT NULL')
+      .andWhere('t.date <= :now', { now })
+      .orderBy('t.category_id')
+      .addOrderBy('t.date', 'DESC')
+      .addOrderBy('t.created_at', 'DESC')
+      .addOrderBy('t.id', 'DESC')
+      .getRawMany();
   }
 
   async get(userId: string, groupId: string, transactionId: string): Promise<{ transaction: Transaction; tagIds: string[] }> {
@@ -423,9 +450,13 @@ export class TransactionsService {
   }
 
   /**
-   * The received amount a transfer is stored with, and when it was last converted at a rate (see
-   * planDestAmount). Anything but a transfer between two currencies keeps what it was given, as it
-   * always has.
+   * The amount on the other side a transaction is stored with, and when it was last converted at a
+   * rate (see planDestAmount): what a transfer between two currencies received, or an expense's or an
+   * income's amount in its category's currency. A transfer within one currency keeps what it was
+   * given, as it always has; an expense or an income within one has nothing to keep.
+   *
+   * Only a transfer has to have one: what it received is what its account's balance goes up by. With
+   * no rate to convert at, an expense or an income is recorded without its category's amount.
    */
   private async settleDest(
     merged: { type: TransactionType; amount: string; destAmount: string | null },
@@ -435,9 +466,10 @@ export class TransactionsService {
     date: Date,
     now: Date,
   ): Promise<{ destAmount: string | null; destAmountAsOf: Date | null }> {
-    const { currencyId, toCurrencyId } = validated;
-    if (merged.type !== TransactionType.TRANSFER || toCurrencyId === null || toCurrencyId === currencyId) {
-      return { destAmount: merged.destAmount, destAmountAsOf: null };
+    const { currencyId, destCurrencyId } = validated;
+    const transfer = merged.type === TransactionType.TRANSFER;
+    if (destCurrencyId === null || destCurrencyId === currencyId) {
+      return { destAmount: transfer ? merged.destAmount : null, destAmountAsOf: null };
     }
 
     const plan = planDestAmount(requested, stored, date);
@@ -448,9 +480,12 @@ export class TransactionsService {
       return { destAmount: stored.destAmount, destAmountAsOf: stored.destAmountAsOf };
     }
 
-    const [from, to] = await this.codesOf(currencyId, toCurrencyId);
+    const [from, to] = await this.codesOf(currencyId, destCurrencyId);
     const rate = await this.rates.rateBetween(from, to);
     if (rate === null) {
+      if (!transfer) {
+        return { destAmount: null, destAmountAsOf: null };
+      }
       throw new BadRequestException(
         `There's no exchange rate from ${from} to ${to} right now: send destAmount, the amount that arrived`,
       );
@@ -459,17 +494,21 @@ export class TransactionsService {
   }
 
   /**
-   * Whether an edited transfer still goes between the same two currencies. Read off the accounts'
-   * currencies as they are now, the ones balances read amounts in: an account's currency can itself
-   * be changed, so the currency recorded on the row isn't to be trusted for this.
+   * Whether an edited transaction still goes between the same two currencies. Read off its account's
+   * and its other side's currencies as they are now — the ones its amounts are read in — rather
+   * than the currency recorded on the row, which an account whose own was changed would leave wrong.
+   * A category's can't change under transactions filed there, other than from none.
    */
   private async sameCurrencies(existing: Transaction, validated: Validated): Promise<boolean> {
-    if (!existing.toAccountId) {
+    if (!existing.toAccountId && !existing.categoryId) {
       return false;
     }
-    const before = await this.accounts.findBy({ id: In([existing.accountId, existing.toAccountId]) });
+    const before = await this.accounts.findBy({ id: In([existing.accountId, existing.toAccountId ?? existing.accountId]) });
     const currencyOf = (id: string) => before.find((account) => account.id === id)?.currencyId;
-    return currencyOf(existing.accountId) === validated.currencyId && currencyOf(existing.toAccountId) === validated.toCurrencyId;
+    const destBefore = existing.toAccountId
+      ? currencyOf(existing.toAccountId)
+      : (await this.categories.findOneBy({ id: existing.categoryId as string }))?.currencyId;
+    return currencyOf(existing.accountId) === validated.currencyId && destBefore === validated.destCurrencyId;
   }
 
   private async codesOf(...ids: number[]): Promise<string[]> {

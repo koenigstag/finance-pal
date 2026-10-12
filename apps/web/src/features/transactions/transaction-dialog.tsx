@@ -31,6 +31,7 @@ import { DateSheet } from './date-sheet';
 import { AccountBalance, AccountPicker, KindPicker, type KindPick } from './pickers';
 import {
   useDeleteRecurringRule,
+  useLastAccounts,
   useSaveRecurringRule,
   useSaveTransaction,
   type RecurringRule,
@@ -38,13 +39,14 @@ import {
 } from './queries';
 import { parseRepeatKey, repeatOf, useRepeatLabel } from './repeat';
 import {
+  crossConversion,
   derivedAmount,
   defaultTransactionFormValues,
   isPlannedDay,
   nextDateOf,
+  otherSideCurrencyId,
   pickDefaultAccountId,
   needsDestAmount,
-  transferConversion,
   parseRoundBalanceTo,
   ruleToFormValues,
   toRecurringRuleBody,
@@ -112,6 +114,7 @@ export function TransactionDialog({
   const { ability } = useGroupScope();
   const accounts = useAccounts(groupId);
   const categories = useCategories(groupId);
+  const lastAccounts = useLastAccounts(groupId);
   const currencyCodes = useCurrencyCodes();
   const conversionOf = useConversionLookup();
   const saveTransaction = useSaveTransaction(groupId);
@@ -143,12 +146,13 @@ export function TransactionDialog({
           percentageAmount: t('transactions.errors.percentageAmount'),
           roundBalanceAmount: t('transactions.errors.roundBalanceAmount'),
         },
-        { seriesNextDay, conversionOf },
+        { seriesNextDay, conversionOf, categories: categoryList },
       ),
-    [accountList, t, seriesNextDay, conversionOf],
+    [accountList, t, seriesNextDay, conversionOf, categoryList],
   );
-  // The schema depends on the accounts (for cross-currency checks), which can load after the form
-  // is created; the resolver reads the current one rather than the one from the first render.
+  // The schema depends on the accounts and categories (for cross-currency checks), which can load
+  // after the form is created; the resolver reads the current one rather than the one from the
+  // first render.
   const schemaRef = useRef(schema);
   schemaRef.current = schema;
   const form = useForm<TransactionFormValues>({
@@ -187,6 +191,11 @@ export function TransactionDialog({
   };
 
   const fallbackAccountId = pickDefaultAccountId(accountList, defaultAccountId);
+  // A new expense or income goes on the account its category was last recorded on, a category not
+  // used yet on the favourite: unless the dialog was opened for an account (one the list is
+  // filtered by, an account's own action), or one was picked by hand since it opened.
+  const accountFollowsCategory = !rule && !transaction && !template && !defaultAccountId;
+  const accountPicked = useRef(false);
   useEffect(() => {
     if (!open) {
       return;
@@ -199,6 +208,7 @@ export function TransactionDialog({
           ? { ...transactionToFormValues(template), day: todayInput() }
           : defaultTransactionFormValues({ accountId: fallbackAccountId, toAccountId: defaultToAccountId, type: defaultType });
     form.reset(values);
+    accountPicked.current = false;
     // A duplicate is a new transaction, and a series works its amount out again on each date: without
     // a base amount, their percentage is of the balance as it stands today.
     if (rule || (!transaction && template)) {
@@ -234,8 +244,9 @@ export function TransactionDialog({
     // that no longer runs can't be taken over.
     (mode === 'planned' && mayStartSeries && ability.can('delete', 'Transaction') && !transaction?.recurringRuleId);
 
-  const showDestAmount = needsDestAmount({ type, accountId, toAccountId }, accountList);
-  const conversion = transferConversion({ type, accountId, toAccountId }, accountList, conversionOf);
+  const sides = useMemo(() => ({ type, accountId, toAccountId, categoryId }), [type, accountId, toAccountId, categoryId]);
+  const showDestAmount = needsDestAmount(sides, accountList, categoryList);
+  const conversion = crossConversion(sides, accountList, categoryList, conversionOf);
   const currencyOf = (id: string) => currencyCodes.get(accountOf(id)?.currencyId ?? -1);
   const category = categoryList.find((candidate) => candidate.id === categoryId);
   // The chosen category's own subcategories, offered as chips under the cards.
@@ -245,6 +256,7 @@ export function TransactionDialog({
   );
 
   const applyPick = (pick: KindPick) => {
+    const otherCurrencyBefore = otherSideCurrencyId(form.getValues(), accountList, categoryList);
     form.setValue('type', pick.type);
     if (pick.type === 'transfer') {
       // The source was only a default; if that's where the money goes, it comes from elsewhere.
@@ -263,6 +275,16 @@ export function TransactionDialog({
       }
       form.setValue('categoryId', pick.categoryId);
       form.setValue('toAccountId', '');
+      if (accountFollowsCategory && !accountPicked.current) {
+        const lastAccountId = lastAccounts.data?.get(pick.categoryId);
+        form.setValue('accountId', pickDefaultAccountId(accountList, lastAccountId) ?? '', {
+          shouldValidate: form.formState.isSubmitted,
+        });
+      }
+    }
+    // A figure typed for the other side is in its currency; in another one, it's the rate's again.
+    if (otherSideCurrencyId(form.getValues(), accountList, categoryList) !== otherCurrencyBefore) {
+      form.setValue('destAmount', '');
     }
     // The account may have changed, and the type decides which way a rounding goes.
     recalculate();
@@ -285,10 +307,12 @@ export function TransactionDialog({
       } else if (transaction) {
         await saveTransaction.mutateAsync({
           transactionId: transaction.id,
-          body: toTransactionBody(values, accountList, transaction, undefined, conversionOf),
+          body: toTransactionBody(values, accountList, transaction, undefined, conversionOf, categoryList),
         });
       } else {
-        await saveTransaction.mutateAsync({ body: toTransactionBody(values, accountList, undefined, undefined, conversionOf) });
+        await saveTransaction.mutateAsync({
+          body: toTransactionBody(values, accountList, undefined, undefined, conversionOf, categoryList),
+        });
       }
       onOpenChange(false);
     } catch {
@@ -337,20 +361,26 @@ export function TransactionDialog({
     t(`transactions.${rule ? 'editSeriesOf' : transaction ? 'editOf' : 'addOf'}.${kind}`);
 
   const withCurrency = (label: string, id: string) => (currencyOf(id) ? `${label} (${currencyOf(id)})` : label);
-  // A figure as the inputs hold it, shown in the given account's currency.
-  const moneyIn = (value: string, id: string) => {
+  // A figure as the inputs hold it, shown in a currency: by default the given account's.
+  const moneyIn = (value: string, id: string, code = currencyOf(id)) => {
     const parsed = parseMoneyInput(value);
-    return parsed === null ? value : formatMoney(parsed, currencyOf(id), i18n.language, { currencyDisplay: 'narrowSymbol' });
+    return parsed === null ? value : formatMoney(parsed, code, i18n.language, { currencyDisplay: 'narrowSymbol' });
   };
-  // Under the amount on its card, a line each: what arrives across currencies, and what the
-  // amount was worked out from.
+  // Under the amount on its card, a line each: the other side's amount across currencies — what a
+  // transfer receives, or what goes into a category in another currency — and what the amount was
+  // worked out from.
   const amountLines: string[] = [];
   const sent = parseMoneyInput(amount);
+  const otherCode = currencyCodes.get(otherSideCurrencyId(sides, accountList, categoryList) ?? -1);
+  const [typedLine, atRateLine] =
+    type === 'transfer'
+      ? (['transactions.receivedAmount', 'transactions.receivedAtRate'] as const)
+      : (['transactions.inCategoryAmount', 'transactions.inCategoryAtRate'] as const);
   if (showDestAmount && isValidAmountInput(destAmount)) {
-    amountLines.push(t('transactions.receivedAmount', { amount: moneyIn(destAmount, toAccountId) }));
+    amountLines.push(t(typedLine, { amount: moneyIn(destAmount, toAccountId, otherCode) }));
   } else if (showDestAmount && conversion && sent !== null && isValidAmountInput(amount)) {
     // Not typed, it's what the amount comes to at the rate: roughly, until it's converted for good.
-    amountLines.push(t('transactions.receivedAtRate', { amount: moneyIn(convertMoney(sent, conversion.rate), toAccountId) }));
+    amountLines.push(t(atRateLine, { amount: moneyIn(convertMoney(sent, conversion.rate), toAccountId, otherCode) }));
   }
   const validPercentage = parsePercentageInput(percentage);
   const step = validPercentage ? null : parseRoundBalanceTo(roundBalanceTo);
@@ -541,8 +571,9 @@ export function TransactionDialog({
         key={`amount-${layer}`}
         open={open && amountSheetOpen}
         onOpenChange={setAmountSheetOpen}
-        sides={{ type, accountId, toAccountId }}
+        sides={sides}
         accounts={accountList}
+        categories={categoryList}
         editing={transaction}
         scheduled={!!repeat || day > todayInput()}
         repeats={!!repeat}
@@ -573,6 +604,7 @@ export function TransactionDialog({
           }
           // The percentage is of this account's balance: another account, another amount.
           if (accountSide === 'accountId') {
+            accountPicked.current = true;
             recalculate();
           }
           setAccountSide(null);

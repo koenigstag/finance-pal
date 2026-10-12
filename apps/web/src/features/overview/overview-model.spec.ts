@@ -11,6 +11,7 @@ const EUR = 3;
 
 const category = (id: string, name: string, type: Category['type'], color: string | null = null): Category => ({
   id,
+  currencyId: null,
   groupId,
   parentId: null,
   type,

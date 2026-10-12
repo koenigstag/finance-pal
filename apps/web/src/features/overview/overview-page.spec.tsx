@@ -19,6 +19,7 @@ const UAH = 1;
 
 const category = (id: string, name: string, type: Category['type']): Category => ({
   id,
+  currencyId: null,
   groupId,
   parentId: null,
   type,

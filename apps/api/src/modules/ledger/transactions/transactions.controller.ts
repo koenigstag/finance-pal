@@ -32,6 +32,15 @@ export class TransactionsController {
     });
   }
 
+  // Ahead of get, whose route would otherwise take "last-accounts" for a transaction's id.
+  @TsRestHandler(transactionsContract.lastAccounts)
+  lastAccounts(@CurrentUser() user?: RequestUser) {
+    return tsRestHandler(transactionsContract.lastAccounts, async ({ params }) => ({
+      status: 200 as const,
+      body: { items: await this.transactions.lastAccounts(requireUser(user).id, params.groupId) },
+    }));
+  }
+
   @TsRestHandler(transactionsContract.get)
   get(@CurrentUser() user?: RequestUser) {
     return tsRestHandler(transactionsContract.get, async ({ params }) => {
