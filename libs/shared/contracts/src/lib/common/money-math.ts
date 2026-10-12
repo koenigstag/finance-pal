@@ -4,6 +4,22 @@ import type { RoundBalanceStep } from './round-balance.schema.js';
 // the same cent: integers (BigInt) throughout, since a float would already be approximating.
 
 /**
+ * The exact sum of signed money strings ("12.5" + "-0.25" → "12.25"). Keeps as many decimals as the
+ * most precise input.
+ */
+export function sumMoney(amounts: string[]): string {
+  const scale = Math.max(0, ...amounts.map((amount) => toUnits(amount)[1]));
+  const total = amounts.reduce((sum, amount) => {
+    const [units, unitsScale] = toUnits(amount);
+    return sum + units * 10n ** BigInt(scale - unitsScale);
+  }, 0n);
+  const factor = 10n ** BigInt(scale);
+  const magnitude = total < 0n ? -total : total;
+  const fraction = scale > 0 ? `.${(magnitude % factor).toString().padStart(scale, '0')}` : '';
+  return `${total < 0n ? '-' : ''}${magnitude / factor}${fraction}`;
+}
+
+/**
  * An amount in one currency valued in another: `amount` times `rate`, rounded to the cent (half
  * away from zero, as money rounding is read). A rate has up to eight decimals.
  */

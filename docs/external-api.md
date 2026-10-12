@@ -231,6 +231,9 @@ Banks, by `type`:
   - A move between your own A-Bank cards records nothing. It posts a minus on one card and a
     plus on the other, and the two cancel out.
   - A declined payment records nothing.
+  - A fee (`Комісія: 20.00 ₴`) isn't in the title's amount, so it's added to the expense:
+    `-500.00 ₴` with that fee records 520.00. A fee it can't read, or one in another currency
+    than the payment, gets a 422.
   - A purchase abroad arrives in its own currency (`-4 280.00 HUF`), so it's refused unless an
     account in that currency receives A-Bank's notifications.
 

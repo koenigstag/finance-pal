@@ -1,4 +1,4 @@
-import { isPositiveMoney, parseMoneyInput } from '@ft/shared-contracts';
+import { isPositiveMoney, parseMoneyInput, sumMoney } from '@ft/shared-contracts';
 import { AMOUNT, currencyCode, distinctLines, folded, plainText } from '../notification-text';
 import type { NotificationParser } from '../parsed-notification';
 
@@ -8,6 +8,7 @@ import type { NotificationParser } from '../parsed-notification';
 //   🛒 -133.40 ₴           title: a category emoji (not always), the signed amount, the currency
 //   АТБ                    who the money went to or came from
 //   Кешбек: 1.6 ₴          sometimes
+//   Комiсiя: 20.00 ₴       the bank's fee, on a transfer to a card: it isn't in the title's amount
 //   Баланс: 55 757.11 ₴    on every payment
 //
 // A purchase abroad has its own currency in the title ("🍸 -4 280.00 HUF") and the rate in the
@@ -16,6 +17,8 @@ import type { NotificationParser } from '../parsed-notification';
 // The title's line: an optional emoji, then the signed amount and its currency, and nothing else.
 const TITLE = new RegExp(String.raw`^(?:\S+ )?([+-]) ?(${AMOUNT}) ?(₴|грн|UAH|[A-Z]{3})$`);
 const BALANCE = new RegExp(String.raw`Баланс: ?-?(?:${AMOUNT})`);
+const FEE_LABEL = /Ком[iі]с[iі]я/;
+const FEE = new RegExp(String.raw`Ком[iі]с[iі]я: ?(${AMOUNT}) ?(₴|грн|UAH|[A-Z]{3})`);
 // The labelled figures that follow a name on its line, when the text comes as a single line:
 // "АТБ Кешбек: 1.6 ₴ Баланс: 55 757.11 ₴". The labels may carry a Latin i as well.
 const FIGURES = /(?:^|\s+)(?:Кешбек|Баланс|Ком[iі]с[iі]я|Кредитн[iі] кошти|Курс)(?=[\s:]|$).*$/;
@@ -53,7 +56,22 @@ export const parseABankNotification: NotificationParser = (raw) => {
   if (amount === null || currency === null || !isPositiveMoney(amount)) {
     return null;
   }
-  return { kind: 'movement', type: sign === '-' ? 'expense' : 'income', amount, currency, counterparty };
+  if (sign === '+') {
+    return { kind: 'movement', type: 'income', amount, currency, counterparty };
+  }
+
+  // The fee leaves the account along with the money, so the expense is the two together.
+  const body = text.join('\n');
+  if (!FEE_LABEL.test(body)) {
+    return { kind: 'movement', type: 'expense', amount, currency, counterparty };
+  }
+  const fee = FEE.exec(body);
+  const feeAmount = fee === null ? null : parseMoneyInput(fee[1]);
+  // A fee it can't read, or one in another currency than the payment, can't be added to it.
+  if (fee === null || feeAmount === null || currencyCode(fee[2]) !== currency) {
+    return null;
+  }
+  return { kind: 'movement', type: 'expense', amount: sumMoney([amount, feeAmount]), currency, counterparty };
 };
 
 // The first thing the text says that isn't a labelled figure: the shop, the person, "Заробiтна плата".

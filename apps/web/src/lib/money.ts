@@ -5,11 +5,12 @@ import {
   percentageSchema,
   percentOf,
   roundBalanceAmount,
+  sumMoney,
 } from '@ft/shared-contracts';
 
 // Shared with the API: its external endpoints read amounts other apps send the same way, and it
 // works percentages and roundings out to the same cent the app does.
-export { convertMoney, parseMoneyInput, percentOf, roundBalanceAmount };
+export { convertMoney, parseMoneyInput, percentOf, roundBalanceAmount, sumMoney };
 
 /**
  * Turns a typed percentage into the API's form ("3,5" → "3.5"), or null unless it's above zero, at
@@ -31,25 +32,6 @@ export function moneySign(amount: string): -1 | 0 | 1 {
     return 0;
   }
   return amount.trim().startsWith('-') ? -1 : 1;
-}
-
-/**
- * The exact sum of signed money strings ("12.5" + "-0.25" → "12.25"), in integer arithmetic so no
- * float rounding creeps in. Keeps as many decimals as the most precise input.
- */
-export function sumMoney(amounts: string[]): string {
-  const scale = Math.max(0, ...amounts.map((amount) => amount.split('.')[1]?.length ?? 0));
-  const factor = 10n ** BigInt(scale);
-  const total = amounts.reduce((sum, amount) => {
-    const negative = amount.trim().startsWith('-');
-    const [whole, fraction = ''] = amount.trim().replace(/^[-+]/, '').split('.');
-    const units = BigInt(whole || '0') * factor + BigInt(fraction.padEnd(scale, '0') || '0');
-    return sum + (negative ? -units : units);
-  }, 0n);
-  const magnitude = total < 0n ? -total : total;
-  const whole = (magnitude / factor).toString();
-  const fraction = scale > 0 ? `.${(magnitude % factor).toString().padStart(scale, '0')}` : '';
-  return `${total < 0n ? '-' : ''}${whole}${fraction}`;
 }
 
 /** An amount the API will accept for a transaction: well-formed and above zero. */
