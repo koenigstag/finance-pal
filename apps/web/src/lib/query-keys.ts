@@ -25,6 +25,11 @@ export const queryKeys = {
   scheduledNotifications: (groupId: string) => ['group', groupId, 'scheduled-notifications'] as const,
   categoryRules: (groupId: string) => ['group', groupId, 'category-rules'] as const,
   recurringRules: (groupId: string) => ['group', groupId, 'recurring-rules'] as const,
+  // A month's lines and what they're measured against, kept under one prefix: a transaction moves
+  // the totals, and refreshing the lines alongside costs next to nothing.
+  budgets: (groupId: string) => ['group', groupId, 'budgets'] as const,
+  budgetLines: (groupId: string, month: string) => ['group', groupId, 'budgets', month, 'lines'] as const,
+  budgetTotals: (groupId: string, month: string) => ['group', groupId, 'budgets', month, 'totals'] as const,
   // Not group data: a device is registered by a person, for every group they are in.
   pushPublicKey: ['push', 'public-key'] as const,
   pushDevice: ['push', 'device'] as const,

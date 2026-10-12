@@ -66,6 +66,8 @@ export const categoryUsageSchema = z.object({
   // Category rules filing into it or its subcategories: deleted along with it, having nowhere left
   // to file.
   categoryRuleCount: z.number().int(),
+  // Budget lines for it, in any month: deleted along with it. Subcategories never have their own.
+  budgetCount: z.number().int(),
 });
 
 const groupPathParams = z.object({ groupId: z.string().uuid() });

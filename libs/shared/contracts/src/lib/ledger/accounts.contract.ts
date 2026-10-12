@@ -73,6 +73,8 @@ export const accountUsageSchema = z.object({
   plannedTransactionCount: z.number().int(),
   // Recurring rules that draw from or pay into it.
   recurringRuleCount: z.number().int(),
+  // Budget lines for it, in any month: deleted along with it.
+  budgetCount: z.number().int(),
 });
 
 const upsertAccountTargetBodySchema = z.object({

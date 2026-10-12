@@ -2,7 +2,7 @@ import { BadRequestException, ForbiddenException, Injectable, NotFoundException 
 import { InjectRepository } from '@nestjs/typeorm';
 import { In, IsNull, Repository } from 'typeorm';
 import { Transactional } from 'typeorm-transactional';
-import { Category, CategoryRule, CategoryType, RecurringRule, Transaction } from '@ft/api-database';
+import { Budget, Category, CategoryRule, CategoryType, RecurringRule, Transaction } from '@ft/api-database';
 import { CATEGORY_TYPES, type Action, type AppAbility, type Subject } from '@ft/shared-contracts';
 import { AbilityFactory } from '../../_core/authz/ability.factory';
 import { RealtimeEmitterService } from '../../realtime/realtime-emitter.service';
@@ -28,6 +28,7 @@ export interface CategoryUsage {
   plannedTransactionCount: number;
   recurringRuleCount: number;
   categoryRuleCount: number;
+  budgetCount: number;
 }
 
 @Injectable()
@@ -37,6 +38,7 @@ export class CategoriesService {
     @InjectRepository(Transaction) private readonly transactions: Repository<Transaction>,
     @InjectRepository(RecurringRule) private readonly recurringRules: Repository<RecurringRule>,
     @InjectRepository(CategoryRule) private readonly categoryRules: Repository<CategoryRule>,
+    @InjectRepository(Budget) private readonly budgets: Repository<Budget>,
     private readonly abilities: AbilityFactory,
     private readonly realtime: RealtimeEmitterService,
   ) {}
@@ -91,6 +93,11 @@ export class CategoriesService {
     await this.categories.update({ id: categoryId, groupId }, patch);
     if (patch.parentId !== undefined && patch.parentId !== category.parentId) {
       await this.refile(groupId, categoryId, category.parentId, patch.parentId);
+    }
+    // A budget is kept per top-level category, its subcategories counting toward it, so a category
+    // that becomes a subcategory has its money counted in its new parent's lines from now on.
+    if (category.parentId === null && patch.parentId) {
+      await this.budgets.delete({ groupId, categoryId });
     }
     const updated = await this.findOrFail(groupId, categoryId);
     this.realtime.emitToGroup(groupId, { resourceType: 'Category', resourceId: categoryId, action: 'updated', groupId });
@@ -199,7 +206,15 @@ export class CategoriesService {
       ],
     });
     const categoryRuleCount = await this.categoryRules.count({ where: { groupId, categoryId: In([categoryId, ...subcategoryIds]) } });
-    return { subcategoryCount: subcategoryIds.length, transactionCount, plannedTransactionCount, recurringRuleCount, categoryRuleCount };
+    const budgetCount = await this.budgets.count({ where: { groupId, categoryId } });
+    return {
+      subcategoryCount: subcategoryIds.length,
+      transactionCount,
+      plannedTransactionCount,
+      recurringRuleCount,
+      categoryRuleCount,
+      budgetCount,
+    };
   }
 
   /**
@@ -228,6 +243,7 @@ export class CategoriesService {
     }
     // A rule filing into a deleted category has nowhere left to file.
     await this.categoryRules.delete({ groupId, categoryId: In(ids) });
+    await this.budgets.delete({ groupId, categoryId: In(ids) });
     await this.categories.softDelete({ groupId, id: In(ids) });
     this.realtime.emitToGroup(groupId, { resourceType: 'Category', resourceId: categoryId, action: 'deleted', groupId });
     return category;
