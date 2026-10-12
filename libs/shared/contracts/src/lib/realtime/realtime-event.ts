@@ -17,6 +17,9 @@ export const REALTIME_RESOURCE_TYPES = [
   // One event per rule change, not one per occurrence it materialized — a client should refresh
   // rules, transactions and account balances together when it sees this.
   'RecurringRule',
+  // Changes only the budget lines. What the budget is measured against changes with transactions,
+  // so a client showing a budget refreshes its totals on Transaction events too.
+  'Budget',
   'Group',
   'GroupMember',
 ] as const;

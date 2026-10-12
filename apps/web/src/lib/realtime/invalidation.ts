@@ -33,17 +33,29 @@ export function invalidationFor({ resourceType, resourceId, action, groupId }: R
   switch (resourceType) {
     case 'Transaction':
       // Money moved: the list, and the balances (and usage counts) under accounts. A planned
-      // occurrence skipped or moved also changes when its series next produces one.
-      return refresh(queryKeys.transactions(groupId), queryKeys.accounts(groupId), queryKeys.recurringRules(groupId));
+      // occurrence skipped or moved also changes when its series next produces one. The budget is
+      // measured against the same money.
+      return refresh(
+        queryKeys.transactions(groupId),
+        queryKeys.accounts(groupId),
+        queryKeys.recurringRules(groupId),
+        queryKeys.budgets(groupId),
+      );
     case 'RecurringRule':
       // The rules themselves, and whatever occurrences one added or dropped: one event for them all.
-      return refresh(queryKeys.transactions(groupId), queryKeys.accounts(groupId), queryKeys.recurringRules(groupId));
+      return refresh(
+        queryKeys.transactions(groupId),
+        queryKeys.accounts(groupId),
+        queryKeys.recurringRules(groupId),
+        queryKeys.budgets(groupId),
+      );
     case 'Account':
       // A deleted account takes its transactions and recurring rules with it, and its transfers out
-      // of other accounts' balances; any other change to one stays among the accounts.
+      // of other accounts' balances; any other change to one stays among the accounts — and the
+      // budget, which drops an account turned regular and follows one's currency.
       return action === 'deleted'
         ? afterDelete(groupId, queryKeys.accountUsage(groupId, resourceId))
-        : refresh(queryKeys.accounts(groupId));
+        : refresh(queryKeys.accounts(groupId), queryKeys.budgets(groupId));
     case 'AccountTarget':
       // Nothing caches targets yet; they would sit with their account.
       return refresh(queryKeys.accounts(groupId));
@@ -52,14 +64,17 @@ export function invalidationFor({ resourceType, resourceId, action, groupId }: R
         // Its transactions and recurring rules lost it.
         return afterDelete(groupId, queryKeys.categoryUsage(groupId, resourceId));
       }
-      // An update may have moved it under another parent, which re-files its transactions; a
-      // reorder only changes where the list puts them.
+      // An update may have moved it under another parent, which re-files its transactions and
+      // drops its budget lines; a reorder only changes where the list puts them.
       return action === 'updated'
-        ? refresh(queryKeys.categories(groupId), queryKeys.transactions(groupId))
+        ? refresh(queryKeys.categories(groupId), queryKeys.transactions(groupId), queryKeys.budgets(groupId))
         : refresh(queryKeys.categories(groupId));
     case 'CategoryRule':
       // Only the rules list: what a rule filed stays where it is.
       return refresh(queryKeys.categoryRules(groupId));
+    case 'Budget':
+      // Only the budget's lines; what they're measured against hasn't moved.
+      return refresh(queryKeys.budgets(groupId));
     case 'Tag':
       // No list of tags is cached yet. Transactions carry tag ids, and a deleted tag drops out of them.
       return action === 'deleted' ? refresh(queryKeys.transactions(groupId)) : refresh();

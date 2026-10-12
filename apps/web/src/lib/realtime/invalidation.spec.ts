@@ -29,6 +29,8 @@ const cached = {
   otherCategoryUsage: queryKeys.categoryUsage(groupId, otherItemId),
   transactions: [...queryKeys.transactions(groupId), 'list', { type: 'expense' }],
   recurringRules: queryKeys.recurringRules(groupId),
+  budgetLines: queryKeys.budgetLines(groupId, '2026-10'),
+  budgetTotals: queryKeys.budgetTotals(groupId, '2026-10'),
   apiKeys: queryKeys.apiKeys(groupId),
   otherGroupAccounts: queryKeys.accounts(otherGroupId),
   otherGroupTransactions: [...queryKeys.transactions(otherGroupId), 'list', {}],
@@ -44,24 +46,25 @@ const refetched = (invalidation: Invalidation) =>
 
 const balances: Cached[] = ['accounts', 'allAccounts', 'accountUsage', 'otherAccountUsage'];
 const categoryList: Cached[] = ['categories', 'categoryUsage', 'otherCategoryUsage'];
+const budget: Cached[] = ['budgetLines', 'budgetTotals'];
 
 describe('invalidationFor', () => {
   it.each(['created', 'updated', 'deleted'] as const)(
-    'refetches the list, the balances and the series for a transaction %s',
+    'refetches the list, the balances, the series and the budget for a transaction %s',
     (action) => {
-      expect(refetched(event('Transaction', action))).toEqual([...balances, 'transactions', 'recurringRules']);
+      expect(refetched(event('Transaction', action))).toEqual([...balances, 'transactions', 'recurringRules', ...budget]);
     },
   );
 
   it.each(['created', 'updated', 'deleted'] as const)(
     'refetches the rules and what their occurrences touch for a recurring rule %s',
     (action) => {
-      expect(refetched(event('RecurringRule', action))).toEqual([...balances, 'transactions', 'recurringRules']);
+      expect(refetched(event('RecurringRule', action))).toEqual([...balances, 'transactions', 'recurringRules', ...budget]);
     },
   );
 
-  it.each(['created', 'updated', 'archived', 'restored'] as const)('refetches the accounts for an account %s', (action) => {
-    expect(refetched(event('Account', action))).toEqual(balances);
+  it.each(['created', 'updated', 'archived', 'restored'] as const)('refetches the accounts and the budget for an account %s', (action) => {
+    expect(refetched(event('Account', action))).toEqual([...balances, ...budget]);
   });
 
   it("refetches all of the group for a deleted account, except that account's usage", () => {
@@ -73,6 +76,7 @@ describe('invalidationFor', () => {
       ...categoryList,
       'transactions',
       'recurringRules',
+      ...budget,
       'apiKeys',
     ]);
   });
@@ -85,8 +89,8 @@ describe('invalidationFor', () => {
     expect(refetched(event('Category', action))).toEqual(categoryList);
   });
 
-  it('refetches the transactions as well for an updated category, which may have moved', () => {
-    expect(refetched(event('Category', 'updated'))).toEqual([...categoryList, 'transactions']);
+  it('refetches the transactions and the budget as well for an updated category, which may have moved', () => {
+    expect(refetched(event('Category', 'updated'))).toEqual([...categoryList, 'transactions', ...budget]);
   });
 
   it("refetches all of the group for a deleted category, except that category's usage", () => {
@@ -97,8 +101,13 @@ describe('invalidationFor', () => {
       'otherCategoryUsage',
       'transactions',
       'recurringRules',
+      ...budget,
       'apiKeys',
     ]);
+  });
+
+  it.each(['created', 'updated', 'deleted'] as const)('refetches only the budget for a budget line %s', (action) => {
+    expect(refetched(event('Budget', action))).toEqual(budget);
   });
 
   it('refetches the transactions only for a deleted tag, whose id they carried', () => {

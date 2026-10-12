@@ -2,7 +2,7 @@ import { ForbiddenException, Injectable, NotFoundException } from '@nestjs/commo
 import { InjectRepository } from '@nestjs/typeorm';
 import { Not, Repository } from 'typeorm';
 import { Transactional } from 'typeorm-transactional';
-import { Account, AccountTarget, AccountType, RecurringRule, Transaction } from '@ft/api-database';
+import { Account, AccountTarget, AccountType, Budget, RecurringRule, Transaction } from '@ft/api-database';
 import { ACCOUNT_TYPES, type Action, type AppAbility, type NotificationBank, type Subject } from '@ft/shared-contracts';
 import { AbilityFactory } from '../../_core/authz/ability.factory';
 import { RealtimeEmitterService } from '../../realtime/realtime-emitter.service';
@@ -28,6 +28,7 @@ export interface AccountUsage {
   transactionCount: number;
   plannedTransactionCount: number;
   recurringRuleCount: number;
+  budgetCount: number;
 }
 
 export interface UpsertAccountTargetInput {
@@ -68,6 +69,7 @@ export class AccountsService {
     @InjectRepository(AccountTarget) private readonly targets: Repository<AccountTarget>,
     @InjectRepository(Transaction) private readonly transactions: Repository<Transaction>,
     @InjectRepository(RecurringRule) private readonly recurringRules: Repository<RecurringRule>,
+    @InjectRepository(Budget) private readonly budgets: Repository<Budget>,
     private readonly abilities: AbilityFactory,
     private readonly realtime: RealtimeEmitterService,
   ) {}
@@ -111,10 +113,17 @@ export class AccountsService {
     patch: UpdateAccountInput,
   ): Promise<AccountWithBalance> {
     await this.authorize(userId, groupId, 'update', 'Account');
-    await this.findOrFail(groupId, accountId);
+    const before = await this.findOrFail(groupId, accountId);
     await this.accounts.update({ id: accountId, groupId }, { ...patch, type: patch.type as AccountType | undefined });
     if (patch.isFavourite) {
       await this.clearOtherFavourites(groupId, accountId);
+    }
+    // Only debt and savings accounts are budgeted for: a regular one has nothing to save up or pay
+    // off. And an account's lines are counted in its currency, so they follow it.
+    if (patch.type === 'regular' && before.type !== 'regular') {
+      await this.budgets.delete({ groupId, accountId });
+    } else if (patch.currencyId !== undefined && patch.currencyId !== before.currencyId) {
+      await this.budgets.update({ groupId, accountId }, { currencyId: patch.currencyId });
     }
     const updated = await this.findOrFail(groupId, accountId);
     this.realtime.emitToGroup(groupId, { resourceType: 'Account', resourceId: accountId, action: 'updated', groupId });
@@ -156,7 +165,8 @@ export class AccountsService {
     const transactionCount = await this.referencing(this.transactions, groupId, accountId).andWhere('date <= :now', { now }).getCount();
     const plannedTransactionCount = await this.referencing(this.transactions, groupId, accountId).andWhere('date > :now', { now }).getCount();
     const recurringRuleCount = await this.referencing(this.recurringRules, groupId, accountId).getCount();
-    return { transactionCount, plannedTransactionCount, recurringRuleCount };
+    const budgetCount = await this.budgets.count({ where: { groupId, accountId } });
+    return { transactionCount, plannedTransactionCount, recurringRuleCount, budgetCount };
   }
 
   /**
@@ -177,6 +187,7 @@ export class AccountsService {
     await this.referencing(this.recurringRules, groupId, accountId).softDelete().execute();
     // Balances follow on their own: the transactions trigger counts a deleted row as zero.
     await this.referencing(this.transactions, groupId, accountId).softDelete().execute();
+    await this.budgets.delete({ groupId, accountId });
     await this.accounts.softDelete({ id: accountId, groupId });
     this.realtime.emitToGroup(groupId, { resourceType: 'Account', resourceId: accountId, action: 'deleted', groupId });
     return result;

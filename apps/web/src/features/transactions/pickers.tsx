@@ -227,7 +227,8 @@ export function AccountBalance({ account, className }: { account: Account; class
   );
 }
 
-function PickerRow({
+/** One choice in a picker sheet; the budget's picker lists its categories and accounts the same way. */
+export function PickerRow({
   icon,
   label,
   aside,
