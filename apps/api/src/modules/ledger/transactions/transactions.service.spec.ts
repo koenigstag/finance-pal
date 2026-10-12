@@ -42,6 +42,7 @@ async function whereOf(filter: ListTransactionsFilter): Promise<{ sql: string; p
     unused,
     unused,
     unused,
+    unused,
     abilities,
     unused,
     unused,

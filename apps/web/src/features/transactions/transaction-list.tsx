@@ -138,9 +138,16 @@ function TransactionRow({ transaction, planned, accountsById, categoriesById, ru
   // Symbols rather than codes (₴, not UAH or грн.), as in the account list.
   const narrow = { currencyDisplay: 'narrowSymbol' } as const;
   const amount = formatMoney(transaction.amount, currencyCodes.get(transaction.currencyId), i18n.language, narrow);
+  // The other side's amount, in its currency: what a transfer received, or what went into (or came
+  // from) a category in another currency.
+  const otherCurrencyId = isTransfer
+    ? toAccount?.currencyId
+    : transaction.categoryId
+      ? categoriesById.get(transaction.categoryId)?.currencyId
+      : null;
   const received =
-    isTransfer && transaction.destAmount && toAccount
-      ? formatMoney(transaction.destAmount, currencyCodes.get(toAccount.currencyId), i18n.language, narrow)
+    transaction.destAmount && otherCurrencyId != null
+      ? formatMoney(transaction.destAmount, currencyCodes.get(otherCurrencyId), i18n.language, narrow)
       : null;
   // Converted before its date, what arrives is still an estimate that follows the rate until then.
   const estimated =

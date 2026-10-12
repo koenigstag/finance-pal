@@ -20,12 +20,13 @@ const base: Omit<SnapshotTransaction, 'type' | 'date' | 'amount' | 'accountId'> 
 };
 
 const account = { isIncludedInBalance: true, isFavourite: false, archived: false, description: null, icon: null, color: null, limitAmount: null, goalAmount: null };
-const category = { icon: null, color: null, archived: false };
+const category = { icon: null, color: null, archived: false, currency: null };
 
 /**
  * A group with a little of everything the file carries: two accounts of one name in different
  * currencies and two in the same one, a subcategory, a transfer between currencies, a series with
- * its planned transaction, and a received amount that's still an estimate.
+ * its planned transaction, a received amount that's still an estimate, and an expense in a
+ * category of another currency.
  */
 export function sampleSnapshot(): GroupSnapshot {
   return {
@@ -40,6 +41,7 @@ export function sampleSnapshot(): GroupSnapshot {
       { ...category, id: 'food', parentId: null, type: 'expense', name: 'Food', icon: 'utensils' },
       { ...category, id: 'groceries', parentId: 'food', type: 'expense', name: 'Groceries' },
       { ...category, id: 'rent', parentId: null, type: 'expense', name: 'Rent' },
+      { ...category, id: 'subscriptions', parentId: null, type: 'expense', name: 'Subscriptions', currency: 'USD' },
       { ...category, id: 'salary', parentId: null, type: 'income', name: 'Salary', archived: true },
     ],
     transactions: [
@@ -90,6 +92,16 @@ export function sampleSnapshot(): GroupSnapshot {
       },
       // Moving money into the old account, which is why the two must come back apart.
       { ...base, type: 'transfer', date: new Date('2026-09-04T10:00:00Z'), amount: '1.00', accountId: 'old-cash', toAccountId: 'cash' },
+      // Paid in hryvnias, and in the dollar category recorded in dollars as well.
+      {
+        ...base,
+        type: 'expense',
+        date: new Date('2026-09-05T08:00:00Z'),
+        amount: '820.00',
+        accountId: 'card',
+        categoryId: 'subscriptions',
+        destAmount: '20.00',
+      },
     ],
     series: [
       {

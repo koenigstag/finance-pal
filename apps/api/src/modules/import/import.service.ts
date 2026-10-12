@@ -91,7 +91,10 @@ export class ImportService {
     plan: ImportPlan,
     { timezone, now }: { timezone: string; now: Date },
   ): Promise<ImportSummary> {
-    const currencyIds = await this.currencyIdsFor(plan.accounts.map((account) => account.currency));
+    const currencyIds = await this.currencyIdsFor([
+      ...plan.accounts.map((account) => account.currency),
+      ...plan.categories.flatMap((category) => (category.currency === null ? [] : [category.currency])),
+    ]);
     const group = await this.groups.save(this.groups.create({ name: groupName, ownerId: userId }));
     await this.members.save(this.members.create({ groupId: group.id, userId, role: MemberRole.OWNER }));
 
@@ -127,6 +130,7 @@ export class ImportService {
 
     // Each takes its place among its siblings: the categories of its type at its level.
     const categoryIds = new Map<string, string>();
+    const categoryCurrencies = new Map<string, string | null>();
     const places = new Map<string, number>();
     for (const planned of plan.categories) {
       const siblings = `${planned.type}|${planned.parentKey ?? ''}`;
@@ -140,6 +144,7 @@ export class ImportService {
           name: planned.name,
           icon: planned.icon,
           color: planned.color,
+          currencyId: planned.currency === null ? null : (currencyIds.get(planned.currency) ?? null),
           sortOrder,
           archived: planned.archived,
           archivedAt: planned.archived ? now : null,
@@ -147,6 +152,7 @@ export class ImportService {
         }),
       );
       categoryIds.set(planned.key, category.id);
+      categoryCurrencies.set(planned.key, planned.currency);
     }
 
     const tagIds = new Map<string, string>();
@@ -204,10 +210,11 @@ export class ImportService {
     const links: { transactionId: string; tagId: string }[] = [];
     for (const planned of plan.transactions) {
       const currency = currencyOf.get(planned.accountKey) as { id: number; code: string };
-      const received = planned.toAccountKey === null ? undefined : currencyOf.get(planned.toAccountKey);
-      const dest = await this.destOf(planned, currency.code, received?.code, rateBetween, now);
+      const received = planned.toAccountKey === null ? undefined : currencyOf.get(planned.toAccountKey)?.code;
+      const categoryCurrency = planned.categoryKey === null ? undefined : (categoryCurrencies.get(planned.categoryKey) ?? undefined);
+      const dest = await this.destOf(planned, currency.code, received ?? categoryCurrency, rateBetween, now);
       if (dest === 'no rate') {
-        unconvertible.add(`${currency.code} to ${received?.code}`);
+        unconvertible.add(`${currency.code} to ${received}`);
         continue;
       }
       const id = randomUUID();
@@ -310,9 +317,11 @@ export class ImportService {
   }
 
   /**
-   * What a transfer received, as it's stored. Only one between two currencies receives anything of
-   * its own: the figure the file gives, or else what was sent converted at the rate now — final for
-   * a date that's passed, an estimate that follows the rate until the day for one ahead.
+   * The amount on the other side, as it's stored: what a transfer received, or an expense's or an
+   * income's amount in its category's currency (`to`). Only one between two currencies has one of
+   * its own: the figure the file gives, or else what the account gave converted at the rate now —
+   * final for a date that's passed, an estimate that follows the rate until the day for one ahead.
+   * Without a rate, a transfer can't be recorded, and an expense or an income goes without it.
    */
   private async destOf(
     planned: PlannedTransaction,
@@ -328,7 +337,10 @@ export class ImportService {
       return { destAmount: planned.destAmount, destAmountAsOf: null };
     }
     const rate = await rateBetween(from, to);
-    return rate === null ? 'no rate' : { destAmount: convertedDest(planned.amount, rate), destAmountAsOf: now };
+    if (rate === null) {
+      return planned.toAccountKey === null ? { destAmount: null, destAmountAsOf: null } : 'no rate';
+    }
+    return { destAmount: convertedDest(planned.amount, rate), destAmountAsOf: now };
   }
 
   // One lookup per pair of currencies for the whole import, however many rows share it.
@@ -410,6 +422,9 @@ export class ImportService {
             type: parsed.type as CategoryType,
             icon: parsed.icon,
             color: parsed.color,
+            // One the app doesn't have is left off, the category kept: its transactions then
+            // record only their account's amount, as in a category without a currency.
+            currencyId: parentId === null && parsed.currencyCode !== null ? (currencyIds.get(parsed.currencyCode) ?? null) : null,
             sortOrder: parsed.sortOrder,
             archived: parsed.archived,
             archivedAt: parsed.archived ? new Date() : null,
@@ -476,7 +491,9 @@ export class ImportService {
 
       // A repeating entry becomes a rule starting at its next due date, which writes that date's
       // transaction itself. Not a transfer between currencies, though: a rule carries one amount
-      // for both sides, so that one stays the single planned transaction it was.
+      // for both sides, so that one stays the single planned transaction it was. An expense or an
+      // income in a category of another currency does become one: its category's amount is
+      // converted at the rate on each date, and moves no balance either way.
       const oneCurrency = toAccountId === null || currencyOf.get(parsed.toAccountSourceId ?? -1) === fields.currencyId;
       if (parsed.recurrence && oneCurrency) {
         rules.push(
@@ -517,9 +534,12 @@ export class ImportService {
     };
   }
 
+  // Every account's currency has to be one the app has; a category's is looked up alongside, and
+  // one the app doesn't have is simply missing from what this returns.
   private async currencyIdsByCode(backup: ParsedBackup): Promise<Map<string, number>> {
     const codes = [...new Set(backup.accounts.map((account) => account.currencyCode))];
-    const known = await this.currencies.find({ where: { code: In(codes) } });
+    const categoryCodes = backup.categories.flatMap((category) => (category.currencyCode === null ? [] : [category.currencyCode]));
+    const known = await this.currencies.find({ where: { code: In([...new Set([...codes, ...categoryCodes])]) } });
     const missing = codes.filter((code) => !known.some((currency) => currency.code === code));
     if (missing.length > 0) {
       throw new UnprocessableEntityException(`Currencies not supported yet: ${missing.join(', ')}`);

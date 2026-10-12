@@ -135,6 +135,8 @@ export const CATEGORIES = table({
     { key: 'name', header: 'Name', type: 'text', width: 22 },
     { key: 'type', header: 'Type', type: 'text', width: 10 },
     { key: 'parent', header: 'Parent', type: 'text', width: 22 },
+    // Not just "Currency": with that, a sheet of categories would read as one of accounts.
+    { key: 'currency', header: 'Default currency', type: 'text', width: 9 },
     { key: 'icon', header: 'Icon', type: 'text', width: 16 },
     { key: 'color', header: 'Color', type: 'text', width: 10, aliases: ['colour'] },
     { key: 'archived', header: 'Archived', type: 'boolean', width: 10 },

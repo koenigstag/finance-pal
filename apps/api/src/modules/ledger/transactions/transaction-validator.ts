@@ -49,11 +49,13 @@ export function keptRoundBalanceTo(patch: AmountSourcePatch, existing: { roundBa
 // its own subcategories.
 export type CategoryPair = Pick<TransactionShape, 'categoryId' | 'subcategoryId'>;
 
-// A valid shape, as it's to be stored: its category pair, and the currencies of its accounts — the
-// transaction's own, which is its account's, and for a transfer the one it arrives in.
+// A valid shape, as it's to be stored: its category pair, and the currencies of its two sides — the
+// transaction's own, which is its account's, and the other side's, where it has one: the account a
+// transfer arrives in, or the category an expense or an income is filed under, when that category
+// has a currency (see destAmount).
 export interface Validated extends CategoryPair {
   currencyId: number;
-  toCurrencyId: number | null;
+  destCurrencyId: number | null;
 }
 
 /**
@@ -154,7 +156,7 @@ export class TransactionValidator {
 
   /**
    * Throws for a shape that can't be stored; otherwise returns its category pair to store, and the
-   * currencies of its accounts.
+   * currencies of its two sides.
    *
    * `estimate`: a planned transaction or a series, whose amount from the balance is only what it
    * comes to as things stand. That may be nothing for now — a balance on a round figure already, an
@@ -203,29 +205,35 @@ export class TransactionValidator {
     if (!account) {
       throw new NotFoundException('Account not found');
     }
-    let toCurrencyId: number | null = null;
+    let destCurrencyId: number | null = null;
     if (shape.toAccountId) {
       const toAccount = await this.accounts.findOneBy({ id: shape.toAccountId, groupId });
       if (!toAccount) {
         throw new NotFoundException('Destination account not found');
       }
-      toCurrencyId = toAccount.currencyId;
+      destCurrencyId = toAccount.currencyId;
     }
-    const pair = await this.categoryPair(groupId, shape.categoryId, shape.subcategoryId);
-    return { ...pair, currencyId: account.currencyId, toCurrencyId };
+    const { currencyId: categoryCurrencyId, ...pair } = await this.categoryPair(groupId, shape.categoryId, shape.subcategoryId);
+    return { ...pair, currencyId: account.currencyId, destCurrencyId: destCurrencyId ?? categoryCurrencyId };
   }
 
   /**
    * A subcategory given as the category — the only way to pick one before subcategories had a
    * field of their own, and still what an out-of-date client sends — is read as that subcategory
    * under its parent, rather than refused.
+   *
+   * With the pair, the currency the category is in: the top-level category's own, if it has one.
    */
-  private async categoryPair(groupId: string, categoryId: string | null, subcategoryId: string | null): Promise<CategoryPair> {
+  private async categoryPair(
+    groupId: string,
+    categoryId: string | null,
+    subcategoryId: string | null,
+  ): Promise<CategoryPair & { currencyId: number | null }> {
     if (!categoryId) {
       if (subcategoryId) {
         throw new BadRequestException('A subcategory needs its category');
       }
-      return { categoryId: null, subcategoryId: null };
+      return { categoryId: null, subcategoryId: null, currencyId: null };
     }
 
     const category = await this.categories.findOneBy({ id: categoryId, groupId });
@@ -236,10 +244,11 @@ export class TransactionValidator {
       if (subcategoryId && subcategoryId !== category.id) {
         throw new BadRequestException('categoryId must be a top-level category');
       }
-      return { categoryId: category.parentId, subcategoryId: category.id };
+      const parent = await this.categories.findOneBy({ id: category.parentId, groupId });
+      return { categoryId: category.parentId, subcategoryId: category.id, currencyId: parent?.currencyId ?? null };
     }
     if (!subcategoryId) {
-      return { categoryId, subcategoryId: null };
+      return { categoryId, subcategoryId: null, currencyId: category.currencyId };
     }
 
     const subcategory = await this.categories.findOneBy({ id: subcategoryId, groupId });
@@ -249,6 +258,6 @@ export class TransactionValidator {
     if (subcategory.parentId !== category.id) {
       throw new BadRequestException('The subcategory belongs to another category');
     }
-    return { categoryId, subcategoryId };
+    return { categoryId, subcategoryId, currencyId: category.currencyId };
   }
 }

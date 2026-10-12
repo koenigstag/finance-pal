@@ -72,16 +72,19 @@ describe.each([
   });
 
   it('brings back the categories, each before its subcategories', () => {
-    expect(imported.categories.map(({ name, type, parentKey, archived }) => ({ name, type, parentKey, archived }))).toEqual([
-      { name: 'Food', type: 'expense', parentKey: null, archived: false },
-      { name: 'Rent', type: 'expense', parentKey: null, archived: false },
-      { name: 'Salary', type: 'income', parentKey: null, archived: true },
-      { name: 'Groceries', type: 'expense', parentKey: 'expense|food', archived: false },
+    expect(
+      imported.categories.map(({ name, type, parentKey, archived, currency }) => ({ name, type, parentKey, archived, currency })),
+    ).toEqual([
+      { name: 'Food', type: 'expense', parentKey: null, archived: false, currency: null },
+      { name: 'Rent', type: 'expense', parentKey: null, archived: false, currency: null },
+      { name: 'Subscriptions', type: 'expense', parentKey: null, archived: false, currency: 'USD' },
+      { name: 'Salary', type: 'income', parentKey: null, archived: true, currency: null },
+      { name: 'Groceries', type: 'expense', parentKey: 'expense|food', archived: false, currency: null },
     ]);
   });
 
   it('brings back the transactions as they were', () => {
-    const [salary, groceries, transfer, rent, planned, moved] = imported.transactions;
+    const [salary, groceries, transfer, rent, planned, moved, subscription] = imported.transactions;
     expect(salary).toMatchObject({ type: 'income', amount: '3000.00', accountKey: 'UAH|cash', categoryKey: 'income|salary' });
     expect(salary.date.toISOString()).toBe('2026-09-01T09:00:00.000Z');
     expect(groceries).toMatchObject({
@@ -96,6 +99,7 @@ describe.each([
     // Still an estimate when it was written: converted afresh at the rate.
     expect(planned.destAmount).toBeNull();
     expect(moved).toMatchObject({ accountKey: 'UAH|cash (2)', toAccountKey: 'UAH|cash' });
+    expect(subscription).toMatchObject({ accountKey: 'UAH|card', categoryKey: 'expense|subscriptions', amount: '820.00', destAmount: '20.00' });
     expect(imported.tags).toEqual(['home', 'weekly']);
 
     // The series' planned transaction goes on as the series' own, untouched.
@@ -287,6 +291,51 @@ describe('a table typed in by hand', () => {
     expect(imported.transactions.map((transaction) => transaction.amount)).toEqual(['0', '0']);
     const problems = problemsOf(() => plan([csv('transactions.csv', 'Date,Type,Amount,Currency,Account,Percentage', '2026-09-01,expense,0,UAH,Card,5')]));
     expect(problems).toEqual(['Transactions, row 2: Amount must be greater than zero']);
+  });
+
+  it('takes an Amount received only from a category in another currency', () => {
+    const categories = csv(
+      'categories.csv',
+      'Name,Type,Parent,Default currency',
+      'Subscriptions,expense,,USD',
+      'Streaming,expense,Subscriptions,',
+      'Food,expense,,UAH',
+      'Rent,expense,,',
+    );
+    const imported = plan([
+      categories,
+      csv(
+        'transactions.csv',
+        'Date,Type,Amount,Currency,Account,Category,Subcategory,Amount received',
+        '2026-09-01,expense,820,UAH,Card,Subscriptions,Streaming,20',
+        '2026-09-02,expense,820,UAH,Card,Subscriptions,,',
+        '2026-09-03,expense,100,UAH,Card,Food,,100',
+      ),
+    ]);
+    expect(imported.transactions.map((transaction) => transaction.destAmount)).toEqual(['20', null, null]);
+
+    const problems = problemsOf(() =>
+      plan([
+        categories,
+        csv(
+          'transactions.csv',
+          'Date,Type,Amount,Currency,Account,Category,Amount received',
+          '2026-09-01,expense,100,UAH,Card,Rent,5',
+          '2026-09-02,expense,100,UAH,Card,Food,5',
+        ),
+      ]),
+    );
+    expect(problems).toEqual([
+      'Transactions, row 2: Only a transfer, or an expense or an income in a category with a Default currency, has an Amount received',
+      "Transactions, row 3: Amount received differs from Amount, and the category is in the account's currency",
+    ]);
+  });
+
+  it('leaves a subcategory in its parent’s currency', () => {
+    const problems = problemsOf(() =>
+      plan([csv('categories.csv', 'Name,Type,Parent,Default currency', 'Subscriptions,expense,,USD', 'Streaming,expense,Subscriptions,EUR')]),
+    );
+    expect(problems).toEqual(["Categories, row 3: A subcategory is in its parent's currency: leave its Default currency empty"]);
   });
 });
 

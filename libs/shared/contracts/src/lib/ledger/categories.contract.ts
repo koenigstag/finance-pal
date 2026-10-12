@@ -16,6 +16,10 @@ export const categorySchema = z.object({
   name: z.string().min(1).max(120),
   icon: z.string().nullable(),
   color: z.string().nullable(),
+  // A top-level category's own currency, or null for none. An expense or an income filed under it
+  // from an account in another currency records the amount in this currency too, as its
+  // destAmount. Always null on a subcategory, which is in its parent's currency.
+  currencyId: z.number().int().nullable(),
   sortOrder: z.number().int(),
   archived: z.boolean(),
   archivedAt: z.string().datetime().nullable(),
@@ -35,11 +39,19 @@ const createCategoryBodySchema = z.object({
     .regex(/^#[0-9a-fA-F]{6}$/, 'color must be #RRGGBB')
     .nullable()
     .optional(),
+  // Top-level categories only: a subcategory given one is refused. Null, or left out, is none.
+  currencyId: z.number().int().nullable().optional(),
   sortOrder: z.number().int().optional(),
 });
 
 // The type is fixed once a category exists: its subcategories, transactions and recurring rules
 // were all filed under that type.
+//
+// So is the currency, once there's a transaction filed under the category or its subcategories:
+// their amounts in it were recorded in that currency. Until then it can change, and a category
+// without one can be given one at any time. Moving a category between parents is held to the
+// same, since a subcategory is in its parent's currency; one leaving its parent keeps the parent's
+// currency unless the update names another.
 const updateCategoryBodySchema = createCategoryBodySchema.omit({ type: true }).partial();
 
 // A whole level at a time, rather than one category's new place: the client already holds the

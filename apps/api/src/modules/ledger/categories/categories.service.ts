@@ -2,7 +2,7 @@ import { BadRequestException, ForbiddenException, Injectable, NotFoundException 
 import { InjectRepository } from '@nestjs/typeorm';
 import { In, IsNull, Repository } from 'typeorm';
 import { Transactional } from 'typeorm-transactional';
-import { Budget, Category, CategoryRule, CategoryType, RecurringRule, Transaction } from '@ft/api-database';
+import { Budget, Category, CategoryRule, CategoryType, Currency, RecurringRule, Transaction } from '@ft/api-database';
 import { CATEGORY_TYPES, type Action, type AppAbility, type Subject } from '@ft/shared-contracts';
 import { AbilityFactory } from '../../_core/authz/ability.factory';
 import { RealtimeEmitterService } from '../../realtime/realtime-emitter.service';
@@ -16,11 +16,14 @@ export interface CreateCategoryInput {
   name: string;
   icon?: string | null;
   color?: string | null;
+  currencyId?: number | null;
   sortOrder?: number;
 }
 
 // No type: it's fixed after creation (see the update contract).
 export type UpdateCategoryInput = Partial<Omit<CreateCategoryInput, 'type'>>;
+
+const SUBCATEGORY_CURRENCY = "A subcategory is in its parent's currency and cannot have one of its own";
 
 export interface CategoryUsage {
   subcategoryCount: number;
@@ -39,6 +42,7 @@ export class CategoriesService {
     @InjectRepository(RecurringRule) private readonly recurringRules: Repository<RecurringRule>,
     @InjectRepository(CategoryRule) private readonly categoryRules: Repository<CategoryRule>,
     @InjectRepository(Budget) private readonly budgets: Repository<Budget>,
+    @InjectRepository(Currency) private readonly currencies: Repository<Currency>,
     private readonly abilities: AbilityFactory,
     private readonly realtime: RealtimeEmitterService,
   ) {}
@@ -61,11 +65,18 @@ export class CategoriesService {
     await this.authorize(userId, groupId, 'create', 'Category');
     if (input.parentId) {
       await this.assertValidParent(groupId, input.parentId, input.type);
+      if (input.currencyId != null) {
+        throw new BadRequestException(SUBCATEGORY_CURRENCY);
+      }
+    }
+    if (input.currencyId != null) {
+      await this.assertCurrencyExists(input.currencyId);
     }
     const category = this.categories.create({
       ...input,
       type: input.type as CategoryType,
       parentId: input.parentId ?? null,
+      currencyId: input.currencyId ?? null,
       groupId,
       createdBy: userId,
     });
@@ -90,7 +101,9 @@ export class CategoriesService {
       }
     }
 
-    await this.categories.update({ id: categoryId, groupId }, patch);
+    const parentId = patch.parentId !== undefined ? patch.parentId : category.parentId;
+    const currencyId = await this.currencyAfter(groupId, category, parentId, patch.currencyId);
+    await this.categories.update({ id: categoryId, groupId }, { ...patch, currencyId });
     if (patch.parentId !== undefined && patch.parentId !== category.parentId) {
       await this.refile(groupId, categoryId, category.parentId, patch.parentId);
     }
@@ -233,9 +246,13 @@ export class CategoriesService {
     // Plain column updates: a category isn't part of an account balance, and an occurrence whose
     // rule loses the same category stays in step with it, so nothing here counts as customizing.
     if (category.parentId === null) {
-      // Its subcategories' transactions are filed under its id too, so this reaches them all.
+      // Its subcategories' transactions are filed under its id too, so this reaches them all. An
+      // amount in the category's currency goes with it: uncategorized, there's no currency it's in.
       const uncategorized = { categoryId: null, subcategoryId: null };
-      await this.transactions.update({ groupId, categoryId, deletedAt: IsNull() }, uncategorized);
+      await this.transactions.update(
+        { groupId, categoryId, deletedAt: IsNull() },
+        { ...uncategorized, destAmount: null, destAmountAsOf: null },
+      );
       await this.recurringRules.update({ groupId, categoryId }, uncategorized);
     } else {
       await this.transactions.update({ groupId, subcategoryId: categoryId, deletedAt: IsNull() }, { subcategoryId: null });
@@ -259,6 +276,57 @@ export class CategoriesService {
     }
     if (parent.parentId !== null) {
       throw new BadRequestException('A subcategory cannot have subcategories of its own');
+    }
+  }
+
+  /**
+   * The currency the category holds after an update that puts it under `parentId` (null: at the top
+   * level) and names `requested` (undefined: names none). A subcategory holds none — it's in its
+   * parent's — and one coming out from under its parent stays in that currency unless another is
+   * named.
+   *
+   * The currency its transactions are in — its own, or its parent's for a subcategory — may only
+   * change while there's none, or no transaction filed under it: an amount recorded in one currency
+   * would otherwise read as another.
+   */
+  private async currencyAfter(
+    groupId: string,
+    category: Category,
+    parentId: string | null,
+    requested: number | null | undefined,
+  ): Promise<number | null> {
+    if (parentId !== null && requested != null) {
+      throw new BadRequestException(SUBCATEGORY_CURRENCY);
+    }
+    const before = await this.currencyIn(groupId, category.parentId, category.currencyId);
+    const own = parentId !== null ? null : requested !== undefined ? requested : before;
+    const after = await this.currencyIn(groupId, parentId, own);
+    if (after === before) {
+      return own;
+    }
+    if (before !== null && (await this.transactionsIn(groupId, category.id).getExists())) {
+      throw new BadRequestException(
+        parentId !== category.parentId
+          ? 'A category with transactions cannot move under a category in another currency'
+          : 'The currency of a category with transactions cannot be changed',
+      );
+    }
+    if (own !== null) {
+      await this.assertCurrencyExists(own);
+    }
+    return own;
+  }
+
+  // The currency what's filed under a category is in: a top-level category's own, a subcategory's
+  // parent's.
+  private async currencyIn(groupId: string, parentId: string | null, own: number | null): Promise<number | null> {
+    return parentId === null ? own : (await this.findOrFail(groupId, parentId)).currencyId;
+  }
+
+  // Up front, rather than left to the foreign key: that would surface as a bare 500.
+  private async assertCurrencyExists(currencyId: number): Promise<void> {
+    if (!(await this.currencies.existsBy({ id: currencyId }))) {
+      throw new BadRequestException('Unknown currency');
     }
   }
 
