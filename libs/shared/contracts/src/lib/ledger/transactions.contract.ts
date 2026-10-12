@@ -87,6 +87,7 @@ const updateTransactionBodySchema = createTransactionBodySchema.partial();
 const transactionListQuerySchema = z.object({
   cursor: z.string().optional(),
   limit: z.coerce.number().int().min(1).max(200).optional(),
+  // Transactions from the account, and transfers into it as well.
   accountId: z.string().uuid().optional(),
   // A category or a subcategory; a category matches its subcategories' transactions as well.
   categoryId: z.string().uuid().optional(),

@@ -113,7 +113,8 @@ export class TransactionsService {
       );
     }
     if (filter.accountId) {
-      qb.andWhere('t.account_id = :accountId', { accountId: filter.accountId });
+      // Either side of a transfer: one into the account moves its balance as much as one out of it.
+      qb.andWhere('(t.account_id = :accountId OR t.to_account_id = :accountId)', { accountId: filter.accountId });
     }
     if (filter.categoryId) {
       // Either column: a category holds its subcategories' transactions too, in category_id.
