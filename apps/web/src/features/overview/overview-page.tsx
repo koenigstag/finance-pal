@@ -6,7 +6,7 @@ import { PageHeader } from '@/components/page-header';
 import { Button } from '@/components/ui/button';
 import { Tabs, TabsContent, TabsList, TabsTrigger } from '@/components/ui/tabs';
 import { useAccounts } from '@/features/accounts/queries';
-import { useCategories, type Category } from '@/features/categories/queries';
+import { useCategories } from '@/features/categories/queries';
 import { useConversionLookup } from '@/features/currencies/queries';
 import { useGroupScope } from '@/features/groups/group-context';
 import { useProfile } from '@/features/profile/queries';
@@ -14,7 +14,7 @@ import { parseMonthParam, shiftMonth, toMonthParam } from '@/lib/dates';
 import { usePageMonth } from '@/lib/page-month';
 import { useSwipeTrack } from '@/lib/swipe';
 import { capitalizeFirst } from '@/lib/text';
-import { MonthOverview } from './month-overview';
+import { MonthOverview, type SelectableSource } from './month-overview';
 import { OVERVIEW_TYPES, type OverviewType, type OverviewViewInput } from './overview-model';
 
 export function OverviewPage() {
@@ -61,9 +61,13 @@ export function OverviewPage() {
     i18n.language,
   );
 
-  // The month's transactions behind a category's row.
-  const showTransactions = (category: Category) =>
-    void navigate(`/g/${group.id}/transactions?month=${monthKey}&category=${category.id}`);
+  // The month's transactions behind a row. A debt's are its transfers both ways, into it and out of
+  // it, while its row adds up one way only: paying it off on the expenses tab, borrowing on income.
+  const showTransactions = (source: SelectableSource) => {
+    const filter =
+      source.kind === 'category' ? `category=${source.category.id}` : `account=${source.account.id}&type=transfer`;
+    void navigate(`/g/${group.id}/transactions?month=${monthKey}&${filter}`);
+  };
 
   return (
     // Fills the content area instead of growing past it, so only the month below scrolls.
@@ -110,7 +114,7 @@ export function OverviewPage() {
                   accounts={accounts.data ?? []}
                   mainCurrencyId={profile.data?.mainCurrencyId}
                   rate={rate}
-                  onSelectCategory={showTransactions}
+                  onSelect={showTransactions}
                 />
               ))}
             </div>
