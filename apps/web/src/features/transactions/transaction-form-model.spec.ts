@@ -8,6 +8,7 @@ import {
   isAhead,
   isPlannedDay,
   isPlannedOccurrence,
+  needsDestAmount,
   pickDefaultAccountId,
   plannedToRecurringRuleBody,
   ruleToFormValues,
@@ -24,6 +25,10 @@ const usd = { id: '00000000-0000-4000-8000-000000000001', currencyId: 1 };
 const usd2 = { id: '00000000-0000-4000-8000-000000000002', currencyId: 1 };
 const eur = { id: '00000000-0000-4000-8000-000000000003', currencyId: 2 };
 const accounts = [usd, usd2, eur];
+const euroCategory = { id: 'travel', currencyId: 2 };
+const dollarCategory = { id: 'subscriptions', currencyId: 1 };
+const plainCategory = { id: 'food', currencyId: null };
+const categories = [euroCategory, dollarCategory, plainCategory];
 const now = new Date(2026, 8, 17, 15, 30);
 const messages = {
   required: 'required',
@@ -114,11 +119,11 @@ describe('transactionFormSchema', () => {
 
 describe('amountFormSchema', () => {
   const sheetIssues = (sides: Partial<TransactionFormValues>, overrides: Partial<TransactionFormValues>) => {
-    const { type, accountId, toAccountId, amount, destAmount, percentage, percentageBase, roundBalanceTo } = values({
+    const { type, accountId, toAccountId, categoryId, amount, destAmount, percentage, percentageBase, roundBalanceTo } = values({
       ...sides,
       ...overrides,
     });
-    const result = amountFormSchema({ type, accountId, toAccountId }, accounts, messages).safeParse({
+    const result = amountFormSchema({ type, accountId, toAccountId, categoryId }, accounts, messages, false, null, categories).safeParse({
       amount,
       destAmount,
       percentage,
@@ -139,7 +144,7 @@ describe('amountFormSchema', () => {
   it('lets an amount from the balance be nothing for now when the transaction is scheduled', () => {
     const scheduledIssues = (overrides: Partial<TransactionFormValues>) => {
       const { amount, destAmount, percentage, percentageBase, roundBalanceTo } = values(overrides);
-      const result = amountFormSchema({ type: 'expense', accountId: usd.id, toAccountId: '' }, accounts, messages, true).safeParse(
+      const result = amountFormSchema({ type: 'expense', accountId: usd.id, toAccountId: '', categoryId: '' }, accounts, messages, true).safeParse(
         { amount, destAmount, percentage, percentageBase, roundBalanceTo },
       );
       return result.success ? {} : Object.fromEntries(result.error.issues.map((issue) => [issue.path.join('.'), issue.message]));
@@ -155,6 +160,24 @@ describe('amountFormSchema', () => {
     expect(sheetIssues({ type: 'transfer', toAccountId: usd2.id }, {})).toEqual({});
     expect(sheetIssues({ type: 'transfer', toAccountId: eur.id }, {})).toEqual({ destAmount: 'amount' });
     expect(sheetIssues({ type: 'transfer', toAccountId: eur.id }, { destAmount: '9,20' })).toEqual({});
+  });
+
+  it('never asks for the amount in a category of another currency, but checks one typed', () => {
+    expect(sheetIssues({ categoryId: euroCategory.id }, {})).toEqual({});
+    expect(sheetIssues({ categoryId: euroCategory.id }, { destAmount: '9,20' })).toEqual({});
+    expect(sheetIssues({ categoryId: euroCategory.id }, { destAmount: 'x' })).toEqual({ destAmount: 'amount' });
+  });
+});
+
+describe('needsDestAmount', () => {
+  it('records a second amount for a category in another currency than the account', () => {
+    const sides = (categoryId: string, type: TransactionFormValues['type'] = 'expense') =>
+      needsDestAmount({ type, accountId: usd.id, toAccountId: '', categoryId }, accounts, categories);
+    expect(sides(euroCategory.id)).toBe(true);
+    expect(sides(euroCategory.id, 'income')).toBe(true);
+    expect(sides(dollarCategory.id)).toBe(false);
+    expect(sides(plainCategory.id)).toBe(false);
+    expect(sides('')).toBe(false);
   });
 });
 
@@ -307,6 +330,28 @@ describe('between two currencies', () => {
   it('converts itself by a rate typed by hand, which the API has no rate for', () => {
     // 100 USD at 0.87.
     expect(toTransactionBody(transfer({}), accounts, undefined, now, typedByHand).destAmount).toBe('87.00');
+  });
+
+  describe('into a category of another currency', () => {
+    const expense = (overrides: Partial<TransactionFormValues>) =>
+      values({ type: 'expense', categoryId: euroCategory.id, amount: '100', destAmount: '', ...overrides });
+    const body = (overrides: Partial<TransactionFormValues>, conversionOf?: () => { rate: string; fetched: boolean } | null) =>
+      toTransactionBody(expense(overrides), accounts, undefined, now, conversionOf, categories);
+
+    it('goes without the category’s amount when there is no rate, rather than asking for it', () => {
+      expect(issues(expense({}), { conversionOf: noRate, categories })).toEqual({});
+      expect(issues(expense({ repeat: 'month:1' }), { conversionOf: noRate, categories })).toEqual({});
+      expect(issues(expense({ destAmount: 'abc' }), { conversionOf: fetched, categories })).toEqual({ destAmount: 'amount' });
+    });
+
+    it('sends the category’s amount as a transfer sends what arrived', () => {
+      expect(body({ destAmount: '92' }, fetched).destAmount).toBe('92');
+      expect(body({}, fetched).destAmount).toBeNull();
+      expect(body({}, typedByHand).destAmount).toBe('87.00');
+      // Nothing to send for one in the account's own currency, or in none.
+      expect(body({ categoryId: dollarCategory.id, destAmount: '92' }, fetched).destAmount).toBeNull();
+      expect(body({ categoryId: plainCategory.id, destAmount: '92' }, fetched).destAmount).toBeNull();
+    });
   });
 });
 

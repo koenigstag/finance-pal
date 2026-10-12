@@ -18,6 +18,7 @@ const USD = 2;
 
 const category = (id: string, name: string, type: Category['type'], sortOrder: number): Category => ({
   id,
+  currencyId: null,
   groupId,
   parentId: null,
   type,

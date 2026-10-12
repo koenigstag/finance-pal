@@ -4,6 +4,7 @@ import { filedUnder } from './filed-under';
 
 const category = (id: string, overrides: Partial<Category>): Category => ({
   id,
+  currencyId: null,
   groupId: 'g',
   parentId: null,
   type: 'expense',

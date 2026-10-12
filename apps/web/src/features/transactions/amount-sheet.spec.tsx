@@ -4,6 +4,7 @@ import type { ReactNode } from 'react';
 import { describe, expect, it, vi } from 'vitest';
 import '@/i18n';
 import type { Account } from '@/features/accounts/queries';
+import type { Category } from '@/features/categories/queries';
 import { queryKeys } from '@/lib/query-keys';
 import { AmountSheet } from './amount-sheet';
 import type { AmountValues, TransactionSides } from './transaction-form-model';
@@ -35,6 +36,24 @@ const account = (id: string, currencyId: number): Account => ({
 // to the third crosses.
 const accounts = [account('wallet', 1), account('savings', 1), account('euros', 2)];
 
+// One in euros, one in dollars, and one with no currency of its own.
+const category = (id: string, currencyId: number | null): Category => ({
+  id,
+  groupId,
+  parentId: null,
+  type: 'expense',
+  name: id,
+  icon: null,
+  color: null,
+  currencyId,
+  sortOrder: 0,
+  archived: false,
+  archivedAt: null,
+  createdAt: '2026-01-01T00:00:00.000Z',
+  updatedAt: '2026-01-01T00:00:00.000Z',
+});
+const categories = [category('travel', 2), category('subscriptions', 1), category('food', null)];
+
 const values: AmountValues = { amount: '0', destAmount: '', percentage: '', percentageBase: '', roundBalanceTo: '' };
 
 const wrapper = () => {
@@ -58,6 +77,7 @@ const open = (sides: TransactionSides) =>
       onOpenChange={() => undefined}
       sides={sides}
       accounts={accounts}
+      categories={categories}
       scheduled={false}
       repeats={false}
       conversion={null}
@@ -77,7 +97,7 @@ const sideBySide = () => !!screen.getByRole('dialog').querySelector('.grid-cols-
 
 describe('AmountSheet', () => {
   it('asks for one amount within a currency, and gives it the row', () => {
-    open({ type: 'transfer', accountId: 'wallet', toAccountId: 'savings' });
+    open({ type: 'transfer', accountId: 'wallet', toAccountId: 'savings', categoryId: '' });
 
     // What leaves is what arrives, so there is one figure and nothing to set it beside.
     expect(amountFields()).toEqual(['Amount (USD)']);
@@ -85,21 +105,35 @@ describe('AmountSheet', () => {
   });
 
   it('asks for both amounts across currencies, side by side', () => {
-    open({ type: 'transfer', accountId: 'wallet', toAccountId: 'euros' });
+    open({ type: 'transfer', accountId: 'wallet', toAccountId: 'euros', categoryId: '' });
 
     expect(amountFields()).toEqual(['Amount withdrawn (USD)', 'Amount received (EUR)']);
     expect(sideBySide()).toBe(true);
   });
 
-  it('asks for one amount for anything that is not a transfer', () => {
-    open({ type: 'expense', accountId: 'wallet', toAccountId: '' });
+  it('asks for one amount for an expense in no category, or one in the account’s currency or none', () => {
+    for (const categoryId of ['', 'subscriptions', 'food']) {
+      const { unmount } = open({ type: 'expense', accountId: 'wallet', toAccountId: '', categoryId });
+      expect(amountFields()).toEqual(['Amount (USD)']);
+      expect(sideBySide()).toBe(false);
+      unmount();
+    }
+  });
 
-    expect(amountFields()).toEqual(['Amount (USD)']);
-    expect(sideBySide()).toBe(false);
+  it('asks for the amount in a category of another currency as well', () => {
+    const { unmount } = open({ type: 'expense', accountId: 'wallet', toAccountId: '', categoryId: 'travel' });
+    expect(amountFields()).toEqual(['Amount withdrawn (USD)', 'In category (EUR)']);
+    expect(sideBySide()).toBe(true);
+    // Without a rate there's nothing to convert it at, and it's only recorded when it's typed.
+    expect(screen.getByText(/No exchange rate for these currencies/)).toBeTruthy();
+    unmount();
+
+    open({ type: 'income', accountId: 'wallet', toAccountId: '', categoryId: 'travel' });
+    expect(amountFields()).toEqual(['Amount (USD)', 'In category (EUR)']);
   });
 
   it('fills an amount in from the calculator, without its sign', () => {
-    open({ type: 'expense', accountId: 'wallet', toAccountId: '' });
+    open({ type: 'expense', accountId: 'wallet', toAccountId: '', categoryId: '' });
 
     fireEvent.click(screen.getByRole('button', { name: 'Calculate the amount' }));
     for (const key of ['2', '0', 'Minus', '5', '0', 'Equals', 'Use this amount']) {

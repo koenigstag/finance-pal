@@ -16,6 +16,7 @@ const group = { id: groupId, name: 'Home', ownerId: 'u1', archivedAt: null, role
 
 const category = (id: string, overrides: Partial<Category> = {}): Category => ({
   id,
+  currencyId: null,
   groupId,
   parentId: null,
   type: 'expense',

@@ -83,8 +83,8 @@ describe('encodeTableCsv', () => {
     expect(header).toEqual(TRANSACTIONS.columns.map((column) => column.header));
     expect(line.slice(0, 3)).toEqual(['2026-09-21 14:30:05', 'expense', '120.50']);
 
-    const [, category] = decodeCsv(encodeTableCsv(CATEGORIES, [['Food', 'expense', null, null, null, true]]));
-    expect(category).toEqual(['Food', 'expense', '', '', '', 'true']);
+    const [, category] = decodeCsv(encodeTableCsv(CATEGORIES, [['Food', 'expense', null, 'USD', null, null, true]]));
+    expect(category).toEqual(['Food', 'expense', '', 'USD', '', '', 'true']);
   });
 });
 

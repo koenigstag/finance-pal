@@ -150,10 +150,46 @@ describe('parseOneMoneyBackup', () => {
     const { categories } = parseOneMoneyBackup(sampleBackup());
 
     // In the order the app had them, with the one it never placed last.
+    const top = { color: null, archived: false, parentSourceId: null, currencyCode: 'UAH' };
     expect(categories).toEqual([
-      { sourceId: 111, name: 'Зарплата', type: 'income', icon: null, color: null, archived: false, sortOrder: 0, parentSourceId: null },
-      { sourceId: 110, name: 'Продукты', type: 'expense', icon: 'wrench', color: '#FFAB40', archived: false, sortOrder: 1, parentSourceId: null },
-      { sourceId: 113, name: 'Кафе', type: 'expense', icon: null, color: null, archived: false, sortOrder: 9999, parentSourceId: null },
+      { ...top, sourceId: 111, name: 'Зарплата', type: 'income', icon: null, sortOrder: 0 },
+      { ...top, sourceId: 110, name: 'Продукты', type: 'expense', icon: 'wrench', color: '#FFAB40', sortOrder: 1 },
+      { ...top, sourceId: 113, name: 'Кафе', type: 'expense', icon: null, sortOrder: 9999 },
+    ]);
+  });
+
+  it("gives a top-level category its currency, and keeps the amount in it when the account's is another", () => {
+    const path = backupFile((db) => {
+      db.prepare('INSERT INTO ba VALUES (?, ?, ?, ?)').run(1, 'Export', 1000, 2);
+      entity(db, [100, 1, 0, USD, 1, null, 'Payoneer', null, 0, null, 1, 0]);
+      entity(db, [101, 1, 0, UAH, 1, null, 'Наличные', null, 0, null, 1, 1]);
+      entity(db, [110, 1, 1, UAH, null, null, 'Продукты', null, 0, null, null, null]);
+      entity(db, [111, 1, 1, USD, null, null, 'Подписки', null, 0, null, null, null]);
+      // As in 1Money, in its parent's currency.
+      entity(db, [120, 1, 1, UAH, null, null, 'Сильпо', null, 0, null, null, null], 110);
+      entity(db, [112, 1, 0, 19999, null, null, 'Злотые', null, 0, null, null, null]);
+      // type, date, scheduled, from, to, amount, dest amount, note
+      transaction(db, [200, 1, 0, 1_700_000_000_000, 0, 100, 120, '4.57', '197.53', null]);
+      transaction(db, [201, 1, 0, 1_700_000_100_000, 0, 100, 111, '6.87', '6.87', null]);
+      // One currency on both sides, and amounts a hair apart: nothing to keep.
+      transaction(db, [202, 1, 0, 1_700_000_200_000, 0, 101, 110, '122.04', '122.042', null]);
+      // A category whose currency isn't known keeps none, and the account's amount alone.
+      transaction(db, [203, 1, 1, 1_700_000_300_000, 0, 100, 112, '2100', '48.58', null]);
+    });
+    const { categories, transactions } = parseOneMoneyBackup(path);
+
+    expect(Object.fromEntries(categories.map((category) => [category.name, category.currencyCode]))).toEqual({
+      Продукты: 'UAH',
+      Подписки: 'USD',
+      Злотые: null,
+      Сильпо: null,
+    });
+    expect(transactions.map((item) => [item.amount, item.destAmount])).toEqual([
+      // Filed under Сильпо, in its parent's hryvnias.
+      ['4.57', '197.53'],
+      ['6.87', null],
+      ['122.04', null],
+      ['2100.00', null],
     ]);
   });
 

@@ -2,16 +2,28 @@ import type { EntityManager } from 'typeorm';
 import type { RateLookup } from '../ledger/exchange-rates/exchange-rates.service';
 import { convertedDest } from '../ledger/transactions/dest-amount';
 
-// Transfers whose received amount was converted at a rate and is still an estimate — worked out
-// before the transfer's date — touching the given accounts, or every one when $1 is null. With the
-// two currencies' codes, for the rate. Locked, since a request and the scheduler may both be at them.
+// The currency of a transaction's or a series' other side (`alias`): the account a transfer arrives
+// in, or else the category it's filed under, which has one only when the category does. Joined as
+// `ta` and `oc`, the two joins it needs.
+function otherSideJoins(alias: string): string {
+  return `
+  LEFT JOIN accounts ta ON ta.id = ${alias}.to_account_id
+  LEFT JOIN categories oc ON oc.id = ${alias}.category_id AND ${alias}.to_account_id IS NULL`;
+}
+const OTHER_CURRENCY = 'COALESCE(ta.currency_id, oc.currency_id)';
+
+// Amounts on the other side converted at a rate that are still estimates — worked out before the
+// transaction's date — on transactions touching the given accounts, or every one when $1 is null:
+// what a transfer between currencies receives, and an expense's or an income's in its category's
+// currency. With the two currencies' codes, for the rate. Locked, since a request and the scheduler
+// may both be at them.
 const RATE_ESTIMATES_SQL = `
   SELECT t.id, t.group_id, t.date, t.amount, t.dest_amount, fc.code AS from_code, tc.code AS to_code
   FROM transactions t
   JOIN accounts fa ON fa.id = t.account_id
-  JOIN accounts ta ON ta.id = t.to_account_id
+  ${otherSideJoins('t')}
   JOIN currencies fc ON fc.id = fa.currency_id
-  JOIN currencies tc ON tc.id = ta.currency_id
+  JOIN currencies tc ON tc.id = ${OTHER_CURRENCY}
   WHERE t.dest_amount_as_of < t.date AND t.deleted_at IS NULL
     AND ($1::uuid[] IS NULL OR t.account_id = ANY($1::uuid[]) OR t.to_account_id = ANY($1::uuid[]))
   ORDER BY t.date, t.id
@@ -19,21 +31,21 @@ const RATE_ESTIMATES_SQL = `
 `;
 
 // The currencies a tick may convert into: those of every estimate still pending, and of every
-// active transfer series between two currencies, which may write its next occurrence. What the
-// scheduler warms before it locks anything.
+// active series between two currencies, which may write its next occurrence. What the scheduler
+// warms before it locks anything.
 const RATES_TO_WARM_SQL = `
   SELECT tc.code
   FROM transactions t
-  JOIN accounts ta ON ta.id = t.to_account_id
-  JOIN currencies tc ON tc.id = ta.currency_id
+  ${otherSideJoins('t')}
+  JOIN currencies tc ON tc.id = ${OTHER_CURRENCY}
   WHERE t.dest_amount_as_of < t.date AND t.deleted_at IS NULL
   UNION
   SELECT tc.code
   FROM recurring_rules r
   JOIN accounts fa ON fa.id = r.account_id
-  JOIN accounts ta ON ta.id = r.to_account_id
-  JOIN currencies tc ON tc.id = ta.currency_id
-  WHERE r.active AND r.deleted_at IS NULL AND fa.currency_id <> ta.currency_id
+  ${otherSideJoins('r')}
+  JOIN currencies tc ON tc.id = ${OTHER_CURRENCY}
+  WHERE r.active AND r.deleted_at IS NULL AND fa.currency_id <> tc.id
 `;
 
 // Landed ($4), it's fixed as of its own date, taken from the column: a date read into JavaScript

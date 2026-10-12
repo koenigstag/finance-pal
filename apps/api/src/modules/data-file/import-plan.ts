@@ -183,6 +183,8 @@ export interface PlannedCategory {
   icon: string | null;
   color: string | null;
   archived: boolean;
+  // ISO code of a top-level category's own currency; null for none, and on a subcategory.
+  currency: string | null;
 }
 
 interface PlannedMovement {
@@ -200,7 +202,9 @@ interface PlannedMovement {
 
 export interface PlannedTransaction extends PlannedMovement {
   date: Date;
-  // For a transfer between currencies: what arrived, or null to convert what was sent at the rate.
+  // Between two currencies — a transfer between them, or an expense or an income in a category of
+  // another currency than its account's — the amount on the other side, or null to convert what
+  // the account gave at the rate.
   destAmount: string | null;
   tags: string[];
   // Set on the transaction a running series has planned, which carries on as the series' own.
@@ -560,6 +564,7 @@ class CategoryBook {
       icon: null,
       color: null,
       archived: false,
+      currency: null,
     });
   }
 
@@ -615,7 +620,7 @@ class CategoryBook {
   }
 }
 
-function readCategories(table: TableRead, { categories, problems }: Context): void {
+function readCategories(table: TableRead, { categories, problems, options }: Context): void {
   const rows: { reader: RowReader<CategoryColumn>; category: Omit<PlannedCategory, 'key' | 'parentKey'>; parent: string | null }[] = [];
   eachRow(table, CATEGORIES, problems, (reader) => {
     const name = reader.required('name', readText);
@@ -624,11 +629,12 @@ function readCategories(table: TableRead, { categories, problems }: Context): vo
     }
     const type = reader.required('type', (cell) => readChoice(cell, CATEGORY_TYPES));
     const parent = reader.text('parent');
+    const currency = reader.currency('currency', options.currencies);
     const icon = reader.text('icon', MAX_ICON);
     const color = reader.color('color');
     const archived = reader.read('archived', readBoolean) ?? false;
     if (!reader.failed && name !== null && type !== null) {
-      rows.push({ reader, category: { name, type, icon, color, archived }, parent });
+      rows.push({ reader, category: { name, type, icon, color, archived, currency }, parent });
     }
   });
 
@@ -652,7 +658,13 @@ function readCategories(table: TableRead, { categories, problems }: Context): vo
       );
       continue;
     }
-    categories.add({ ...category, key: childKey(parentKey, category.name), parentKey });
+    // A subcategory is in its parent's currency: naming that one again is no mistake.
+    const parentCurrency = categories.get(parentKey)?.currency ?? null;
+    if (category.currency !== null && category.currency !== parentCurrency) {
+      reader.problem("A subcategory is in its parent's currency: leave its Default currency empty");
+      continue;
+    }
+    categories.add({ ...category, currency: null, key: childKey(parentKey, category.name), parentKey });
   }
 }
 
@@ -876,20 +888,29 @@ function readTransactions(table: TableRead, series: SeriesRead[], hasSeriesTable
       row.problem('Amount must be greater than zero');
       return;
     }
+    // What a transfer received, or an expense's or an income's amount in its category's currency.
+    const { categoryKey } = movement.movement;
+    const otherCurrency = toAccount?.currency ?? (categoryKey === null ? null : (context.categories.get(categoryKey)?.currency ?? null));
     let destAmount: string | null = null;
     if (received !== null) {
-      if (toAccount === null) {
-        row.problem('Only a transfer has an Amount received');
+      if (otherCurrency === null) {
+        row.problem(
+          'Only a transfer, or an expense or an income in a category with a Default currency, has an Amount received',
+        );
         return;
       }
-      if (toAccount.currency !== account.currency) {
+      if (otherCurrency !== account.currency) {
         if (Number(received) === 0) {
           row.problem('Amount received must be greater than zero');
           return;
         }
         destAmount = received;
       } else if (Number(received) !== Number(movement.movement.amount)) {
-        row.problem('Amount received differs from Amount, and both accounts are in the same currency');
+        row.problem(
+          toAccount
+            ? 'Amount received differs from Amount, and both accounts are in the same currency'
+            : "Amount received differs from Amount, and the category is in the account's currency",
+        );
         return;
       }
     }

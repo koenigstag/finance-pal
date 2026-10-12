@@ -9,6 +9,7 @@ import {
   PrimaryColumn,
   UpdateDateColumn,
 } from 'typeorm';
+import { Currency } from './currency.entity.js';
 import { Group } from './group.entity.js';
 import { User } from './user.entity.js';
 import { CategoryType } from './enums.js';
@@ -44,6 +45,16 @@ export class Category {
 
   @Column({ type: 'text', nullable: true })
   color!: string | null;
+
+  // A top-level category's own currency, if it has one (its subcategories are in the same): an
+  // expense or an income filed under it from an account in another currency also records the
+  // amount in this one, in the transaction's dest_amount. Always null on a subcategory.
+  @Column({ type: 'smallint', name: 'currency_id', nullable: true })
+  currencyId!: number | null;
+
+  @ManyToOne(() => Currency, { nullable: true })
+  @JoinColumn({ name: 'currency_id' })
+  currency!: Currency | null;
 
   @Column({ type: 'int', name: 'sort_order', default: 0 })
   sortOrder!: number;

@@ -56,13 +56,16 @@ const INSERT_OCCURRENCE_SQL = `
 
 const MOVE_FRONTIER_SQL = `UPDATE recurring_rules SET next_run_date = $2 WHERE id = $1`;
 
-// The currencies of a transfer's two accounts, for converting what it sends into what arrives.
+// The currencies of a series' two sides, for converting what its account sends into the other's:
+// a transfer's two accounts, or an account ($1) and the category ($3) an expense or an income is
+// filed under, when the category has a currency.
 const PAIR_SQL = `
   SELECT fc.code AS from_code, tc.code AS to_code
   FROM accounts fa
   JOIN currencies fc ON fc.id = fa.currency_id
-  JOIN accounts ta ON ta.id = $2
-  JOIN currencies tc ON tc.id = ta.currency_id
+  LEFT JOIN accounts ta ON ta.id = $2
+  LEFT JOIN categories c ON c.id = $3 AND $2::uuid IS NULL
+  JOIN currencies tc ON tc.id = COALESCE(ta.currency_id, c.currency_id)
   WHERE fa.id = $1
 `;
 
@@ -144,20 +147,24 @@ async function occurrenceAmount(manager: EntityManager, rule: RecurringRule, dat
 }
 
 /**
- * How a series' occurrences convert what they send into what arrives: not at all (null) when
- * nothing crosses currencies — one currency, or not a transfer — and otherwise at the rate for its
- * pair as it stands now, itself null when there's none to be had, which the series waits out (see
- * materializeOccurrences).
+ * How a series' occurrences convert what they send into the other side's currency: not at all
+ * (null) when nothing crosses currencies — one currency, or nothing on the other side with a
+ * currency of its own — and otherwise at the rate for its pair as it stands now, itself null when
+ * there's none to be had (see materializeOccurrences).
  */
 async function seriesConversion(
   manager: EntityManager,
   rule: RecurringRule,
   rateBetween: RateLookup,
 ): Promise<{ rate: string | null } | null> {
-  if (!rule.toAccountId) {
+  if (!rule.toAccountId && !rule.categoryId) {
     return null;
   }
-  const [pair]: { from_code: string; to_code: string }[] = await manager.query(PAIR_SQL, [rule.accountId, rule.toAccountId]);
+  const [pair]: { from_code: string; to_code: string }[] = await manager.query(PAIR_SQL, [
+    rule.accountId,
+    rule.toAccountId,
+    rule.categoryId,
+  ]);
   if (!pair || pair.from_code === pair.to_code) {
     return null;
   }
@@ -192,6 +199,10 @@ function scheduleOf(rule: RecurringRule): Schedule {
  * Setting such a series up is refused in the first place, so this only covers a provider that stops
  * quoting a currency afterwards.
  *
+ * An expense or an income filed under a category in another currency records its amount in that
+ * currency the same way. That amount moves no balance, so without a rate the series doesn't wait:
+ * it writes the occurrence without one.
+ *
  * Must run inside the caller's transaction so the inserts and the frontier move commit or fail
  * together. Returns the number of rows inserted.
  */
@@ -207,10 +218,10 @@ export async function materializeOccurrences(
     return 0;
   }
   const conversion = await seriesConversion(manager, rule, rateBetween);
-  if (conversion?.rate === null) {
+  if (conversion?.rate === null && rule.toAccountId) {
     return 0;
   }
-  // Only set for a series that converts, and then never null past the return above.
+  // Only set for a series that converts, and for a transfer never null past the return above.
   const rate = conversion?.rate ?? null;
 
   const schedule = scheduleOf(rule);

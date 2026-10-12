@@ -25,7 +25,7 @@ interface Row {
   id: string;
   groupId: string;
   parentId?: string | null;
-  currencyId?: number;
+  currencyId?: number | null;
 }
 
 // Just what the validator reads: one row by id within a group.
@@ -40,10 +40,10 @@ const validator = new TransactionValidator(
     { id: 'dollars', groupId: GROUP, currencyId: 2 },
   ]),
   repository<Category>([
-    { id: 'transport', groupId: GROUP, parentId: null },
-    { id: 'taxi', groupId: GROUP, parentId: 'transport' },
-    { id: 'food', groupId: GROUP, parentId: null },
-    { id: 'elsewhere', groupId: 'another group', parentId: null },
+    { id: 'transport', groupId: GROUP, parentId: null, currencyId: 2 },
+    { id: 'taxi', groupId: GROUP, parentId: 'transport', currencyId: null },
+    { id: 'food', groupId: GROUP, parentId: null, currencyId: null },
+    { id: 'elsewhere', groupId: 'another group', parentId: null, currencyId: null },
   ]),
 );
 
@@ -76,10 +76,18 @@ describe('TransactionValidator', () => {
       ...overrides,
     });
 
-    await expect(validator.validate(GROUP, shape({}))).resolves.toMatchObject({ currencyId: 1, toCurrencyId: null });
+    await expect(validator.validate(GROUP, shape({}))).resolves.toMatchObject({ currencyId: 1, destCurrencyId: null });
     await expect(
       validator.validate(GROUP, shape({ type: TransactionType.TRANSFER, toAccountId: 'dollars' })),
-    ).resolves.toMatchObject({ currencyId: 1, toCurrencyId: 2 });
+    ).resolves.toMatchObject({ currencyId: 1, destCurrencyId: 2 });
+  });
+
+  it('reports the currency of the category an expense is filed under, a subcategory’s from its parent', async () => {
+    await expect(validator.validate(GROUP, expense('transport'))).resolves.toMatchObject({ currencyId: 1, destCurrencyId: 2 });
+    await expect(validator.validate(GROUP, expense('transport', 'taxi'))).resolves.toMatchObject({ destCurrencyId: 2 });
+    // Sent as the category, as an out-of-date client does.
+    await expect(validator.validate(GROUP, expense('taxi'))).resolves.toMatchObject({ destCurrencyId: 2 });
+    await expect(validator.validate(GROUP, expense('food'))).resolves.toMatchObject({ destCurrencyId: null });
   });
 
   it('files a transaction under a category and one of its subcategories', async () => {

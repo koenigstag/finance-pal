@@ -13,16 +13,22 @@ import { Dialog, DialogContent, DialogDescription, DialogFooter, DialogHeader, D
 import { Field, FieldContent, FieldDescription, FieldError, FieldGroup, FieldLabel } from '@/components/ui/field';
 import { Input } from '@/components/ui/input';
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select';
+import { useCurrencies } from '@/features/currencies/queries';
+import { useProfile } from '@/features/profile/queries';
 import { DeleteCategoryDialog } from './delete-category-dialog';
-import { nextSortOrder, useSaveCategory, useSetCategoryArchived, type Category } from './queries';
+import { nextSortOrder, useCategoryUsage, useSaveCategory, useSetCategoryArchived, type Category } from './queries';
 
-// Radix Select can't hold an empty value, so "no parent" needs a stand-in.
+// Radix Select can't hold an empty value, so "no parent" needs a stand-in, and so does "no currency".
 const TOP_LEVEL = 'top';
+const NO_CURRENCY = 'none';
 
 // archived is the form's own, not the body's: archiving is a route of its own, and saved as one.
+// currencyId is a select's value: a currency's id as text, NO_CURRENCY, or '' while a new
+// category's default — the main currency — is still loading.
 const categoryFormSchema = z.object({
   name: z.string().trim().min(1).max(120),
   parentId: z.string(),
+  currencyId: z.string(),
   icon: z.string().nullable(),
   color: z.string().nullable(),
   archived: z.boolean(),
@@ -55,16 +61,29 @@ export function CategoryDialog({
   onOpenChange,
 }: CategoryDialogProps) {
   const { t } = useTranslation();
+  const currencies = useCurrencies();
+  const profile = useProfile();
   const saveCategory = useSaveCategory(groupId);
   const setArchived = useSetCategoryArchived(groupId);
   const [confirmingDelete, setConfirmingDelete] = useState(false);
   const form = useForm<CategoryFormValues>({ resolver: zodResolver(categoryFormSchema) });
   const errors = form.formState.errors;
 
+  // The currency what's filed under the category is in: a subcategory's is its parent's. Once
+  // something is, it stays — those amounts were recorded in it — so it's fixed while the category
+  // has transactions, and while that's still being found out. A category without one can always
+  // be given one.
+  const parentOf = (id: string | null | undefined) => categories.find((candidate) => candidate.id === id);
+  const currentCurrencyId = category ? (category.parentId ? (parentOf(category.parentId)?.currencyId ?? null) : category.currencyId) : null;
+  const usage = useCategoryUsage(groupId, category?.id ?? '', open && currentCurrencyId !== null);
+  const currencyLocked =
+    currentCurrencyId !== null && (!usage.data || usage.data.transactionCount + usage.data.plannedTransactionCount > 0);
+
   // Categories are two levels deep: parents are top-level categories of the same type, and one
   // that has subcategories of its own can't become a subcategory. Archived ones are not offered —
   // nothing new is filed under one — except the parent this category already sits under, so that
-  // editing a subcategory put away with its parent still says where it belongs.
+  // editing a subcategory put away with its parent still says where it belongs. Nor, for one whose
+  // currency is fixed, a parent in another currency.
   const parentOptions = useMemo(
     () =>
       categories
@@ -73,14 +92,19 @@ export function CategoryDialog({
             candidate.type === type &&
             candidate.parentId === null &&
             candidate.id !== category?.id &&
-            (!candidate.archived || candidate.id === category?.parentId),
+            (!candidate.archived || candidate.id === category?.parentId) &&
+            (!currencyLocked || candidate.currencyId === currentCurrencyId),
         )
         .sort((a, b) => a.sortOrder - b.sortOrder || a.name.localeCompare(b.name)),
-    [categories, type, category?.id, category?.parentId],
+    [categories, type, category?.id, category?.parentId, currencyLocked, currentCurrencyId],
   );
   const subcategories = category ? categories.filter((candidate) => candidate.parentId === category.id) : [];
   const canHaveParent = subcategories.length === 0;
-  const [previewName, previewIcon, previewColor] = useWatch({ control: form.control, name: ['name', 'icon', 'color'] });
+  const [previewName, previewIcon, previewColor, pickedParentId] = useWatch({
+    control: form.control,
+    name: ['name', 'icon', 'color', 'parentId'],
+  });
+  const mainCurrencyId = profile.data?.mainCurrencyId;
 
   useEffect(() => {
     if (open) {
@@ -90,9 +114,13 @@ export function CategoryDialog({
         categories.find((candidate) => candidate.id === parentId),
         categories.filter((candidate) => candidate.type === type && candidate.parentId === parentId).length,
       );
+      // An existing one shows the currency it's in; a new one starts in its parent's, or the main
+      // currency — once that's known.
+      const currencyId = category ? currentCurrencyId : parentId ? (parentOf(parentId)?.currencyId ?? null) : mainCurrencyId;
       form.reset({
         name: category?.name ?? '',
         parentId: parentId ?? TOP_LEVEL,
+        currencyId: currencyId === undefined ? '' : currencyId === null ? NO_CURRENCY : String(currencyId),
         icon: category ? category.icon : suggested.icon,
         color: category ? category.color : suggested.color,
         archived: category?.archived ?? false,
@@ -102,16 +130,32 @@ export function CategoryDialog({
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [open, category, defaultParentId, form]);
 
+  // The profile can still be loading when a new category's dialog opens; its main currency goes in
+  // once it arrives, unless one was picked meanwhile.
+  useEffect(() => {
+    if (open && mainCurrencyId !== undefined && form.getValues('currencyId') === '') {
+      form.setValue('currencyId', String(mainCurrencyId));
+    }
+  }, [open, mainCurrencyId, form]);
+
   const onSubmit = form.handleSubmit(async (values) => {
     const parentId = values.parentId === TOP_LEVEL ? null : values.parentId;
     // A category that moves (or a new one) goes to the end of its new siblings.
     const sortOrder =
       category && category.parentId === parentId ? undefined : nextSortOrder(categories, type, parentId);
     const appearance = { icon: values.icon, color: values.color };
+    // Only a top-level category holds one; a subcategory is left to its parent's.
+    const currency =
+      parentId === null && values.currencyId !== ''
+        ? { currencyId: values.currencyId === NO_CURRENCY ? null : Number(values.currencyId) }
+        : {};
     try {
       await (category
-        ? saveCategory.mutateAsync({ categoryId: category.id, body: { name: values.name, parentId, sortOrder, ...appearance } })
-        : saveCategory.mutateAsync({ body: { type, name: values.name, parentId, sortOrder, ...appearance } }));
+        ? saveCategory.mutateAsync({
+            categoryId: category.id,
+            body: { name: values.name, parentId, sortOrder, ...currency, ...appearance },
+          })
+        : saveCategory.mutateAsync({ body: { type, name: values.name, parentId, sortOrder, ...currency, ...appearance } }));
       // Its own request, after the fields and only when the checkbox moved: the category has to
       // exist to be put away, and saving the rest is what the dialog is mostly for.
       if (category && values.archived !== category.archived) {
@@ -171,6 +215,34 @@ export function CategoryDialog({
                 />
                 {!canHaveParent && <FieldDescription>{t('categories.hasSubcategories')}</FieldDescription>}
               </Field>
+              {/* A subcategory is in its parent's currency, so only a top-level category asks. */}
+              {pickedParentId === TOP_LEVEL && (
+                <Field>
+                  <FieldLabel htmlFor="category-currency">{t('categories.currency')}</FieldLabel>
+                  <Controller
+                    control={form.control}
+                    name="currencyId"
+                    render={({ field }) => (
+                      <Select value={field.value} onValueChange={field.onChange} disabled={currencyLocked}>
+                        <SelectTrigger id="category-currency" className="w-full">
+                          <SelectValue />
+                        </SelectTrigger>
+                        <SelectContent>
+                          <SelectItem value={NO_CURRENCY}>{t('categories.noCurrency')}</SelectItem>
+                          {currencies.data?.map((currency) => (
+                            <SelectItem key={currency.id} value={String(currency.id)}>
+                              {currency.code} — {currency.name}
+                            </SelectItem>
+                          ))}
+                        </SelectContent>
+                      </Select>
+                    )}
+                  />
+                  <FieldDescription>
+                    {t(currencyLocked ? 'categories.currencyLocked' : 'categories.currencyDescription')}
+                  </FieldDescription>
+                </Field>
+              )}
               {/* Only for a category that exists: there is nothing to put away until it does. */}
               {category && (
                 <Controller

@@ -21,7 +21,9 @@ type RecurrenceUnit = (typeof RECURRENCE_UNITS)[number];
  *       anything else is a category. `_ty` then means account type (0 regular, 1 debt, 2 savings)
  *       or category type (0 income, 1 expense). `_a_m_b` is the account's opening balance,
  *       `_a_i_i_b` whether it counts toward the total, `_ar` archived, `_co` an ARGB colour and
- *       `_c_i` the currency. `_ty` 4 is the pseudo-account "all accounts", which isn't one.
+ *       `_c_i` the currency — an account's, and a category's too: every category has one, the
+ *       same for a subcategory as for its parent. `_ty` 4 is the pseudo-account "all accounts",
+ *       which isn't one.
  *       `_pi` makes a category a subcategory: it holds the `_id` of the category it sits under,
  *       which is top-level and of the same type — 1Money nests one level deep, as this app does.
  *   bu  one row per entity holding `_or`, the position the user dragged it to. Accounts carry
@@ -31,7 +33,8 @@ type RecurrenceUnit = (typeof RECURRENCE_UNITS)[number];
  *   tr  transactions. `_ty` is 0 expense, 1 income, 2 transfer, but it can't be trusted on its
  *       own: 1Money writes lending to a debt account as an expense whose target is that account.
  *       What the target *is* decides. `_da` is epoch milliseconds, `_a_m`/`_d_m` the amounts on
- *       each side, `_co` the note, `_sch` marks a scheduled (future) entry and `_ta` tags, which
+ *       each side — the account's and the target's, in each one's currency, so an expense from a
+ *       dollar account into a hryvnia category has one of each —, `_co` the note, `_sch` marks a scheduled (future) entry and `_ta` tags, which
  *       this importer ignores because the export never fills them in. A transaction filed under
  *       a subcategory targets the subcategory itself; `_p_id` and `_c_id` stay empty.
  *       A repeating series is one scheduled row dated at its next due date, with `_rec` saying
@@ -176,13 +179,18 @@ export interface ParsedCategory {
   // same backup. A parent the app couldn't hold it under — missing from the file, of the other
   // type, or a subcategory itself — leaves this null, and the category stands on its own.
   parentSourceId: number | null;
+  // A top-level category's currency; null for a subcategory, which is in its parent's, and for one
+  // in a currency 1Money's id of isn't known — that one is kept without a currency rather than
+  // left out with everything filed under it.
+  currencyCode: string | null;
 }
 
 export interface ParsedTransaction {
   type: TransactionType;
   date: Date;
   amount: string;
-  // Only for a transfer between accounts in different currencies: what arrived.
+  // Only between two currencies: what a transfer between accounts in different ones received, or an
+  // expense's or an income's amount in the currency of a category in another one than its account.
   destAmount: string | null;
   accountSourceId: number;
   toAccountSourceId: number | null;
@@ -262,6 +270,8 @@ export function parseOneMoneyBackup(filePath: string, currencyOverrides: Record<
     const categories: ParsedCategory[] = [];
     // Each subcategory's parent as the file records it, to be checked once every category is known.
     const recordedParents = new Map<number, number>();
+    // Each category's own currency, which only counts for one that ends up at the top level.
+    const categoryCurrencies = new Map<number, string | null>();
     const unknown = new Map<number, string[]>();
 
     for (const row of entities) {
@@ -279,9 +289,11 @@ export function parseOneMoneyBackup(filePath: string, currencyOverrides: Record<
           archived: row._ar === 1,
           // Anything the app never gave a place goes last rather than first.
           sortOrder: order.get(row._id) ?? UNORDERED,
-          // Settled below.
+          // Both settled below.
           parentSourceId: null,
+          currencyCode: null,
         });
+        categoryCurrencies.set(row._id, (row._c_i !== null && currencies[row._c_i]) || null);
         const parentId = row._pi ?? null;
         if (parentId !== null) {
           recordedParents.set(row._id, parentId);
@@ -318,10 +330,13 @@ export function parseOneMoneyBackup(filePath: string, currencyOverrides: Record<
       const parent = parentId === undefined ? undefined : categoryById.get(parentId);
       if (parent && parent.type === category.type && !recordedParents.has(parent.sourceId)) {
         category.parentSourceId = parent.sourceId;
+      } else {
+        category.currencyCode = categoryCurrencies.get(category.sourceId) ?? null;
       }
     }
 
     const accountIds = new Set(accounts.map((account) => account.sourceId));
+    const accountCurrencies = new Map(accounts.map((account) => [account.sourceId, account.currencyCode]));
     const rows = db
       .prepare('SELECT * FROM tr WHERE _b_i = ? ORDER BY _da')
       .all(snapshotId) as unknown as TransactionRow[];
@@ -337,7 +352,11 @@ export function parseOneMoneyBackup(filePath: string, currencyOverrides: Record<
       const toAccount = row._d_i !== null && accountIds.has(row._d_i) ? row._d_i : null;
       const type: TransactionType = toAccount !== null ? 'transfer' : row._ty === 1 ? 'income' : 'expense';
       const target = type === 'transfer' || row._d_i === null ? undefined : categoryById.get(row._d_i);
-      const destAmount = toAccount !== null ? toAmount(row._d_m) : null;
+      const topLevel = target?.parentSourceId != null ? categoryById.get(target.parentSourceId) : target;
+      // The target's amount is only its own where the target is in another currency: a category
+      // in the account's own, or in none known, takes what the account gave.
+      const otherCurrency = topLevel?.currencyCode != null && topLevel.currencyCode !== accountCurrencies.get(row._a_i);
+      const destAmount = toAccount !== null || otherCurrency ? toAmount(row._d_m) : null;
       transactions.push({
         type,
         date: new Date(row._da),

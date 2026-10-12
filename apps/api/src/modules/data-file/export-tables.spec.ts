@@ -32,7 +32,7 @@ describe('exportTables', () => {
     expect(groceries[column(TRANSACTIONS, 'category')]).toBe('Food');
     expect(groceries[column(TRANSACTIONS, 'subcategory')]).toBe('Groceries');
     expect(groceries[column(TRANSACTIONS, 'tags')]).toBe('home, weekly');
-    expect(categories.rows.map((row) => row[column(CATEGORIES, 'parent')])).toEqual([null, 'Food', null, null]);
+    expect(categories.rows.map((row) => row[column(CATEGORIES, 'parent')])).toEqual([null, 'Food', null, null, null]);
   });
 
   it('leaves a received amount out while it’s still an estimate', () => {
@@ -41,8 +41,17 @@ describe('exportTables', () => {
     expect(transactions.rows[4][column(TRANSACTIONS, 'amountReceived')]).toBeNull();
   });
 
+  it('writes a category’s currency, and an expense’s amount in it', () => {
+    expect(categories.rows.map((row) => row[column(CATEGORIES, 'currency')])).toEqual([null, null, null, 'USD', null]);
+    const subscription = transactions.rows[6];
+    expect(subscription[column(TRANSACTIONS, 'amountReceived')]).toBe('20.00');
+    expect(subscription[column(TRANSACTIONS, 'currencyReceived')]).toBe('USD');
+    // In the account's own currency, there's no other side to name.
+    expect(transactions.rows[1][column(TRANSACTIONS, 'currencyReceived')]).toBeNull();
+  });
+
   it('marks only the transaction a series has planned with its number', () => {
-    expect(transactions.rows.map((row) => row[column(TRANSACTIONS, 'series')])).toEqual([null, null, null, '1', null, null]);
+    expect(transactions.rows.map((row) => row[column(TRANSACTIONS, 'series')])).toEqual([null, null, null, '1', null, null, null]);
   });
 
   it('writes a series’ dates in its own zone', () => {

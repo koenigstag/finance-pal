@@ -36,6 +36,8 @@ export interface SnapshotCategory {
   icon: string | null;
   color: string | null;
   archived: boolean;
+  // A top-level category's own currency, as an ISO code; null for none, and on a subcategory.
+  currency: string | null;
 }
 
 // What a transaction and a series both carry.
@@ -104,20 +106,25 @@ export function exportTables(snapshot: GroupSnapshot, { timezone, now }: ExportO
   const accountNames = uniqueNames(snapshot.accounts, (account) => account.currency);
   const categoryNames = uniqueNames(snapshot.categories, (category) => `${category.type}|${category.parentId ?? ''}`);
   const accounts = new Map(snapshot.accounts.map((account) => [account.id, account]));
+  const categoryCurrencies = new Map(snapshot.categories.map((category) => [category.id, category.currency]));
   const seriesNumbers = new Map(snapshot.series.map((series, index) => [series.id, index + 1]));
   const planned = plannedOccurrences(snapshot, now);
 
   const movement = (item: MoneyMovement) => {
     const toAccount = item.toAccountId ? accounts.get(item.toAccountId) : undefined;
+    const currency = accounts.get(item.accountId)?.currency ?? null;
+    // The other side's currency where it's another: a transfer's receiving account's, or that of the
+    // category an expense or an income is filed under.
+    const categoryCurrency = item.categoryId ? (categoryCurrencies.get(item.categoryId) ?? null) : null;
     return {
       type: item.type,
       amount: item.amount,
-      currency: accounts.get(item.accountId)?.currency ?? null,
+      currency,
       account: accountNames.get(item.accountId) ?? null,
       category: item.categoryId ? (categoryNames.get(item.categoryId) ?? null) : null,
       subcategory: item.subcategoryId ? (categoryNames.get(item.subcategoryId) ?? null) : null,
       toAccount: item.toAccountId ? (accountNames.get(item.toAccountId) ?? null) : null,
-      currencyReceived: toAccount?.currency ?? null,
+      currencyReceived: toAccount?.currency ?? (categoryCurrency !== currency ? categoryCurrency : null),
       note: item.note || null,
       percentage: item.percentage === null ? null : trimPercentage(item.percentage),
       baseAmount: item.percentageBase,
@@ -161,6 +168,7 @@ export function exportTables(snapshot: GroupSnapshot, { timezone, now }: ExportO
       name: categoryNames.get(category.id) ?? category.name,
       type: category.type,
       parent: category.parentId ? (categoryNames.get(category.parentId) ?? null) : null,
+      currency: category.currency,
       icon: category.icon,
       color: category.color,
       archived: category.archived,
@@ -241,9 +249,10 @@ function plannedOccurrences(snapshot: GroupSnapshot, now: Date): Set<SnapshotTra
 }
 
 /**
- * What a transfer between two currencies received. Left empty while it's an estimate — converted at
- * the latest rate ahead of its date — so that it's converted again when the file comes back, and
- * keeps following the rate until the day, as it does here.
+ * What a transfer between two currencies received, or an expense's or an income's amount in its
+ * category's currency. Left empty while it's an estimate — converted at the latest rate ahead of
+ * its date — so that it's converted again when the file comes back, and keeps following the rate
+ * until the day, as it does here.
  */
 function receivedAmount(transaction: SnapshotTransaction): string | null {
   const { destAmount, destAmountAsOf, date } = transaction;

@@ -88,7 +88,7 @@ export class ExportService {
         limitAmount: targets.get(account.id)?.limitAmount ?? null,
         goalAmount: targets.get(account.id)?.goalAmount ?? null,
       })),
-      categories: await this.categoriesInOrder(groupId),
+      categories: await this.categoriesInOrder(groupId, codes),
       transactions: transactions.map((transaction) => ({
         type: transaction.type,
         date: transaction.date,
@@ -131,7 +131,7 @@ export class ExportService {
   }
 
   // Each type's categories in their order, every one followed by its own subcategories.
-  private async categoriesInOrder(groupId: string): Promise<SnapshotCategory[]> {
+  private async categoriesInOrder(groupId: string, codes: Map<number, string>): Promise<SnapshotCategory[]> {
     const all = await this.categories.find({ where: { groupId }, order: { sortOrder: 'ASC', createdAt: 'ASC' } });
     const plain = (category: Category): SnapshotCategory => ({
       id: category.id,
@@ -141,6 +141,7 @@ export class ExportService {
       icon: category.icon,
       color: category.color,
       archived: category.archived,
+      currency: category.currencyId === null ? null : (codes.get(category.currencyId) ?? String(category.currencyId)),
     });
     const ordered: SnapshotCategory[] = [];
     for (const type of CATEGORY_TYPE_ORDER) {
