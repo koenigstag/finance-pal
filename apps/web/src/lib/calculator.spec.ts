@@ -46,6 +46,22 @@ describe('pressKey', () => {
   ])('types %j as %j', (keys, formula) => {
     expect(typed(keys)).toBe(formula);
   });
+
+  // The keypad's one bracket key: it opens one where a value is due, closes one that's open after a
+  // value, and after a value with none open, multiplies it by what the new one holds.
+  it.each([
+    ['', '('],
+    ['5+', '5+('],
+    ['(', '(('],
+    ['(5', '(5)'],
+    ['(5,', '(5)'],
+    ['(2+3)%', '(2+3)%*('],
+    ['((5)', '((5))'],
+    ['5', '5*('],
+    ['(5)', '(5)*('],
+  ])('turns the bracket key after %j into %j', (formula, next) => {
+    expect(pressKey(formula, '()')).toBe(next);
+  });
 });
 
 describe('formulaAmount', () => {

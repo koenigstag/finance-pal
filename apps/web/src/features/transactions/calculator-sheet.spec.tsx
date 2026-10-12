@@ -24,7 +24,7 @@ describe('CalculatorSheet', () => {
 
     press('1', '2', 'Plus', '3', 'Multiply by', '4');
     // Typed, not worked out: there's still something to do.
-    expect(shown()).toBe('12 + 3 × 4');
+    expect(shown()).toBe('12\u00a0+ 3\u00a0× 4');
     expect(screen.queryByRole('button', { name: 'Use this amount' })).toBeNull();
 
     press('Equals');
@@ -53,7 +53,7 @@ describe('CalculatorSheet', () => {
     expect(screen.getByRole('button', { name: 'Use this amount' })).toBeTruthy();
 
     press('Plus', '1', 'Decimal comma', '5');
-    expect(shown()).toBe('12,50 + 1,5');
+    expect(shown()).toBe('12,50\u00a0+ 1,5');
 
     press('Equals', '7');
     expect(shown()).toBe('7');
@@ -71,19 +71,32 @@ describe('CalculatorSheet', () => {
 
     press('5', 'Divide by', '0', 'Equals');
     expect(screen.getByRole('alert').textContent).toBe("Can't divide by zero");
-    expect(shown()).toBe('5 ÷ 0');
+    expect(shown()).toBe('5\u00a0÷ 0');
 
-    press('Erase', '2');
+    press('Erase the last character', '2');
     expect(screen.queryByRole('alert')).toBeNull();
-    expect(shown()).toBe('5 ÷ 2');
+    expect(shown()).toBe('5\u00a0÷ 2');
   });
 
-  it('takes a percentage of what it is added to, with brackets and the comma', () => {
+  it('erases a character at a time, or all of it at once', () => {
+    open('12.50');
+
+    press('Erase the last character', 'Erase the last character');
+    expect(shown()).toBe('12,');
+
+    press('Clear all');
+    expect(shown()).toBe('0');
+    expect(screen.getByRole('button', { name: 'Equals' }).hasAttribute('disabled')).toBe(true);
+  });
+
+  it('takes a percentage of what it is added to, with one key for both brackets', () => {
     const { onDone } = open();
 
-    press('Opening bracket', '1', '0', '0', 'Plus', '1', '0', '0', 'Closing bracket', 'Minus', '1', '0', 'Per cent');
+    press('Brackets', '1', '0', '0', 'Plus', '2', 'Decimal comma', '5', 'Brackets', 'Minus', '1', '0', 'Per cent');
+    expect(shown()).toBe('(100\u00a0+ 2,5)\u00a0− 10%');
+
     press('Equals', 'Use this amount');
-    expect(onDone).toHaveBeenCalledWith('180');
+    expect(onDone).toHaveBeenCalledWith('92.25');
   });
 
   it('types from a keyboard too', () => {

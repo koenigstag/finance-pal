@@ -357,16 +357,16 @@ export const en = {
     calculator: {
       title: 'Calculator',
       open: 'Calculate the amount',
-      clear: 'Clear',
-      erase: 'Erase',
+      clear: 'Clear all',
+      erase: 'Erase the last character',
       add: 'Plus',
       subtract: 'Minus',
       multiply: 'Multiply by',
       divide: 'Divide by',
       percent: 'Per cent',
       decimal: 'Decimal comma',
-      openBracket: 'Opening bracket',
-      closeBracket: 'Closing bracket',
+      // The one key for both: it opens a bracket or closes one, as the formula needs.
+      brackets: 'Brackets',
       equals: 'Equals',
       // Once the formula is a single number: it goes into the field.
       done: 'Use this amount',

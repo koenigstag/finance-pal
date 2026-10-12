@@ -14,16 +14,18 @@ import {
 } from '@/lib/calculator';
 import { isValidAmountInput, parseMoneyInput } from '@/lib/money';
 
-// The keypad, row by row; '=' turns into a tick once there's a single number to hand over.
-const KEYPAD: (CalculatorKey | 'clear' | 'equals')[][] = [
-  ['clear', '(', ')', '/'],
-  ['7', '8', '9', '*'],
-  ['4', '5', '6', '-'],
-  ['1', '2', '3', '+'],
-  ['%', '0', ',', 'equals'],
+// The keypad, laid out as a phone's calculator lays it: AC clears it all, ⌫ the last character,
+// one key for both brackets; '=' turns into a tick once there's a single number to hand over.
+const KEYPAD: (CalculatorKey | 'clear' | 'erase' | 'equals')[] = [
+  'clear', '()', '%', '/',
+  '7', '8', '9', '*',
+  '4', '5', '6', '-',
+  '1', '2', '3', '+',
+  '0', ',', 'erase', 'equals',
 ];
-const KEYS = new Set<string>(KEYPAD.flat().filter((key) => key !== 'clear' && key !== 'equals'));
-const GLYPHS: Partial<Record<CalculatorKey, string>> = { '/': '÷', '*': '×', '-': '−' };
+// What a keyboard types: the keypad's keys, with each bracket on its own.
+const KEYS = new Set<string>([...'0123456789,+-*/%()']);
+const GLYPHS: Partial<Record<CalculatorKey, string>> = { '/': '÷', '*': '×', '-': '−', '()': '( )' };
 // What a screen reader calls the keys that aren't digits.
 const NAMES = {
   '+': 'add',
@@ -32,8 +34,7 @@ const NAMES = {
   '/': 'divide',
   '%': 'percent',
   ',': 'decimal',
-  '(': 'openBracket',
-  ')': 'closeBracket',
+  '()': 'brackets',
 } as const;
 const isNamed = (key: CalculatorKey): key is keyof typeof NAMES => key in NAMES;
 
@@ -135,37 +136,25 @@ export function CalculatorSheet({ open, onOpenChange, value, onDone }: Calculato
         <DialogHeader>
           <DialogTitle>{t('transactions.calculator.title')}</DialogTitle>
         </DialogHeader>
-        <div className="flex items-end gap-1 rounded-lg bg-muted/50 py-2 pr-1 pl-3">
-          <div className="min-w-0 flex-1 py-1 text-right">
-            <output
-              aria-live="polite"
-              className={cn(
-                'block min-h-10 font-medium tabular-nums wrap-anywhere',
-                // Smaller as it grows, so a long formula still fits in a line or two.
-                shown.length > 18 ? 'text-2xl' : shown.length > 10 ? 'text-3xl' : 'text-4xl',
-              )}
-            >
-              {formula ? shown : <span className="text-muted-foreground">0</span>}
-            </output>
-            {error && (
-              <p role="alert" className="text-sm text-destructive">
-                {t(`transactions.calculator.errors.${error}`)}
-              </p>
+        <div className="rounded-lg bg-muted/50 px-3 py-3 text-right">
+          <output
+            aria-live="polite"
+            className={cn(
+              'block min-h-10 font-medium tabular-nums wrap-anywhere',
+              // Smaller as it grows, so a long formula still fits in a line or two.
+              shown.length > 18 ? 'text-2xl' : shown.length > 10 ? 'text-3xl' : 'text-4xl',
             )}
-          </div>
-          <Button
-            type="button"
-            variant="ghost"
-            size="icon-lg"
-            aria-label={t('transactions.calculator.erase')}
-            disabled={!formula}
-            onClick={erase}
           >
-            <DeleteIcon className="size-5" />
-          </Button>
+            {formula ? shown : <span className="text-muted-foreground">0</span>}
+          </output>
+          {error && (
+            <p role="alert" className="text-sm text-destructive">
+              {t(`transactions.calculator.errors.${error}`)}
+            </p>
+          )}
         </div>
         <div className="grid grid-cols-4 gap-2">
-          {KEYPAD.flat().map((key) => {
+          {KEYPAD.map((key) => {
             const keyClass = 'h-14 text-xl md:h-12';
             if (key === 'clear') {
               return (
@@ -177,7 +166,21 @@ export function CalculatorSheet({ open, onOpenChange, value, onDone }: Calculato
                   aria-label={t('transactions.calculator.clear')}
                   onClick={clear}
                 >
-                  C
+                  AC
+                </Button>
+              );
+            }
+            if (key === 'erase') {
+              return (
+                <Button
+                  key={key}
+                  type="button"
+                  variant="outline"
+                  className={keyClass}
+                  aria-label={t('transactions.calculator.erase')}
+                  onClick={erase}
+                >
+                  <DeleteIcon className="size-6" />
                 </Button>
               );
             }

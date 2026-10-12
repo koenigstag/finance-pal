@@ -1,11 +1,23 @@
+import Fraction from 'fraction.js';
 import { parseMoneyInput } from '@/lib/money';
 
 // A calculator's formula: a string typed key by key, and worked out only on "=". It's kept as the
 // keys typed it — a comma for the decimal separator, + - * / and a postfix %, with brackets — and
-// shown with proper signs by displayFormula. Worked out in fractions of integers (BigInt), so
-// 0,1 + 0,2 is 0,3 and a third of 100 is 33,33 rather than whatever a float makes of either.
+// shown with proper signs by displayFormula. Worked out in fractions (fraction.js), so 0,1 + 0,2
+// is 0,3 and a third of 100 is 33,33 rather than whatever a float makes of either.
+//
+// The reading is this module's own: the expression libraries there are take `%` before a + or −
+// for a remainder (mathjs works 200 − 15% − 5 out to 200), or don't take it at all.
 
-export type CalculatorKey = '0' | '1' | '2' | '3' | '4' | '5' | '6' | '7' | '8' | '9' | ',' | Operator | '%' | '(' | ')';
+// '()' is the keypad's one key for both brackets, which opens or closes one as the formula needs.
+export type CalculatorKey =
+  | '0' | '1' | '2' | '3' | '4' | '5' | '6' | '7' | '8' | '9'
+  | ','
+  | Operator
+  | '%'
+  | '('
+  | ')'
+  | '()';
 type Operator = '+' | '-' | '*' | '/';
 
 export type CalculatorError = 'incomplete' | 'divisionByZero' | 'tooLarge';
@@ -35,6 +47,9 @@ export function pressKey(formula: string, key: CalculatorKey): string {
     return /(^|[^\d,])0$/.test(formula) ? `${formula.slice(0, -1)}${key}` : `${formula}${key}`;
   }
   switch (key) {
+    case '()':
+      // Closes one that's open once there's a value to close it on; opens another otherwise.
+      return pressKey(formula, endsWithValue(formula) && openBrackets(formula) > 0 ? ')' : '(');
     case ',':
       if (last === ')' || last === '%' || /,\d*$/.test(formula)) {
         return formula;
@@ -85,8 +100,8 @@ export function evaluateFormula(formula: string): Evaluation {
     while (tokens[position] === '+' || tokens[position] === '-') {
       const operator = tokens[position++];
       const right = term();
-      const amount = right.percent ? multiply(value, right.value) : right.value;
-      value = operator === '+' ? add(value, amount) : add(value, negate(amount));
+      const amount = right.percent ? value.mul(right.value) : right.value;
+      value = operator === '+' ? value.add(amount) : value.sub(amount);
     }
     return value;
   };
@@ -96,7 +111,7 @@ export function evaluateFormula(formula: string): Evaluation {
     while (tokens[position] === '*' || tokens[position] === '/') {
       const operator = tokens[position++];
       const right = unary().value;
-      value = operator === '*' ? multiply(value, right) : divide(value, right);
+      value = operator === '*' ? value.mul(right) : divide(value, right);
       percent = false;
     }
     return { value, percent };
@@ -106,12 +121,12 @@ export function evaluateFormula(formula: string): Evaluation {
     if (tokens[position] === '-') {
       position++;
       const operand = unary();
-      return { ...operand, value: negate(operand.value) };
+      return { ...operand, value: operand.value.neg() };
     }
     const value = primary();
     if (tokens[position] === '%') {
       position++;
-      return { value: divide(value, HUNDRED), percent: true };
+      return { value: value.div(100), percent: true };
     }
     return { value, percent: false };
   };
@@ -127,7 +142,7 @@ export function evaluateFormula(formula: string): Evaluation {
     }
     if (token !== undefined && isDigit(token[0])) {
       const [whole, decimals = ''] = token.split(',');
-      return fraction(BigInt(`${whole}${decimals}`), 10n ** BigInt(decimals.length));
+      return new Fraction(BigInt(`${whole}${decimals}`), 10n ** BigInt(decimals.length));
     }
     throw new FormulaError('incomplete');
   };
@@ -137,9 +152,9 @@ export function evaluateFormula(formula: string): Evaluation {
     if (position < tokens.length) {
       throw new FormulaError('incomplete');
     }
-    // To the cent, half away from zero, as money rounds — and the sign gone.
-    const magnitude = value.numerator < 0n ? -value.numerator : value.numerator;
-    const cents = (magnitude * 200n + value.denominator) / (2n * value.denominator);
+    // The sign gone, then to the cent: half up, which without a sign is half away from zero, as
+    // money rounds.
+    const cents = value.abs().mul(100).round().n;
     if (cents >= MAX_CENTS) {
       throw new FormulaError('tooLarge');
     }
@@ -183,48 +198,16 @@ class FormulaError extends Error {
   }
 }
 
-interface Fraction {
-  numerator: bigint;
-  // Above zero.
-  denominator: bigint;
-}
-
 interface Operand {
   value: Fraction;
   // A percentage on its own ("15%"), which + and − take of what they add it to.
   percent: boolean;
 }
 
-const HUNDRED: Fraction = { numerator: 100n, denominator: 1n };
-
-function fraction(numerator: bigint, denominator: bigint): Fraction {
-  const sign = denominator < 0n ? -1n : 1n;
-  const divisor = gcd(numerator < 0n ? -numerator : numerator, denominator * sign);
-  return { numerator: (sign * numerator) / divisor, denominator: (sign * denominator) / divisor };
-}
-
-function gcd(a: bigint, b: bigint): bigint {
-  while (b !== 0n) {
-    [a, b] = [b, a % b];
-  }
-  return a === 0n ? 1n : a;
-}
-
-function add(a: Fraction, b: Fraction): Fraction {
-  return fraction(a.numerator * b.denominator + b.numerator * a.denominator, a.denominator * b.denominator);
-}
-
-function negate(a: Fraction): Fraction {
-  return { numerator: -a.numerator, denominator: a.denominator };
-}
-
-function multiply(a: Fraction, b: Fraction): Fraction {
-  return fraction(a.numerator * b.numerator, a.denominator * b.denominator);
-}
-
+// Said as a calculator says it, rather than as fraction.js throws it.
 function divide(a: Fraction, b: Fraction): Fraction {
-  if (b.numerator === 0n) {
+  if (b.n === 0n) {
     throw new FormulaError('divisionByZero');
   }
-  return fraction(a.numerator * b.denominator, a.denominator * b.numerator);
+  return a.div(b);
 }
