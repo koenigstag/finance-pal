@@ -1,11 +1,10 @@
 import { useCallback, useMemo } from 'react';
 import { useQuery } from '@tanstack/react-query';
 import type { ClientInferResponseBody } from '@ts-rest/core';
-import type { exchangeRatesContract } from '@ft/shared-contracts';
+import { conversionBetween, effectiveRates, type Conversion, type exchangeRatesContract } from '@ft/shared-contracts';
 import { api, unwrap } from '@/lib/api/client';
 import { queryKeys } from '@/lib/query-keys';
 import { useProfile } from '@/features/profile/queries';
-import { conversionBetween, effectiveRates, type Conversion } from './rates';
 
 export type ExchangeRates = ClientInferResponseBody<typeof exchangeRatesContract.get, 200>;
 

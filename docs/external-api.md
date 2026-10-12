@@ -38,8 +38,12 @@ What a key may do is set per resource:
 | `categories:read`      | listing and reading categories                |
 | `categories:create`    | creating categories and subcategories         |
 | `categories:update`    | renaming and moving categories                |
+| `budgets:read`         | reading a month's budget, on the MCP endpoint |
 
-Nothing is ever deleted through this API: that stays in the app.
+Nothing is ever deleted through this API: that stays in the app. Budgets are only ever read.
+
+AI assistants read a group through the [MCP endpoint](mcp.md) with the same keys, or with one
+they get by signing in.
 
 Recording transactions from notifications needs `transactions:create` only. Accounts and
 categories can be named without reading them.

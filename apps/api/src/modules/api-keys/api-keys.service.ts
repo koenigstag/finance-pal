@@ -11,6 +11,16 @@ export interface CreateApiKeyInput {
   name: string;
   scopes: ApiKeyScope[];
   expiresAt?: string;
+  // IANA zone, already validated.
+  timeZone?: string;
+  // An app connected through OAuth sign-in, which the key is made for (see OauthService).
+  oauthApp?: OauthApp;
+}
+
+/** How a signed-in app is known again: its registered name, and the redirect it signs in through. */
+export interface OauthApp {
+  clientName: string;
+  redirectUri: string;
 }
 
 export interface UpdateApiKeyInput {
@@ -36,7 +46,13 @@ export class ApiKeysService {
     return this.apiKeys.find({ where: { groupId, userId }, order: { createdAt: 'DESC' } });
   }
 
-  /** Returns the key itself alongside its row: the one moment it exists outside its hash. */
+  /**
+   * Returns the key itself alongside its row: the one moment it exists outside its hash.
+   *
+   * A key for a signed-in app replaces the one that app was given before, in the same group: an app
+   * that signs in again has let go of its old key, and a key nothing holds is only a risk. Keys made
+   * in the app are never replaced, whatever they're called.
+   */
   @Transactional()
   async create(userId: string, groupId: string, input: CreateApiKeyInput): Promise<{ apiKey: ApiKey; token: string }> {
     const { ability } = await this.abilities.forGroup(userId, groupId);
@@ -44,6 +60,14 @@ export class ApiKeysService {
     const expiresAt = input.expiresAt ? new Date(input.expiresAt) : null;
     if (expiresAt && expiresAt <= new Date()) {
       throw new BadRequestException('expiresAt must be in the future');
+    }
+    if (input.oauthApp) {
+      await this.apiKeys.delete({
+        groupId,
+        userId,
+        oauthClientName: input.oauthApp.clientName,
+        oauthRedirectUri: input.oauthApp.redirectUri,
+      });
     }
 
     const { token, tokenHash, tokenPrefix } = generateApiKey();
@@ -56,6 +80,9 @@ export class ApiKeysService {
         tokenPrefix,
         scopes,
         expiresAt,
+        timeZone: input.timeZone ?? null,
+        oauthClientName: input.oauthApp?.clientName ?? null,
+        oauthRedirectUri: input.oauthApp?.redirectUri ?? null,
         // Explicit rather than left to the column default: save() hands back this object.
         lastUsedAt: null,
       }),

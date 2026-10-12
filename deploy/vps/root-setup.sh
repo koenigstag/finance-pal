@@ -6,9 +6,9 @@
 # 1. PostgreSQL roles and database (libs/api/database/bootstrap.sql): ft_api owns the schema and
 #    runs migrations, ft_user is the runtime role that row-level security applies to. Their
 #    passwords come from the service's env file, created by init-env.sh if missing.
-# 2. An nginx site for finance-api.tfc-russia.xyz proxying to the API on 127.0.0.1:3002 and the
-#    deploy webhook (/hooks/deploy) to 127.0.0.1:3003, and a certbot certificate once DNS points at
-#    this server. Renewal is certbot.timer's job, as for every other certificate here; the script
+# 2. An nginx site for finance-api.tfc-russia.xyz proxying to the API on 127.0.0.1:3002 (/api/,
+#    and the OAuth discovery routes under /.well-known/) and the deploy webhook (/hooks/deploy) to
+#    127.0.0.1:3003, and a certbot certificate once DNS points at this server. Renewal is certbot.timer's job, as for every other certificate here; the script
 #    ends with a dry run to prove it covers this one.
 set -euo pipefail
 
@@ -60,17 +60,22 @@ if [[ ! -e /etc/nginx/sites-available/finance-api ]]; then
   install -m 644 "$HERE/nginx-finance-api.conf" /etc/nginx/sites-available/finance-api
 fi
 ln -sfn /etc/nginx/sites-available/finance-api /etc/nginx/sites-enabled/finance-api
-# The file is certbot's to edit after the first install, so the webhook route is inserted into it
-# (before the catch-all location, in every server block that has one) rather than the file being
-# replaced. Skipped once present.
-if ! grep -q 'location = /hooks/deploy' /etc/nginx/sites-available/finance-api; then
-  awk -v snippet="$HERE/nginx-finance-api-hooks.conf" '
-    /^    location \/ \{/ { while ((getline line < snippet) > 0) print line; close(snippet) }
-    { print }
-  ' /etc/nginx/sites-available/finance-api >/etc/nginx/sites-available/finance-api.new
-  mv /etc/nginx/sites-available/finance-api.new /etc/nginx/sites-available/finance-api
-  chmod 644 /etc/nginx/sites-available/finance-api
-fi
+# The file is certbot's to edit after the first install, so routes added since are inserted into
+# it (before the catch-all location, in every server block that has one) rather than the file being
+# replaced. Each is skipped once present.
+insert_route() {
+  local marker="$1" snippet="$2"
+  if ! grep -qF "$marker" /etc/nginx/sites-available/finance-api; then
+    awk -v snippet="$snippet" '
+      /^    location \/ \{/ { while ((getline line < snippet) > 0) print line; close(snippet) }
+      { print }
+    ' /etc/nginx/sites-available/finance-api >/etc/nginx/sites-available/finance-api.new
+    mv /etc/nginx/sites-available/finance-api.new /etc/nginx/sites-available/finance-api
+    chmod 644 /etc/nginx/sites-available/finance-api
+  fi
+}
+insert_route 'location = /hooks/deploy' "$HERE/nginx-finance-api-hooks.conf"
+insert_route 'location /.well-known/oauth-' "$HERE/nginx-finance-api-oauth.conf"
 nginx -t
 systemctl reload nginx
 

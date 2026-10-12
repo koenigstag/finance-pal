@@ -1,5 +1,6 @@
 export * from './lib/common/money.schema.js';
 export * from './lib/common/money-math.js';
+export * from './lib/common/rates.js';
 export * from './lib/common/percentage.schema.js';
 export * from './lib/common/round-balance.schema.js';
 export * from './lib/common/boolean-query.schema.js';
@@ -23,6 +24,7 @@ export * from './lib/api-keys/api-key-scopes.js';
 export * from './lib/api-keys/api-keys.contract.js';
 export * from './lib/external/external.contract.js';
 export * from './lib/external/notification-banks.js';
+export * from './lib/oauth/oauth.contract.js';
 export * from './lib/realtime/realtime-event.js';
 export * from './lib/ledger/exchange-rates.contract.js';
 export * from './lib/push/push.contract.js';

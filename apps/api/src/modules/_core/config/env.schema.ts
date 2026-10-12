@@ -20,6 +20,19 @@ export const envSchema = z.object({
           .every((origin) => /^https?:\/\/[^/]+$/.test(origin)),
       'CORS_ORIGINS must be comma-separated origins like https://example.com, without paths',
     ),
+  // OAuth sign-in for apps reaching the MCP endpoint, such as an AI assistant. Optional as a pair:
+  // without them the MCP endpoint takes API keys only, and the OAuth routes say sign-in isn't set
+  // up. PUBLIC_API_URL is the origin other apps reach this API at, which names it as the issuer
+  // of what it signs; WEB_APP_URL is where the web app is served, whose consent page asks the
+  // person. Neither ends in a slash.
+  PUBLIC_API_URL: z
+    .string()
+    .regex(/^https?:\/\/[^/]+$/, 'PUBLIC_API_URL must be an origin like https://api.example.com, without a path')
+    .optional(),
+  WEB_APP_URL: z
+    .string()
+    .regex(/^https?:\/\/[^?#]*[^/?#]$/, 'WEB_APP_URL must be a URL like https://example.github.io/app, without a trailing slash')
+    .optional(),
   DATABASE_URL: z.string().min(1),
   // Two keys on purpose: a refresh token can't be passed off as an access token or vice versa,
   // and either key can be rotated without touching the other kind of token.
@@ -62,6 +75,10 @@ export const envSchema = z.object({
   .refine((env) => !env.VAPID_PUBLIC_KEY || Boolean(env.VAPID_SUBJECT), {
     message: 'VAPID_SUBJECT is required when push notifications are configured',
     path: ['VAPID_SUBJECT'],
+  })
+  .refine((env) => !env.PUBLIC_API_URL === !env.WEB_APP_URL, {
+    message: 'PUBLIC_API_URL and WEB_APP_URL must be set together',
+    path: ['WEB_APP_URL'],
   });
 
 export type Env = z.infer<typeof envSchema>;

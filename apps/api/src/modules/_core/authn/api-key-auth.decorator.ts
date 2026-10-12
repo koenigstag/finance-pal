@@ -24,7 +24,15 @@ export function ApiKeyAuth(route: AppRoute): MethodDecorator {
     // At startup, when the controller class is evaluated: a route with no scope isn't one to guess about.
     throw new Error(`${route.method} ${route.path} declares no API key scope in its metadata`);
   }
-  return SetMetadata(API_KEY_ROUTE_KEY, { scope: metadata.scope } satisfies ApiKeyRoute);
+  return ApiKeyAuthScope(metadata.scope);
+}
+
+/**
+ * ApiKeyAuth for a handler outside the ts-rest contracts, which names its scope itself: the MCP
+ * endpoint, whose JSON-RPC body has no contract to declare one in.
+ */
+export function ApiKeyAuthScope(scope: ApiKeyScope | null): MethodDecorator {
+  return SetMetadata(API_KEY_ROUTE_KEY, { scope } satisfies ApiKeyRoute);
 }
 
 // Read from the handler only, matching where ApiKeyAuth puts it.

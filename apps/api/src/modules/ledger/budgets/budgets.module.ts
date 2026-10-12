@@ -10,5 +10,7 @@ import { BudgetsService } from './budgets.service';
   imports: [TypeOrmModule.forFeature([Budget, Category, Account, Profile]), AuthzModule, RealtimeModule],
   controllers: [BudgetsController],
   providers: [BudgetsService],
+  // To the MCP endpoint, which reports a month's budget.
+  exports: [BudgetsService],
 })
 export class BudgetsModule {}

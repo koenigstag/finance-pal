@@ -44,6 +44,18 @@ add_secret() {
 add_secret JWT_ACCESS_SECRET 'Signs access tokens.'
 add_secret JWT_REFRESH_SECRET 'Signs refresh tokens; must differ from JWT_ACCESS_SECRET.'
 
+# OAuth sign-in for apps reaching the MCP endpoint, an AI assistant say: where this API and the
+# web app are reached from outside. Not secrets, but added the same way, once: a value changed by
+# hand stays. The API wants both or neither.
+if ! grep -q '^PUBLIC_API_URL=' "$ENV_FILE" && ! grep -q '^WEB_APP_URL=' "$ENV_FILE"; then
+  cat >>"$ENV_FILE" <<'ENV'
+# Sign-in for apps reaching the MCP endpoint: this API's public origin, and the web app's URL.
+PUBLIC_API_URL=https://finance-api.tfc-russia.xyz
+WEB_APP_URL=https://koenigstag.github.io/finance-pal
+ENV
+  echo "Added PUBLIC_API_URL and WEB_APP_URL to $ENV_FILE"
+fi
+
 # Push notifications, unlike the secrets above, are left commented out and filled in by hand.
 # A VAPID pair is not rotatable: every device is registered against the public key it subscribed
 # with, so a newly generated pair would stop reaching all of them, silently. A deploy must never

@@ -11,5 +11,7 @@ import { ApiKeysService } from './api-keys.service';
   imports: [TypeOrmModule.forFeature([ApiKey]), AuthzModule],
   controllers: [ApiKeysController],
   providers: [ApiKeysService],
+  // To OAuth sign-in, whose apps are handed a key of their own.
+  exports: [ApiKeysService],
 })
 export class ApiKeysModule {}

@@ -43,6 +43,19 @@ export class ApiKey {
   @Column({ type: 'timestamptz', name: 'expires_at', nullable: true })
   expiresAt!: Date | null;
 
+  // IANA zone, from the browser that made the key: where its reports count their days. Null for a
+  // key made before keys had one, whose reports then go by UTC unless a request names a zone.
+  @Column({ type: 'text', name: 'time_zone', nullable: true })
+  timeZone!: string | null;
+
+  // Set on a key OAuth sign-in made, and only there: the app's registered name, and the redirect it
+  // signs in through (a loopback one without its port). The same app signing in again replaces it.
+  @Column({ type: 'text', name: 'oauth_client_name', nullable: true })
+  oauthClientName!: string | null;
+
+  @Column({ type: 'text', name: 'oauth_redirect_uri', nullable: true })
+  oauthRedirectUri!: string | null;
+
   // Updated at most once a minute, by authenticate_api_key().
   @Column({ type: 'timestamptz', name: 'last_used_at', nullable: true })
   lastUsedAt!: Date | null;

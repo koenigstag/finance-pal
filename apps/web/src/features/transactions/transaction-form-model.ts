@@ -1,7 +1,6 @@
 import { z } from 'zod';
-import { TRANSACTION_TYPES, isRoundBalanceStep, type RoundBalanceStep } from '@ft/shared-contracts';
+import { TRANSACTION_TYPES, isRoundBalanceStep, type Conversion, type RoundBalanceStep } from '@ft/shared-contracts';
 import { deviceTimezone, fromDayInput, seriesStartFromDayInput, toDayInput, todayInput } from '@/lib/dates';
-import type { Conversion } from '@/features/currencies/rates';
 import {
   convertMoney,
   isValidAmountInput,
