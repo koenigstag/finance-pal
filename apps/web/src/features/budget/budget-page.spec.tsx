@@ -68,7 +68,11 @@ const line = (id: string, target: { categoryId?: string; accountId?: string }, a
   updatedAt: '2026-10-01T00:00:00.000Z',
 });
 const october = {
-  lines: [line('l1', { categoryId: 'groceries' }, '15000.00', UAH), line('l2', { accountId: 'piggy' }, '200.00', USD)],
+  lines: [
+    line('l1', { categoryId: 'groceries' }, '15000.00', UAH),
+    line('l2', { accountId: 'piggy' }, '200.00', USD),
+    line('l3', { categoryId: 'salary' }, '35000.00', UAH),
+  ],
   totals: {
     categories: [
       { categoryId: 'groceries', type: 'expense', currencyId: UAH, recorded: '1300.00', planned: '800.00' },
@@ -128,6 +132,13 @@ describe('BudgetPage', () => {
     // The savings line, in the account's currency.
     expect(screen.getByText('Piggy bank')).toBeTruthy();
     expect(screen.getByText('$120.00 to go')).toBeTruthy();
+  });
+
+  it('shows what the budgeted income leaves once everything else budgeted is taken out', () => {
+    render(<BudgetPage />, { wrapper: wrapper('2026-10') });
+
+    // 35 000 of salary less 15 000 of groceries and 200 USD (at 41) for the piggy bank.
+    expect(screen.getByText('Available to budget').parentElement?.textContent).toContain('₴11,800.00');
   });
 
   it('folds the categories outside the budget into one row, which opens to list them', () => {

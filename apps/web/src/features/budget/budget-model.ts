@@ -1,6 +1,6 @@
 import type { Account } from '@/features/accounts/queries';
 import type { Category } from '@/features/categories/queries';
-import { convertMoney, sumMoney } from '@/lib/money';
+import { convertMoney, moneySign, sumMoney } from '@/lib/money';
 import type { Budget, BudgetTotals } from './queries';
 
 export type BudgetSectionKind = 'expense' | 'income' | 'savings' | 'debt';
@@ -14,6 +14,9 @@ export type BudgetTarget = { type: 'category'; category: Category } | { type: 'a
 export interface BudgetLineRow {
   line: Budget;
   target: BudgetTarget;
+  // A debt line for a loan someone owes back: money coming in, so what is recorded and planned
+  // against it is what came out of the account, and it adds to what is available.
+  incoming: boolean;
   // All in the line's currency.
   amount: string;
   recorded: string;
@@ -43,6 +46,10 @@ export interface BudgetSection {
 export interface BudgetView {
   // The sections with anything in them, in SECTION_ORDER.
   sections: BudgetSection[];
+  // What the income lines and the loans coming back leave once the expense, savings and other debt
+  // lines are taken out, in the main currency: below zero the month means to give out more than it
+  // brings in. Null without lines.
+  available: string | null;
   // Currencies no rate converts, whose amounts are left out of the sums they'd have gone into.
   missingCurrencyIds: number[];
 }
@@ -101,6 +108,7 @@ export function buildBudgetView({ lines, totals, categories, accounts, mainCurre
     let target: BudgetTarget;
     let recorded: string;
     let planned: string;
+    let incoming = false;
     if (category) {
       const money = categoryMoney.get(`${category.id}|${category.type}`) ?? [];
       kind = category.type;
@@ -119,6 +127,16 @@ export function buildBudgetView({ lines, totals, categories, accounts, mainCurre
       target = { type: 'account', account };
       recorded = convert(money?.recorded ?? '0', account.currencyId, line.currencyId) ?? '0';
       planned = convert(money?.planned ?? '0', account.currencyId, line.currencyId) ?? '0';
+      // Somebody owes the user, as the account's actions read it, so the line is for getting it
+      // back. Settled since, the month's own money tells: it came out of the account.
+      const balance = moneySign(account.balance);
+      incoming =
+        account.type === 'debt' &&
+        (balance > 0 || (balance === 0 && moneySign(sumMoney([money?.recorded ?? '0', money?.planned ?? '0'])) < 0));
+      if (incoming) {
+        recorded = negate(recorded);
+        planned = negate(planned);
+      }
     } else {
       // Gone from the lists since (the API deletes a line along with what it's for): nothing to show.
       continue;
@@ -128,6 +146,7 @@ export function buildBudgetView({ lines, totals, categories, accounts, mainCurre
       row: {
         line,
         target,
+        incoming,
         amount: line.amount,
         recorded,
         planned,
@@ -164,7 +183,19 @@ export function buildBudgetView({ lines, totals, categories, accounts, mainCurre
     }
   }
 
-  return { sections, missingCurrencyIds: [...missing] };
+  // Everything else is money the month gives out: spent, put aside, paid off or lent.
+  const available =
+    mainCurrencyId === undefined || rows.length === 0
+      ? null
+      : sumMoney([
+          '0',
+          ...rows.map(({ kind, row }) => {
+            const amount = convert(row.amount, row.line.currencyId, mainCurrencyId) ?? '0';
+            return kind === 'income' || row.incoming ? amount : negate(amount);
+          }),
+        ]);
+
+  return { sections, available, missingCurrencyIds: [...missing] };
 }
 
 function unbudgetedRows(
@@ -207,7 +238,8 @@ function compareTargets(a: BudgetTarget, b: BudgetTarget): number {
 }
 
 export function negate(amount: string): string {
-  return amount.startsWith('-') ? amount.slice(1) : `-${amount}`;
+  // Zero stays as it is: "-0" would show as a minus.
+  return moneySign(amount) === 0 ? amount : amount.startsWith('-') ? amount.slice(1) : `-${amount}`;
 }
 
 /** The section a line sits in. A regular account never has a line: the API drops one turned regular. */

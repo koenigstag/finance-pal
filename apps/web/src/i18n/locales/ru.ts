@@ -770,6 +770,7 @@ export const ru: Catalog<typeof en> = {
       savings: 'Накопления',
       debt: 'Долги',
     },
+    available: 'Доступно для бюджета',
     sectionTotal: '{{done}} из {{amount}}',
     of: 'из {{amount}}',
     left: 'Осталось {{amount}}',

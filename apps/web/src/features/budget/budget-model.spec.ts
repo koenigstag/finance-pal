@@ -10,8 +10,8 @@ const EUR = 3;
 
 const category = (id: string, type: Category['type'], sortOrder: number, archived = false) =>
   ({ id, name: id, type, parentId: null, sortOrder, archived, icon: null, color: null }) as Category;
-const account = (id: string, type: Account['type'], currencyId: number) =>
-  ({ id, name: id, type, currencyId, sortOrder: 0, archived: false, icon: null, color: null }) as Account;
+const account = (id: string, type: Account['type'], currencyId: number, balance = '0') =>
+  ({ id, name: id, type, currencyId, balance, sortOrder: 0, archived: false, icon: null, color: null }) as Account;
 const line = (id: string, target: { categoryId?: string; accountId?: string }, amount: string, currencyId = UAH) =>
   ({ id, month: '2026-10', categoryId: target.categoryId ?? null, accountId: target.accountId ?? null, amount, currencyId }) as Budget;
 
@@ -21,7 +21,10 @@ const cafe = category('cafe', 'expense', 3);
 const salary = category('salary', 'income', 1);
 const gifts = category('gifts', 'income', 2, true);
 const piggy = account('piggy', 'savings', USD);
-const loan = account('loan', 'debt', UAH);
+const loan = account('loan', 'debt', UAH, '-60000.00');
+// Lent out, so owed back.
+const lent = account('lent', 'debt', UAH, '3000.00');
+const settled = account('settled', 'debt', UAH);
 
 // 1 USD = 41 UAH; nothing converts EUR.
 const rate: BudgetViewInput['rate'] = (from, to) =>
@@ -33,7 +36,7 @@ function view(lines: Budget[], totals: Partial<BudgetTotals>, mainCurrencyId: nu
     lines,
     totals: { categories: [], accounts: [], ...totals },
     categories: [groceries, transport, cafe, salary, gifts],
-    accounts: [piggy, loan],
+    accounts: [piggy, loan, lent, settled],
     mainCurrencyId: mainCurrencyId ?? undefined,
     rate,
   });
@@ -74,6 +77,28 @@ describe('buildBudgetView', () => {
     expect(sections[1].lines[0]).toMatchObject({ recorded: '5000.00', planned: '2000.00', remaining: '-2000.00' });
     // The savings total is in the main currency.
     expect(sections[0].total).toEqual({ amount: '8200.00', recorded: '3280.00' });
+  });
+
+  it('measures a loan someone owes back by what came out of it, and settled since by that month', () => {
+    const { sections } = view(
+      [
+        line('l1', { accountId: lent.id }, '5000'),
+        line('l2', { accountId: settled.id }, '2000'),
+        line('l3', { accountId: loan.id }, '6000'),
+      ],
+      {
+        accounts: [
+          { accountId: lent.id, recorded: '-2000.00', planned: '0' },
+          { accountId: settled.id, recorded: '-2000.00', planned: '0' },
+          { accountId: loan.id, recorded: '6000.00', planned: '0' },
+        ],
+      },
+    );
+    expect(sections[0].lines.map((row) => [row.line.id, row.incoming, row.recorded, row.remaining])).toEqual([
+      ['l1', true, '2000.00', '3000.00'],
+      ['l3', false, '6000.00', '0.00'],
+      ['l2', true, '2000.00', '0.00'],
+    ]);
   });
 
   it('counts a withdrawal from savings against what was put in', () => {
@@ -118,7 +143,41 @@ describe('buildBudgetView', () => {
   });
 
   it('shows nothing for a month with no lines and no money', () => {
-    expect(view([], {}).sections).toEqual([]);
+    expect(view([], {})).toMatchObject({ sections: [], available: null });
+  });
+
+  it('leaves available what the income lines bring in less what the other lines give out', () => {
+    const { available } = view(
+      [
+        line('l1', { categoryId: salary.id }, '35000'),
+        line('l2', { categoryId: groceries.id }, '15000'),
+        line('l3', { categoryId: transport.id }, '100', USD),
+        line('l4', { accountId: piggy.id }, '200', USD),
+        line('l5', { accountId: loan.id }, '6000'),
+      ],
+      // Money outside the budget doesn't come into it.
+      { categories: [{ categoryId: cafe.id, type: 'expense', currencyId: UAH, recorded: '500.00', planned: '0' }] },
+    );
+    // 35 000 less 15 000 and 100 USD of expenses, 200 USD put aside and 6 000 paid off, a dollar at 41.
+    expect(available).toBe('1700.00');
+  });
+
+  it('goes below zero with more budgeted to give out than to come in, or nothing to come in', () => {
+    expect(view([line('l1', { categoryId: salary.id }, '1000'), line('l2', { categoryId: groceries.id }, '1500')], {}).available).toBe(
+      '-500',
+    );
+    expect(view([line('l1', { categoryId: groceries.id }, '1500')], {}).available).toBe('-1500');
+    expect(view([line('l1', { accountId: piggy.id }, '200', USD)], {}).available).toBe('-8200.00');
+  });
+
+  it('counts a loan coming back as money in', () => {
+    const { available } = view(
+      [line('l1', { categoryId: groceries.id }, '1500'), line('l2', { accountId: lent.id }, '3000'), line('l3', { accountId: loan.id }, '1000')],
+      {},
+    );
+    expect(available).toBe('500');
+    // A debt settled and nothing moving on it this month: a line for it is money going out, a loan.
+    expect(view([line('l1', { accountId: settled.id }, '700')], {}).available).toBe('-700');
   });
 
   it('puts expenses first and income last', () => {
@@ -146,5 +205,6 @@ describe('buildBudgetView', () => {
     const { sections } = view([line('l1', { categoryId: groceries.id }, '15000')], {}, null);
     expect(sections[0].total).toBeNull();
     expect(sections[0].unbudgeted).toBeNull();
+    expect(view([line('l1', { categoryId: groceries.id }, '15000')], {}, null).available).toBeNull();
   });
 });
