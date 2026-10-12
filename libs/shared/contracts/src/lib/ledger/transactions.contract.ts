@@ -103,6 +103,12 @@ const transactionListResponseSchema = z.object({
   nextCursor: z.string().nullable(),
 });
 
+// Per category, the account its latest recorded transaction is on: where a new expense or income
+// under it starts. A category with none isn't listed.
+const lastAccountsResponseSchema = z.object({
+  items: z.array(z.object({ categoryId: z.string().uuid(), accountId: z.string().uuid() })),
+});
+
 const groupPathParams = z.object({ groupId: z.string().uuid() });
 const transactionPathParams = z.object({ groupId: z.string().uuid(), transactionId: z.string().uuid() });
 
@@ -115,6 +121,13 @@ export const transactionsContract = c.router(
       query: transactionListQuerySchema,
       responses: { 200: transactionListResponseSchema, 400: errorSchema, 404: errorSchema },
       summary: 'List transactions in a group, cursor-paginated by date desc, filterable',
+    },
+    lastAccounts: {
+      method: 'GET',
+      path: '/groups/:groupId/transactions/last-accounts',
+      pathParams: groupPathParams,
+      responses: { 200: lastAccountsResponseSchema, 404: errorSchema },
+      summary: "For each category, the account of its latest transaction that isn't planned",
     },
     create: {
       method: 'POST',

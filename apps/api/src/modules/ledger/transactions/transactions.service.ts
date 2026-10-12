@@ -159,6 +159,32 @@ export class TransactionsService {
     return { items: rows, tagsByTransactionId: await this.loadTagIds(rows.map((r) => r.id)), nextCursor };
   }
 
+  /**
+   * For each category, the account its latest transaction is on, a subcategory's counting toward
+   * its category: where a new expense or income under it starts. Latest by the order list() keeps,
+   * among those that have happened: a planned one doesn't say where the money goes these days.
+   */
+  async lastAccounts(
+    userId: string,
+    groupId: string,
+    now = new Date(),
+  ): Promise<{ categoryId: string; accountId: string }[]> {
+    await this.authorize(userId, groupId, 'read', 'Transaction');
+    return this.transactions
+      .createQueryBuilder('t')
+      .select('t.category_id', 'categoryId')
+      .addSelect('t.account_id', 'accountId')
+      .distinctOn(['t.category_id'])
+      .where('t.group_id = :groupId', { groupId })
+      .andWhere('t.category_id IS NOT NULL')
+      .andWhere('t.date <= :now', { now })
+      .orderBy('t.category_id')
+      .addOrderBy('t.date', 'DESC')
+      .addOrderBy('t.created_at', 'DESC')
+      .addOrderBy('t.id', 'DESC')
+      .getRawMany();
+  }
+
   async get(userId: string, groupId: string, transactionId: string): Promise<{ transaction: Transaction; tagIds: string[] }> {
     await this.authorize(userId, groupId, 'read', 'Transaction');
     const transaction = await this.findOrFail(groupId, transactionId);

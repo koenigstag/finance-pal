@@ -31,6 +31,7 @@ import { DateSheet } from './date-sheet';
 import { AccountBalance, AccountPicker, KindPicker, type KindPick } from './pickers';
 import {
   useDeleteRecurringRule,
+  useLastAccounts,
   useSaveRecurringRule,
   useSaveTransaction,
   type RecurringRule,
@@ -112,6 +113,7 @@ export function TransactionDialog({
   const { ability } = useGroupScope();
   const accounts = useAccounts(groupId);
   const categories = useCategories(groupId);
+  const lastAccounts = useLastAccounts(groupId);
   const currencyCodes = useCurrencyCodes();
   const conversionOf = useConversionLookup();
   const saveTransaction = useSaveTransaction(groupId);
@@ -187,6 +189,11 @@ export function TransactionDialog({
   };
 
   const fallbackAccountId = pickDefaultAccountId(accountList, defaultAccountId);
+  // A new expense or income goes on the account its category was last recorded on, a category not
+  // used yet on the favourite: unless the dialog was opened for an account (one the list is
+  // filtered by, an account's own action), or one was picked by hand since it opened.
+  const accountFollowsCategory = !rule && !transaction && !template && !defaultAccountId;
+  const accountPicked = useRef(false);
   useEffect(() => {
     if (!open) {
       return;
@@ -199,6 +206,7 @@ export function TransactionDialog({
           ? { ...transactionToFormValues(template), day: todayInput() }
           : defaultTransactionFormValues({ accountId: fallbackAccountId, toAccountId: defaultToAccountId, type: defaultType });
     form.reset(values);
+    accountPicked.current = false;
     // A duplicate is a new transaction, and a series works its amount out again on each date: without
     // a base amount, their percentage is of the balance as it stands today.
     if (rule || (!transaction && template)) {
@@ -263,6 +271,12 @@ export function TransactionDialog({
       }
       form.setValue('categoryId', pick.categoryId);
       form.setValue('toAccountId', '');
+      if (accountFollowsCategory && !accountPicked.current) {
+        const lastAccountId = lastAccounts.data?.get(pick.categoryId);
+        form.setValue('accountId', pickDefaultAccountId(accountList, lastAccountId) ?? '', {
+          shouldValidate: form.formState.isSubmitted,
+        });
+      }
     }
     // The account may have changed, and the type decides which way a rounding goes.
     recalculate();
@@ -573,6 +587,7 @@ export function TransactionDialog({
           }
           // The percentage is of this account's balance: another account, another amount.
           if (accountSide === 'accountId') {
+            accountPicked.current = true;
             recalculate();
           }
           setAccountSide(null);
