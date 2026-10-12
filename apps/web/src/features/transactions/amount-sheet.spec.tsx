@@ -1,5 +1,5 @@
 import { QueryClient, QueryClientProvider } from '@tanstack/react-query';
-import { render, screen } from '@testing-library/react';
+import { fireEvent, render, screen } from '@testing-library/react';
 import type { ReactNode } from 'react';
 import { describe, expect, it, vi } from 'vitest';
 import '@/i18n';
@@ -96,5 +96,17 @@ describe('AmountSheet', () => {
 
     expect(amountFields()).toEqual(['Amount (USD)']);
     expect(sideBySide()).toBe(false);
+  });
+
+  it('fills an amount in from the calculator, without its sign', () => {
+    open({ type: 'expense', accountId: 'wallet', toAccountId: '' });
+
+    fireEvent.click(screen.getByRole('button', { name: 'Calculate the amount' }));
+    for (const key of ['2', '0', 'Minus', '5', '0', 'Equals', 'Use this amount']) {
+      fireEvent.click(screen.getByRole('button', { name: key }));
+    }
+
+    expect(screen.queryByRole('heading', { name: 'Calculator' })).toBeNull();
+    expect(screen.getByRole<HTMLInputElement>('textbox', { name: 'Amount (USD)' }).value).toBe('30');
   });
 });

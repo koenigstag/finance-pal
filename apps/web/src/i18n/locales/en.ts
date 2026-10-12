@@ -353,6 +353,29 @@ export const en = {
       nextMonth: 'Next month',
       done: 'Done',
     },
+    // Opened from an amount field's button: a formula typed first, worked out on "=".
+    calculator: {
+      title: 'Calculator',
+      open: 'Calculate the amount',
+      clear: 'Clear all',
+      erase: 'Erase the last character',
+      add: 'Plus',
+      subtract: 'Minus',
+      multiply: 'Multiply by',
+      divide: 'Divide by',
+      percent: 'Per cent',
+      decimal: 'Decimal comma',
+      // The one key for both: it opens a bracket or closes one, as the formula needs.
+      brackets: 'Brackets',
+      equals: 'Equals',
+      // Once the formula is a single number: it goes into the field.
+      done: 'Use this amount',
+      errors: {
+        incomplete: 'Finish the formula first',
+        divisionByZero: "Can't divide by zero",
+        tooLarge: 'Too large for an amount',
+      },
+    },
     deleteConfirm: {
       title: 'Delete this transaction?',
       description: 'Account balances will be recalculated.',
