@@ -26,6 +26,23 @@ export function useTransactionPages(groupId: string, filters: TransactionFilters
   });
 }
 
+/**
+ * Per category, the account its latest transaction that has happened is on, by category id. Kept
+ * with the transactions, so recording one refreshes it.
+ */
+export function useLastAccounts(groupId: string) {
+  return useQuery({
+    queryKey: [...queryKeys.transactions(groupId), 'last-accounts'],
+    queryFn: () => unwrap(api.transactions.lastAccounts({ params: { groupId } }), 200),
+    select: byCategory,
+  });
+}
+
+// Outside the hook, so the query keeps the map it made until the list itself changes.
+function byCategory(body: { items: { categoryId: string; accountId: string }[] }): Map<string, string> {
+  return new Map(body.items.map((item) => [item.categoryId, item.accountId]));
+}
+
 /** The group's running series; paused ones have nothing planned, so nothing shows them. */
 export function useRecurringRules(groupId: string) {
   return useQuery({
