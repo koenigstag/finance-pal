@@ -309,6 +309,7 @@ export const externalContract = c.router(
         query: z.object({
           cursor: z.string().optional(),
           limit: z.coerce.number().int().min(1).max(200).optional(),
+          // Transactions from the account, and transfers into it as well.
           accountId: z.string().uuid().optional(),
           // A category takes in its subcategories' transactions.
           categoryId: z.string().uuid().optional(),
