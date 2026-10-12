@@ -30,6 +30,9 @@ export const queryKeys = {
   budgets: (groupId: string) => ['group', groupId, 'budgets'] as const,
   budgetLines: (groupId: string, month: string) => ['group', groupId, 'budgets', month, 'lines'] as const,
   budgetTotals: (groupId: string, month: string) => ['group', groupId, 'budgets', month, 'totals'] as const,
+  // What was spent and received each day of a month, which money moving changes as the budget's totals.
+  overview: (groupId: string) => ['group', groupId, 'overview'] as const,
+  overviewDays: (groupId: string, month: string) => ['group', groupId, 'overview', month, 'days'] as const,
   // Not group data: a device is registered by a person, for every group they are in.
   pushPublicKey: ['push', 'public-key'] as const,
   pushDevice: ['push', 'device'] as const,

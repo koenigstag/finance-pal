@@ -40,10 +40,6 @@ export const ru: Catalog<typeof en> = {
     delete: 'Удалить',
     edit: 'Изменить',
     ratesPublished: 'Курсы на {{date}}',
-    comingSoon: {
-      title: 'Скоро',
-      description: 'Этот раздел в разработке.',
-    },
   },
   nav: {
     account: 'Аккаунт',
@@ -736,6 +732,32 @@ export const ru: Catalog<typeof en> = {
     archivedCategory: 'Категория в архиве',
     readOnly: 'Вы наблюдатель в этой группе: видите правила, но не можете их менять.',
     archivedGroup: 'Группа в архиве, правила менять нельзя.',
+  },
+  overview: {
+    title: 'Обзор',
+    previousMonth: 'Предыдущий месяц',
+    nextMonth: 'Следующий месяц',
+    tabs: {
+      expense: 'Расходы',
+      income: 'Доходы',
+    },
+    chartLabel: {
+      expense: 'Расходы по дням, {{month}}',
+      income: 'Доходы по дням, {{month}}',
+    },
+    perDay: 'В день',
+    perWeek: 'В неделю',
+    month: 'За месяц',
+    more: 'Ещё',
+    noCategory: 'Без категории',
+    debt: 'Долг',
+    dayMore: 'и ещё {{count}}',
+    missingRates: 'Нет курса для {{codes}}, поэтому суммы в этой валюте не учтены. Курсы можно задать в настройках.',
+    empty: {
+      expense: 'В этом месяце расходов нет',
+      income: 'В этом месяце доходов нет',
+      description: 'Учитывается только то, что уже произошло: запланированная операция появится здесь в свой день.',
+    },
   },
   budget: {
     title: 'Бюджет',
