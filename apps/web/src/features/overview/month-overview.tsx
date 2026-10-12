@@ -27,6 +27,9 @@ import {
 } from './overview-model';
 import { useOverviewDays } from './queries';
 
+// What a row can lead to: a category, or a debt. Money with no category has nowhere to go.
+export type SelectableSource = Exclude<OverviewSource, { kind: 'none' }>;
+
 interface MonthOverviewProps {
   groupId: string;
   // The first of the month this panel is about.
@@ -37,9 +40,8 @@ interface MonthOverviewProps {
   // The signed-in person's, which everything is in; unknown while loading.
   mainCurrencyId: number | undefined;
   rate: OverviewViewInput['rate'];
-  // A category's row leads to its transactions. A debt's doesn't: the transactions list finds an
-  // account's own transfers out, not those into it, which is half of what the row adds up.
-  onSelectCategory: (category: Category) => void;
+  // A category's or a debt's row leads to the transactions behind it.
+  onSelect: (source: SelectableSource) => void;
   // Set on a panel waiting off to the side: it can be seen, but not read out or tabbed into.
   inert?: boolean;
 }
@@ -56,7 +58,7 @@ export function MonthOverview({
   accounts,
   mainCurrencyId,
   rate,
-  onSelectCategory,
+  onSelect,
   inert,
 }: MonthOverviewProps) {
   const { t, i18n } = useTranslation();
@@ -121,7 +123,7 @@ export function MonthOverview({
                 <Stat label={t('overview.perWeek')} value={tab.perWeek === null ? '—' : money(tab.perWeek)} />
                 <Stat label={t('overview.month')} value={money(tab.total)} />
               </dl>
-              <Rows rows={tab.rows} money={money} nameOf={nameOf} onSelect={onSelectCategory} />
+              <Rows rows={tab.rows} money={money} nameOf={nameOf} onSelect={onSelect} />
             </>
           )}
           {view.missingCurrencyIds.length > 0 && (
@@ -158,7 +160,7 @@ function Rows({
   rows: OverviewRow[];
   money: (amount: string) => string;
   nameOf: (source: OverviewSource) => string;
-  onSelect: (category: Category) => void;
+  onSelect: (source: SelectableSource) => void;
 }) {
   const { t, i18n } = useTranslation();
   const listId = useId();
@@ -220,7 +222,7 @@ function Row({
   money: (amount: string) => string;
   name: string;
   percent: Intl.NumberFormat;
-  onSelect: (category: Category) => void;
+  onSelect: (source: SelectableSource) => void;
 }) {
   const { t } = useTranslation();
   const { source } = row;
@@ -247,13 +249,13 @@ function Row({
   );
   const layout = 'flex w-full min-w-0 items-start gap-3 px-4 py-3 text-left';
 
-  // Only a category's leads anywhere: see onSelectCategory.
-  return source.kind === 'category' ? (
-    <button type="button" className={cn(layout, 'hover:bg-muted/50')} onClick={() => onSelect(source.category)}>
+  // Money with no category has no filter to lead to.
+  return source.kind === 'none' ? (
+    <div className={layout}>{body}</div>
+  ) : (
+    <button type="button" className={cn(layout, 'hover:bg-muted/50')} onClick={() => onSelect(source)}>
       {body}
     </button>
-  ) : (
-    <div className={layout}>{body}</div>
   );
 }
 

@@ -171,6 +171,23 @@ describe('OverviewPage', () => {
     expect(screen.getByTestId('location').textContent).toBe(`/g/${groupId}/transactions?month=2026-10&category=groceries`);
   });
 
+  it("leads from a debt to the month's transfers into it and out of it", () => {
+    renderPage(`/g/${groupId}/overview?month=2026-10`);
+
+    fireEvent.click(screen.getByRole('button', { name: /Loan/ }));
+    expect(screen.getByTestId('location').textContent).toBe(
+      `/g/${groupId}/transactions?month=2026-10&account=loan&type=transfer`,
+    );
+  });
+
+  it('leaves money with no category where it is', () => {
+    renderPage(`/g/${groupId}/overview?month=2026-10`);
+
+    fireEvent.click(screen.getByRole('button', { name: /More/ }));
+    expect(screen.queryByRole('button', { name: /No category/ })).toBeNull();
+    expect(screen.getByText('No category')).toBeTruthy();
+  });
+
   it('says so for a month with nothing in it', () => {
     renderPage(`/g/${groupId}/overview?month=2026-11`);
 
