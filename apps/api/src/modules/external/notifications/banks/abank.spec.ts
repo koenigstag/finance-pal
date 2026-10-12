@@ -49,6 +49,19 @@ describe('parseABankNotification', () => {
     expect(parse(forwarded('🛒 \u22121\u00a0250,00\u00a0₴', 'Сільпо\nБаланс: 3\u00a0000,00 ₴'))).toEqual(expense('1250.00', 'Сільпо'));
   });
 
+  it("adds the bank's fee to what was spent, since the title's amount leaves it out", () => {
+    expect(parse(forwarded('💸 -500.00 ₴', '5168****0000\nКомiсiя: 20.00 ₴\nБаланс: 1 000.00 ₴'))).toEqual(
+      expense('520.00', '5168****0000'),
+    );
+    // On a single line, and with a Cyrillic і.
+    expect(parse('💸 -340.00 ₴\nОлена К. Комісія: 0.62 ₴ Баланс: 4 000.00 ₴')).toEqual(expense('340.62', 'Олена К.'));
+  });
+
+  it("doesn't add a fee it can't read, or one in another currency than the payment", () => {
+    expect(parse(forwarded('💸 -500.00 ₴', '5168****0000\nКомiсiя: 1%\nБаланс: 1 000.00 ₴'))).toBeNull();
+    expect(parse(forwarded('🍸 -4 280.00 HUF', 'Ресторан\nКомiсiя: 12.00 ₴\nБаланс: 1 000.00 ₴'))).toBeNull();
+  });
+
   it('finds the title wherever it is, for a client that sends the text first', () => {
     expect(parse('АТБ\nБаланс: 5.00 ₴\n🛒 -1.00 ₴')).toEqual(expense('1.00', 'АТБ'));
   });
