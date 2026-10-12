@@ -1,4 +1,4 @@
-import { Table, TableColumn, TableForeignKey } from 'typeorm';
+import { Table, TableCheck, TableColumn, TableForeignKey } from 'typeorm';
 import type { QueryRunner } from 'typeorm';
 import type { Migration } from './migration.interface.js';
 
@@ -89,9 +89,23 @@ async function up(queryRunner: QueryRunner): Promise<void> {
   // Where a key's reports count their days when a request names no time zone: the browser's that
   // made the key, or allowed the app it was made for.
   await queryRunner.addColumn('api_keys', new TableColumn({ name: 'time_zone', type: 'text', isNullable: true }));
+
+  // The app a sign-in made the key for, set on those keys only: its registered name, and the
+  // redirect it signs in through. When the same app signs in again, its new key replaces this one,
+  // rather than leaving a key behind that nothing holds any more.
+  await queryRunner.addColumns('api_keys', [
+    new TableColumn({ name: 'oauth_client_name', type: 'text', isNullable: true }),
+    new TableColumn({ name: 'oauth_redirect_uri', type: 'text', isNullable: true }),
+  ]);
+  await queryRunner.createCheckConstraint(
+    'api_keys',
+    new TableCheck({ name: 'chk_api_keys_oauth_app', expression: 'num_nonnulls(oauth_client_name, oauth_redirect_uri) IN (0, 2)' }),
+  );
 }
 
 async function down(queryRunner: QueryRunner): Promise<void> {
+  await queryRunner.dropCheckConstraint('api_keys', 'chk_api_keys_oauth_app');
+  await queryRunner.dropColumns('api_keys', ['oauth_client_name', 'oauth_redirect_uri']);
   await queryRunner.dropColumn('api_keys', 'time_zone');
   await queryRunner.query('DROP FUNCTION IF EXISTS redeem_oauth_code(text)');
   // Takes its policy and foreign key along.

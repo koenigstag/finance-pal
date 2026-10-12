@@ -17,7 +17,7 @@ import {
   type AuthorizationParams,
   type ValidAuthorization,
 } from './oauth-authorization';
-import { encodeClientId, parseRegistration } from './oauth-clients';
+import { encodeClientId, parseRegistration, redirectIdentity } from './oauth-clients';
 import { OauthSettings } from './oauth-settings';
 
 // Long enough to get through the app's redirect and its server's call back, short enough that a
@@ -55,7 +55,7 @@ export class TokenError extends HttpException {
  * code for a key of its own, with viewing scopes only. The key is listed with the group's other
  * keys, under the app's name, and deleting it there disconnects the app. It doesn't expire —
  * nothing here hands out refresh tokens — so it works until it's deleted, like any key made in the
- * app without an expiry.
+ * app without an expiry, or until the same app signs in to the group again and gets a new one.
  */
 @Injectable()
 export class OauthService {
@@ -164,12 +164,13 @@ export class OauthService {
 
     const scopes = redeemed.scopes.filter(isApiKeyScope) as ApiKeyScope[];
     // The trade has no identity of its own; the key is made as the person who allowed the app, under
-    // the same rules as one they'd make in the app.
+    // the same rules as one they'd make in the app. It replaces the key this app had in the group.
     const { token } = await withRlsUser(this.dataSource, redeemed.user_id, () =>
       this.apiKeys.create(redeemed.user_id, redeemed.group_id, {
         name: redeemed.client_name,
         scopes,
         timeZone: redeemed.time_zone ?? undefined,
+        oauthApp: { clientName: redeemed.client_name, redirectUri: redirectIdentity(redeemed.redirect_uri) },
       }),
     );
     return { access_token: token, token_type: 'Bearer', scope: scopes.join(' ') };

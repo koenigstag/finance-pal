@@ -42,7 +42,9 @@ claude mcp add --transport http finance-pal https://finance-api.tfc-russia.xyz/a
 Signing in gives the assistant an API key of its own. It sees one group, as the person who
 allowed it, with every view scope and nothing else. The key is listed in the group's settings
 under **API keys**, by the name the assistant gave itself, usually *Claude*. Deleting it there
-disconnects the assistant at once. The key doesn't expire otherwise.
+disconnects the assistant at once. The key doesn't expire otherwise. When the same assistant
+connects to the group again, its new key replaces the old one. The assistant is known by its name
+and the address it signs in through. Keys made in the app are never replaced.
 
 Each tool needs a scope, and a key only gets the tools it has scopes for:
 

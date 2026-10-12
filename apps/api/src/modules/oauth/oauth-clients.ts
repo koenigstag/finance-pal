@@ -133,6 +133,14 @@ export function isRegisteredRedirect(client: OauthClient, requested: string): bo
   return loose !== null && client.redirectUris.some((uri) => withoutLoopbackPort(uri) === loose);
 }
 
+/**
+ * The redirect as an app is known by from one sign-in to the next: as registered, but a loopback
+ * one without its port, which a desktop app picks anew each time.
+ */
+export function redirectIdentity(uri: string): string {
+  return withoutLoopbackPort(uri) ?? uri;
+}
+
 function withoutLoopbackPort(uri: string): string | null {
   try {
     const url = new URL(uri);

@@ -115,6 +115,8 @@ describe('OauthService', () => {
         name: 'Claude',
         scopes: ['accounts:read', 'budgets:read'],
         timeZone: 'Europe/Kyiv',
+        // So it replaces the key Claude had here before.
+        oauthApp: { clientName: 'Claude', redirectUri },
       });
     });
 

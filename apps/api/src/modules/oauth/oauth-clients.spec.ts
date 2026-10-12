@@ -5,6 +5,7 @@ import {
   isAllowedRedirectUri,
   isRegisteredRedirect,
   parseRegistration,
+  redirectIdentity,
 } from './oauth-clients';
 
 const key = Buffer.from('k'.repeat(32));
@@ -105,5 +106,15 @@ describe('isRegisteredRedirect', () => {
     expect(isRegisteredRedirect(claude, 'https://claude.ai/api/mcp/auth_callback/')).toBe(false);
     expect(isRegisteredRedirect(desktop, 'http://localhost:51234/other')).toBe(false);
     expect(isRegisteredRedirect(desktop, 'http://127.0.0.1:3118/callback')).toBe(false);
+  });
+});
+
+describe('redirectIdentity', () => {
+  it('knows a desktop app again whatever port it listens on', () => {
+    expect(redirectIdentity('http://localhost:51234/callback')).toBe(redirectIdentity('http://localhost:3118/callback'));
+  });
+
+  it('keeps any other redirect as it is', () => {
+    expect(redirectIdentity('https://claude.ai/api/mcp/auth_callback')).toBe('https://claude.ai/api/mcp/auth_callback');
   });
 });
