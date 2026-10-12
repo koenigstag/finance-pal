@@ -1,4 +1,5 @@
 import { zodResolver } from '@hookform/resolvers/zod';
+import { CalculatorIcon } from 'lucide-react';
 import { useEffect, useMemo, useRef, useState, type FocusEvent } from 'react';
 import { useForm, useWatch } from 'react-hook-form';
 import { useTranslation } from 'react-i18next';
@@ -22,6 +23,7 @@ import type { Account } from '@/features/accounts/queries';
 import { useCurrencyCodes } from '@/features/currencies/queries';
 import type { Conversion } from '@/features/currencies/rates';
 import { convertMoney, formatPercentage, isValidAmountInput, parseMoneyInput, parsePercentageInput } from '@/lib/money';
+import { CalculatorSheet } from './calculator-sheet';
 import type { Transaction } from './queries';
 import {
   amountFormSchema,
@@ -85,6 +87,10 @@ export function AmountSheet({
   // Off unless the amount already comes from one: their fields only show once asked for.
   const [percentageOn, setPercentageOn] = useState(values.percentage !== '');
   const [roundOn, setRoundOn] = useState(values.roundBalanceTo !== '');
+  // The field the calculator is open for, if it is; bumped each opening, so it mounts fresh, on top
+  // and going on from what the field holds then.
+  const [calculating, setCalculating] = useState<'amount' | 'destAmount' | null>(null);
+  const [calculatorLayer, setCalculatorLayer] = useState(0);
 
   const schema = useMemo(
     () =>
@@ -223,19 +229,38 @@ export function AmountSheet({
     return (
       <Field data-invalid={!!errors[name]} data-disabled={disabled}>
         <FieldLabel htmlFor={`amount-sheet-${name}`}>{label}</FieldLabel>
-        <Input
-          id={`amount-sheet-${name}`}
-          inputMode="decimal"
-          autoComplete="off"
-          aria-invalid={!!errors[name]}
-          onFocus={selectOnFocus}
-          // Empty is "at the rate", and the figure that comes to stands in for it.
-          placeholder={received && atTheRate ? atTheRate : undefined}
-          {...form.register(name)}
-          // On the element, not through register's `disabled` option, which would also leave the
-          // worked-out amount out of what's submitted.
-          disabled={disabled}
-        />
+        <div className="relative">
+          <Input
+            id={`amount-sheet-${name}`}
+            inputMode="decimal"
+            autoComplete="off"
+            className="pr-10"
+            aria-invalid={!!errors[name]}
+            onFocus={selectOnFocus}
+            // Empty is "at the rate", and the figure that comes to stands in for it.
+            placeholder={received && atTheRate ? atTheRate : undefined}
+            {...form.register(name)}
+            // On the element, not through register's `disabled` option, which would also leave the
+            // worked-out amount out of what's submitted.
+            disabled={disabled}
+          />
+          {/* Works the figure out from a formula, in a sheet of its own; not while it's worked out
+              here already or can't be typed. */}
+          <Button
+            type="button"
+            variant="ghost"
+            size="icon-sm"
+            className="absolute inset-y-0 right-1.5 my-auto text-muted-foreground"
+            aria-label={t('transactions.calculator.open')}
+            disabled={disabled}
+            onClick={() => {
+              setCalculatorLayer((current) => current + 1);
+              setCalculating(name);
+            }}
+          >
+            <CalculatorIcon />
+          </Button>
+        </div>
         {received && rateHint && <FieldDescription>{rateHint}</FieldDescription>}
         <FieldError errors={[errors[name]]} />
       </Field>
@@ -243,162 +268,176 @@ export function AmountSheet({
   };
 
   return (
-    <Dialog open={open} onOpenChange={onOpenChange}>
-      <DialogContent aria-describedby={undefined}>
-        <DialogHeader>
-          <DialogTitle>{t('transactions.amount')}</DialogTitle>
-        </DialogHeader>
-        <form onSubmit={onSubmit} noValidate>
-          <FieldGroup className="gap-4">
-            {twoSided ? (
-              // Each amount in its own side's currency, side by side.
-              <div className="grid grid-cols-2 gap-3">
-                {amountInput('amount', withCurrency(t('transactions.amountWithdrawn'), sides.accountId))}
-                {amountInput('destAmount', withCurrency(t('transactions.destAmount'), sides.toAccountId))}
-              </div>
-            ) : (
-              // One figure, so it takes the row: a transfer within a currency arrives as what left,
-              // which is nothing to ask twice or to name as one side of two.
-              amountInput('amount', withCurrency(t('transactions.amount'), sides.accountId))
-            )}
+    <>
+      <Dialog open={open} onOpenChange={onOpenChange}>
+        <DialogContent aria-describedby={undefined}>
+          <DialogHeader>
+            <DialogTitle>{t('transactions.amount')}</DialogTitle>
+          </DialogHeader>
+          <form onSubmit={onSubmit} noValidate>
+            <FieldGroup className="gap-4">
+              {twoSided ? (
+                // Each amount in its own side's currency, side by side.
+                <div className="grid grid-cols-2 gap-3">
+                  {amountInput('amount', withCurrency(t('transactions.amountWithdrawn'), sides.accountId))}
+                  {amountInput('destAmount', withCurrency(t('transactions.destAmount'), sides.toAccountId))}
+                </div>
+              ) : (
+                // One figure, so it takes the row: a transfer within a currency arrives as what left,
+                // which is nothing to ask twice or to name as one side of two.
+                amountInput('amount', withCurrency(t('transactions.amount'), sides.accountId))
+              )}
 
-            <Accordion
-              type="single"
-              collapsible
-              value={advancedOpen ? 'advanced' : ''}
-              onValueChange={(value) => setAdvancedOpen(value === 'advanced')}
-            >
-              <AccordionItem value="advanced">
-                <AccordionTrigger className="py-1">
-                  {/* Taking the free space, it keeps what follows next to the chevron. */}
-                  <span className="flex-1">{t('transactions.advanced')}</span>
-                  {/* Folded away, the section still says where the amount comes from. */}
-                  {!advancedOpen && (validPercentage || parseRoundBalanceTo(roundBalanceTo)) && (
-                    <span className="mr-2 font-normal text-muted-foreground">
-                      {validPercentage
-                        ? formatPercentage(validPercentage, i18n.language)
-                        : stepLabel(Number(roundBalanceTo))}
-                    </span>
-                  )}
-                </AccordionTrigger>
-                {/* Unlike the stock one, its height follows what's in it, so an error showing up
-                    under a field isn't clipped, and it spaces fields the way the form does rather
-                    than paragraphs of prose. */}
-                <AccordionContent className="h-auto pt-2 pb-0 [&_p:not(:last-child)]:mb-0">
-                  <FieldGroup className="gap-4">
-                    {/* A card that ticks as a whole; the percentage's fields only show while it's ticked. */}
-                    <FieldLabel htmlFor="amount-sheet-percentage-on">
-                      <Field orientation="horizontal">
-                        <Checkbox
-                          id="amount-sheet-percentage-on"
-                          checked={percentageOn}
-                          onCheckedChange={(checked) => switchPercentage(checked === true)}
-                        />
-                        <FieldContent>
-                          <FieldTitle>{t('transactions.percentageMode')}</FieldTitle>
-                          <FieldDescription>{t('transactions.percentageModeHint')}</FieldDescription>
-                        </FieldContent>
-                      </Field>
-                    </FieldLabel>
-                    {percentageOn && (
-                      <>
-                        <Field data-invalid={!!errors.percentage}>
-                          <FieldLabel htmlFor="amount-sheet-percentage">{t('transactions.percentage')}</FieldLabel>
-                          <div className="relative">
+              <Accordion
+                type="single"
+                collapsible
+                value={advancedOpen ? 'advanced' : ''}
+                onValueChange={(value) => setAdvancedOpen(value === 'advanced')}
+              >
+                <AccordionItem value="advanced">
+                  <AccordionTrigger className="py-1">
+                    {/* Taking the free space, it keeps what follows next to the chevron. */}
+                    <span className="flex-1">{t('transactions.advanced')}</span>
+                    {/* Folded away, the section still says where the amount comes from. */}
+                    {!advancedOpen && (validPercentage || parseRoundBalanceTo(roundBalanceTo)) && (
+                      <span className="mr-2 font-normal text-muted-foreground">
+                        {validPercentage
+                          ? formatPercentage(validPercentage, i18n.language)
+                          : stepLabel(Number(roundBalanceTo))}
+                      </span>
+                    )}
+                  </AccordionTrigger>
+                  {/* Unlike the stock one, its height follows what's in it, so an error showing up
+                      under a field isn't clipped, and it spaces fields the way the form does rather
+                      than paragraphs of prose. */}
+                  <AccordionContent className="h-auto pt-2 pb-0 [&_p:not(:last-child)]:mb-0">
+                    <FieldGroup className="gap-4">
+                      {/* A card that ticks as a whole; the percentage's fields only show while it's ticked. */}
+                      <FieldLabel htmlFor="amount-sheet-percentage-on">
+                        <Field orientation="horizontal">
+                          <Checkbox
+                            id="amount-sheet-percentage-on"
+                            checked={percentageOn}
+                            onCheckedChange={(checked) => switchPercentage(checked === true)}
+                          />
+                          <FieldContent>
+                            <FieldTitle>{t('transactions.percentageMode')}</FieldTitle>
+                            <FieldDescription>{t('transactions.percentageModeHint')}</FieldDescription>
+                          </FieldContent>
+                        </Field>
+                      </FieldLabel>
+                      {percentageOn && (
+                        <>
+                          <Field data-invalid={!!errors.percentage}>
+                            <FieldLabel htmlFor="amount-sheet-percentage">{t('transactions.percentage')}</FieldLabel>
+                            <div className="relative">
+                              <Input
+                                id="amount-sheet-percentage"
+                                inputMode="decimal"
+                                autoComplete="off"
+                                className="pr-7"
+                                aria-invalid={!!errors.percentage}
+                                {...form.register('percentage', { onChange: recalculate })}
+                              />
+                              <span
+                                className="pointer-events-none absolute inset-y-0 right-2.5 flex items-center text-muted-foreground"
+                                aria-hidden
+                              >
+                                %
+                              </span>
+                            </div>
+                            <FieldError errors={[errors.percentage]} />
+                          </Field>
+                          {/* Optional: what the percentage is of, in the account's currency, when it
+                              isn't the account's balance — the income a tax is a share of, say. */}
+                          <Field data-invalid={!!errors.percentageBase}>
+                            <FieldLabel htmlFor="amount-sheet-percentageBase">
+                              {withCurrency(t('transactions.percentageBase'), sides.accountId)}
+                            </FieldLabel>
                             <Input
-                              id="amount-sheet-percentage"
+                              id="amount-sheet-percentageBase"
                               inputMode="decimal"
                               autoComplete="off"
-                              className="pr-7"
-                              aria-invalid={!!errors.percentage}
-                              {...form.register('percentage', { onChange: recalculate })}
+                              aria-invalid={!!errors.percentageBase}
+                              {...form.register('percentageBase', { onChange: recalculate })}
                             />
-                            <span
-                              className="pointer-events-none absolute inset-y-0 right-2.5 flex items-center text-muted-foreground"
-                              aria-hidden
-                            >
-                              %
-                            </span>
-                          </div>
-                          <FieldError errors={[errors.percentage]} />
-                        </Field>
-                        {/* Optional: what the percentage is of, in the account's currency, when it
-                            isn't the account's balance — the income a tax is a share of, say. */}
-                        <Field data-invalid={!!errors.percentageBase}>
-                          <FieldLabel htmlFor="amount-sheet-percentageBase">
-                            {withCurrency(t('transactions.percentageBase'), sides.accountId)}
-                          </FieldLabel>
-                          <Input
-                            id="amount-sheet-percentageBase"
-                            inputMode="decimal"
-                            autoComplete="off"
-                            aria-invalid={!!errors.percentageBase}
-                            {...form.register('percentageBase', { onChange: recalculate })}
+                            {account && (
+                              <FieldDescription>
+                                {t(
+                                  balanceBase(account, editing) === account.balance
+                                    ? 'transactions.percentageBaseHint'
+                                    : 'transactions.percentageBaseHintWithout',
+                                  { account: account.name },
+                                )}
+                              </FieldDescription>
+                            )}
+                            <FieldError errors={[errors.percentageBase]} />
+                          </Field>
+                        </>
+                      )}
+                      <FieldLabel htmlFor="amount-sheet-round-on">
+                        <Field orientation="horizontal">
+                          <Checkbox
+                            id="amount-sheet-round-on"
+                            checked={roundOn}
+                            onCheckedChange={(checked) => switchRounding(checked === true)}
                           />
-                          {account && (
-                            <FieldDescription>
-                              {t(
-                                balanceBase(account, editing) === account.balance
-                                  ? 'transactions.percentageBaseHint'
-                                  : 'transactions.percentageBaseHintWithout',
-                                { account: account.name },
-                              )}
-                            </FieldDescription>
-                          )}
-                          <FieldError errors={[errors.percentageBase]} />
+                          <FieldContent>
+                            <FieldTitle>{t('transactions.roundBalanceMode')}</FieldTitle>
+                            <FieldDescription>{t('transactions.roundBalanceModeHint')}</FieldDescription>
+                          </FieldContent>
                         </Field>
-                      </>
-                    )}
-                    <FieldLabel htmlFor="amount-sheet-round-on">
-                      <Field orientation="horizontal">
-                        <Checkbox
-                          id="amount-sheet-round-on"
-                          checked={roundOn}
-                          onCheckedChange={(checked) => switchRounding(checked === true)}
-                        />
-                        <FieldContent>
-                          <FieldTitle>{t('transactions.roundBalanceMode')}</FieldTitle>
-                          <FieldDescription>{t('transactions.roundBalanceModeHint')}</FieldDescription>
-                        </FieldContent>
-                      </Field>
-                    </FieldLabel>
-                    {roundOn && (
-                      <Field data-invalid={!!errors.roundBalanceTo}>
-                        {/* One step at a time, like radio buttons: tapping the picked one keeps it. */}
-                        <ToggleGroup
-                          type="single"
-                          variant="outline"
-                          className="w-full flex-wrap justify-start"
-                          aria-label={t('transactions.roundBalanceMode')}
-                          value={roundBalanceTo}
-                          onValueChange={(next) => next && pickStep(next)}
-                        >
-                          {ROUND_BALANCE_STEPS.map((step) => (
-                            <ToggleGroupItem
-                              key={step}
-                              value={String(step)}
-                              className="rounded-full data-[state=on]:border-foreground/60"
-                            >
-                              {stepLabel(step)}
-                            </ToggleGroupItem>
-                          ))}
-                        </ToggleGroup>
-                        <FieldError errors={[errors.roundBalanceTo]} />
-                      </Field>
-                    )}
-                  </FieldGroup>
-                </AccordionContent>
-              </AccordionItem>
-            </Accordion>
-          </FieldGroup>
-          <DialogFooter className="mt-6">
-            <Button type="button" variant="outline" onClick={() => onOpenChange(false)}>
-              {t('common.cancel')}
-            </Button>
-            <Button type="submit">{t('common.done')}</Button>
-          </DialogFooter>
-        </form>
-      </DialogContent>
-    </Dialog>
+                      </FieldLabel>
+                      {roundOn && (
+                        <Field data-invalid={!!errors.roundBalanceTo}>
+                          {/* One step at a time, like radio buttons: tapping the picked one keeps it. */}
+                          <ToggleGroup
+                            type="single"
+                            variant="outline"
+                            className="w-full flex-wrap justify-start"
+                            aria-label={t('transactions.roundBalanceMode')}
+                            value={roundBalanceTo}
+                            onValueChange={(next) => next && pickStep(next)}
+                          >
+                            {ROUND_BALANCE_STEPS.map((step) => (
+                              <ToggleGroupItem
+                                key={step}
+                                value={String(step)}
+                                className="rounded-full data-[state=on]:border-foreground/60"
+                              >
+                                {stepLabel(step)}
+                              </ToggleGroupItem>
+                            ))}
+                          </ToggleGroup>
+                          <FieldError errors={[errors.roundBalanceTo]} />
+                        </Field>
+                      )}
+                    </FieldGroup>
+                  </AccordionContent>
+                </AccordionItem>
+              </Accordion>
+            </FieldGroup>
+            <DialogFooter className="mt-6">
+              <Button type="button" variant="outline" onClick={() => onOpenChange(false)}>
+                {t('common.cancel')}
+              </Button>
+              <Button type="submit">{t('common.done')}</Button>
+            </DialogFooter>
+          </form>
+        </DialogContent>
+      </Dialog>
+
+      <CalculatorSheet
+        key={`calculator-${calculatorLayer}`}
+        open={open && calculating !== null}
+        onOpenChange={(next) => !next && setCalculating(null)}
+        value={calculating ? form.getValues(calculating) : ''}
+        onDone={(amount) => {
+          if (calculating) {
+            form.setValue(calculating, amount, { shouldValidate: form.formState.isSubmitted });
+          }
+        }}
+      />
+    </>
   );
 }
