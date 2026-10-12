@@ -44,8 +44,8 @@ interface MonthBudgetProps {
 }
 
 /**
- * One month of the budget, scrolling on its own: a section each for expenses, income, savings and
- * debts, every line with a bar for how far it has got, and under the categories whatever had money
+ * One month of the budget, scrolling on its own: a section each for expenses, savings, debts and
+ * income, every line with a bar for how far it has got, and under the categories whatever had money
  * without being budgeted, folded into one row.
  */
 export function MonthBudget({

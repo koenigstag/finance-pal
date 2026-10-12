@@ -121,6 +121,19 @@ describe('buildBudgetView', () => {
     expect(view([], {}).sections).toEqual([]);
   });
 
+  it('puts expenses first and income last', () => {
+    const { sections } = view(
+      [
+        line('l1', { categoryId: salary.id }, '1'),
+        line('l2', { accountId: loan.id }, '1'),
+        line('l3', { accountId: piggy.id }, '1', USD),
+        line('l4', { categoryId: groceries.id }, '1'),
+      ],
+      {},
+    );
+    expect(sections.map((section) => section.kind)).toEqual(['expense', 'savings', 'debt', 'income']);
+  });
+
   it('orders lines as the categories are ordered', () => {
     const { sections } = view(
       [line('l1', { categoryId: cafe.id }, '1'), line('l2', { categoryId: groceries.id }, '1'), line('l3', { categoryId: transport.id }, '1')],

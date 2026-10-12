@@ -5,8 +5,9 @@ import type { Budget, BudgetTotals } from './queries';
 
 export type BudgetSectionKind = 'expense' | 'income' | 'savings' | 'debt';
 
-// What is spent, then what comes in, then what is put aside and paid off.
-export const SECTION_ORDER: readonly BudgetSectionKind[] = ['expense', 'income', 'savings', 'debt'];
+// What is spent, then what is put aside and paid off, and last what comes in. The picker's tabs
+// follow the same order.
+export const SECTION_ORDER: readonly BudgetSectionKind[] = ['expense', 'savings', 'debt', 'income'];
 
 export type BudgetTarget = { type: 'category'; category: Category } | { type: 'account'; account: Account };
 
