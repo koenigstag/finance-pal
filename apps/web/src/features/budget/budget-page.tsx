@@ -1,7 +1,7 @@
 import { ChevronLeftIcon, ChevronRightIcon, PlusIcon } from 'lucide-react';
 import { useCallback, useMemo, useState } from 'react';
 import { useTranslation } from 'react-i18next';
-import { useNavigate, useSearchParams } from 'react-router';
+import { useNavigate } from 'react-router';
 import { PageHeader } from '@/components/page-header';
 import { Button } from '@/components/ui/button';
 import { useAccounts } from '@/features/accounts/queries';
@@ -10,6 +10,7 @@ import { useConversionLookup } from '@/features/currencies/queries';
 import { useGroupScope } from '@/features/groups/group-context';
 import { useProfile } from '@/features/profile/queries';
 import { parseMonthParam, shiftMonth, toMonthParam } from '@/lib/dates';
+import { usePageMonth } from '@/lib/page-month';
 import { useSwipeTrack } from '@/lib/swipe';
 import { capitalizeFirst } from '@/lib/text';
 import { BudgetActionsSheet, type BudgetAction } from './budget-actions-sheet';
@@ -24,7 +25,6 @@ export function BudgetPage() {
   const { t, i18n } = useTranslation();
   const { group, ability } = useGroupScope();
   const navigate = useNavigate();
-  const [params, setParams] = useSearchParams();
   // Archived ones too: a line, or money in a month gone by, can belong to one put away since.
   const categories = useCategories(group.id, true);
   const accounts = useAccounts(group.id, true);
@@ -40,18 +40,9 @@ export function BudgetPage() {
   const [sheet, setSheet] = useState<{ open: boolean; row?: BudgetLineRow }>({ open: false });
   const [removing, setRemoving] = useState<{ open: boolean; row?: BudgetLineRow }>({ open: false });
 
-  // In the URL, as on the transactions page, so a reload or the back button keeps the month.
-  const month = parseMonthParam(params.get('month'));
-  const monthKey = toMonthParam(month);
-  const goToMonth = (delta: number) =>
-    setParams(
-      (current) => {
-        const next = new URLSearchParams(current);
-        next.set('month', toMonthParam(shiftMonth(month, delta)));
-        return next;
-      },
-      { replace: true },
-    );
+  // In the URL, so a reload or the back button keeps the month; the same one as on the transactions
+  // page and the overview.
+  const { monthKey, goToMonth } = usePageMonth();
   // The month on screen and the ones either side of it, loaded and waiting just out of sight; a
   // move shifts which months those are, so there is no first or last month to stop at.
   const strip = useSwipeTrack({ count: 3, index: 1, position: monthKey, onCommit: goToMonth });

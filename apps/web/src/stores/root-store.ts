@@ -1,4 +1,5 @@
 import { LocaleStore } from './locale-store';
+import { MonthStore } from './month-store';
 import { SessionStore } from './session-store';
 import { ThemeStore } from './theme-store';
 
@@ -11,6 +12,7 @@ export class RootStore {
   readonly session = new SessionStore();
   readonly theme = new ThemeStore();
   readonly locale = new LocaleStore();
+  readonly month = new MonthStore();
 }
 
 // One instance for the app. React code reaches it through useStores(); non-React code that has
