@@ -5,6 +5,7 @@ import { AccountsModule } from './accounts/accounts.module';
 import { BudgetsModule } from './budgets/budgets.module';
 import { CategoriesModule } from './categories/categories.module';
 import { CategoryRulesModule } from './category-rules/category-rules.module';
+import { OverviewModule } from './overview/overview.module';
 import { TagsModule } from './tags/tags.module';
 import { TransactionsModule } from './transactions/transactions.module';
 
@@ -18,6 +19,7 @@ import { TransactionsModule } from './transactions/transactions.module';
     TagsModule,
     TransactionsModule,
     BudgetsModule,
+    OverviewModule,
   ],
 })
 export class LedgerModule {}
