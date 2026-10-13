@@ -146,6 +146,9 @@ All paths start with `/api/external/v1`.
 A subcategory may also be named as the category (`"categoryName": "Taxi"`), and a subcategory
 named alone brings its category along, as long as no other category has one called the same.
 
+A transaction recorded through a key keeps the key's name as its `source`, and the app shows it
+on the transaction: "Added via iPhone shortcut".
+
 ```sh
 # An expense, by names
 curl -X POST https://<api host>/api/external/v1/transactions \

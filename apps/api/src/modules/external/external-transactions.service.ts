@@ -41,7 +41,8 @@ export class ExternalTransactionsService {
    * one recorded, and records nothing — whether the transaction has been edited since, or deleted,
    * which a repeat mustn't undo. The same key asking for different money is refused instead.
    */
-  async create({ userId, groupId }: RequestApiKey, body: CreateBody, idempotencyKey?: string): Promise<CreatedTransaction> {
+  async create(apiKey: RequestApiKey, body: CreateBody, idempotencyKey?: string): Promise<CreatedTransaction> {
+    const { userId, groupId } = apiKey;
     let idempotency: TransactionIdempotency | undefined;
     if (idempotencyKey !== undefined) {
       idempotency = { key: hashIdempotencyKey(idempotencyKey), fingerprint: movementFingerprint(body) };
@@ -92,6 +93,7 @@ export class ExternalTransactionsService {
         toAccountId,
         destAmount,
         note: note || undefined,
+        source: apiKey.name,
       },
       idempotency,
     );

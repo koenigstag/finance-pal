@@ -28,6 +28,7 @@ import { createBudgets } from './20261012120000-create-budgets.js';
 import { addCategoryCurrency } from './20261012190000-add-category-currency.js';
 import { createOauthCodes } from './20261012200000-create-oauth-codes.js';
 import { addRecurringRuleEndsOn } from './20261013160000-add-recurring-rule-ends-on.js';
+import { createChangeSets } from './20261013180000-create-change-sets.js';
 
 export const migrations: readonly Migration[] = [
   createAuthTables,
@@ -64,6 +65,7 @@ export const migrations: readonly Migration[] = [
   addCategoryCurrency,
   createOauthCodes,
   addRecurringRuleEndsOn,
+  createChangeSets,
 ];
 
 export * from './migration.interface.js';

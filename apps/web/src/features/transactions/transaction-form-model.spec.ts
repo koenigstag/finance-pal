@@ -283,6 +283,7 @@ const rule = (overrides: Partial<RecurringRule>): RecurringRule => ({
   nextOccurrence: new Date(2026, 9, 5, 12).toISOString(),
   endsOn: null,
   reminderDaysBefore: null,
+  source: null,
   timezone: 'Europe/Kyiv',
   active: true,
   createdAt: new Date(2026, 0, 1).toISOString(),

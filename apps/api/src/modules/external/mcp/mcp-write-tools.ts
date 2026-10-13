@@ -1,5 +1,4 @@
 import { Injectable, Logger } from '@nestjs/common';
-import type { McpServer } from '@modelcontextprotocol/sdk/server/mcp.js';
 import type { ServerInferRequest } from '@ts-rest/core';
 import { z } from 'zod';
 import type { Transaction } from '@ft/api-database';
@@ -28,6 +27,7 @@ import {
   timeZoneOf,
   toolHandler,
   type McpContext,
+  type ToolRegistry,
 } from './mcp-tool';
 
 type UpdateTransactionBody = ServerInferRequest<typeof externalContract.transactions.update>['body'];
@@ -66,7 +66,7 @@ export class McpWriteTools {
     private readonly lookup: ExternalLookupService,
   ) {}
 
-  register(server: McpServer, context: McpContext): void {
+  register(server: ToolRegistry, context: McpContext): void {
     if (can(context, 'transactions:create')) {
       this.addTransaction(server, context);
     }
@@ -103,7 +103,7 @@ export class McpWriteTools {
     }
   }
 
-  private addTransaction(server: McpServer, context: McpContext): void {
+  private addTransaction(server: ToolRegistry, context: McpContext): void {
     server.registerTool(
       'add_transaction',
       {
@@ -156,7 +156,7 @@ export class McpWriteTools {
     );
   }
 
-  private updateTransaction(server: McpServer, context: McpContext): void {
+  private updateTransaction(server: ToolRegistry, context: McpContext): void {
     server.registerTool(
       'update_transaction',
       {
@@ -229,15 +229,15 @@ export class McpWriteTools {
     );
   }
 
-  private deleteTransaction(server: McpServer, context: McpContext): void {
+  private deleteTransaction(server: ToolRegistry, context: McpContext): void {
     server.registerTool(
       'delete_transaction',
       {
         title: 'Delete a transaction',
         description:
           'Delete a planned transaction (one dated after now) found with search_transactions; one that already happened can only ' +
-          "be deleted in the app. The app can't undo it, so only delete what the person asked to. Deleting the planned " +
-          'transaction of a repeating series leaves the series going.',
+          'be deleted in the app. Only delete what the person asked to: the app has no undo, though undo_changes can take ' +
+          'it back. Deleting the planned transaction of a repeating series leaves the series going.',
         inputSchema: { id: z.string().uuid().describe("The transaction's id") },
         annotations: DELETES,
       },
@@ -249,7 +249,7 @@ export class McpWriteTools {
     );
   }
 
-  private addAccount(server: McpServer, context: McpContext): void {
+  private addAccount(server: ToolRegistry, context: McpContext): void {
     server.registerTool(
       'add_account',
       {
@@ -284,7 +284,7 @@ export class McpWriteTools {
     );
   }
 
-  private updateAccount(server: McpServer, context: McpContext): void {
+  private updateAccount(server: ToolRegistry, context: McpContext): void {
     server.registerTool(
       'update_account',
       {
@@ -339,16 +339,16 @@ export class McpWriteTools {
     );
   }
 
-  private deleteAccount(server: McpServer, context: McpContext): void {
+  private deleteAccount(server: ToolRegistry, context: McpContext): void {
     server.registerTool(
       'delete_account',
       {
         title: 'Delete an account',
         description:
           'Delete an account that has no transactions that already happened, with what it has planned: its planned ' +
-          "transactions, its repeating series and its budget lines. The app can't undo it, so only delete what the person " +
-          'asked to. An account with a history can only be deleted in the app; archive it with update_account instead. The ' +
-          'answer counts what went with it.',
+          'transactions, its repeating series and its budget lines. Only delete what the person asked to: the app has no ' +
+          'undo, though undo_changes can take it back. An account with a history can only be deleted in the app; archive it ' +
+          'with update_account instead. The answer counts what went with it.',
         inputSchema: { account: z.string().describe('By name or id') },
         annotations: DELETES,
       },
@@ -374,7 +374,7 @@ export class McpWriteTools {
     );
   }
 
-  private addCategory(server: McpServer, context: McpContext): void {
+  private addCategory(server: ToolRegistry, context: McpContext): void {
     server.registerTool(
       'add_category',
       {
@@ -405,7 +405,7 @@ export class McpWriteTools {
     );
   }
 
-  private updateCategory(server: McpServer, context: McpContext): void {
+  private updateCategory(server: ToolRegistry, context: McpContext): void {
     server.registerTool(
       'update_category',
       {
@@ -455,15 +455,16 @@ export class McpWriteTools {
     );
   }
 
-  private deleteCategory(server: McpServer, context: McpContext): void {
+  private deleteCategory(server: ToolRegistry, context: McpContext): void {
     server.registerTool(
       'delete_category',
       {
         title: 'Delete a category',
         description:
           'Delete a category with its subcategories. Transactions and repeating series filed under it keep their money and lose ' +
-          "the category (a subcategory's stay in its parent); its rules and budget lines go. The app can't undo it, so only " +
-          'delete what the person asked to; to keep it for old transactions, archive it with update_category instead.',
+          "the category (a subcategory's stay in its parent); its rules and budget lines go. Only delete what the person " +
+          'asked to: the app has no undo, though undo_changes can take it back. To keep it for old transactions, archive it ' +
+          'with update_category instead.',
         inputSchema: { category: z.string().describe('By name or id') },
         annotations: DELETES,
       },
@@ -485,7 +486,7 @@ export class McpWriteTools {
     );
   }
 
-  private setBudget(server: McpServer, context: McpContext): void {
+  private setBudget(server: ToolRegistry, context: McpContext): void {
     server.registerTool(
       'set_budget',
       {
@@ -527,7 +528,7 @@ export class McpWriteTools {
     );
   }
 
-  private removeBudgetLine(server: McpServer, context: McpContext): void {
+  private removeBudgetLine(server: ToolRegistry, context: McpContext): void {
     server.registerTool(
       'remove_budget_line',
       {

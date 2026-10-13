@@ -1,5 +1,4 @@
 import { Injectable, Logger } from '@nestjs/common';
-import type { McpServer } from '@modelcontextprotocol/sdk/server/mcp.js';
 import { TZDate } from '@date-fns/tz';
 import { z } from 'zod';
 import type { RecurringRule } from '@ft/api-database';
@@ -29,6 +28,7 @@ import {
   timeZoneOf,
   toolHandler,
   type McpContext,
+  type ToolRegistry,
 } from './mcp-tool';
 
 const unitArg = z.enum(RECURRENCE_UNITS).describe('day, week, month or year');
@@ -77,7 +77,7 @@ export class McpSeriesTools {
     private readonly lookup: ExternalLookupService,
   ) {}
 
-  register(server: McpServer, context: McpContext): void {
+  register(server: ToolRegistry, context: McpContext): void {
     if (can(context, 'transactions:read')) {
       this.listSeries(server, context);
     }
@@ -92,7 +92,7 @@ export class McpSeriesTools {
     }
   }
 
-  private listSeries(server: McpServer, context: McpContext): void {
+  private listSeries(server: ToolRegistry, context: McpContext): void {
     server.registerTool(
       'list_series',
       {
@@ -116,7 +116,7 @@ export class McpSeriesTools {
     );
   }
 
-  private addSeries(server: McpServer, context: McpContext): void {
+  private addSeries(server: ToolRegistry, context: McpContext): void {
     server.registerTool(
       'add_series',
       {
@@ -185,6 +185,7 @@ export class McpSeriesTools {
           startsAt: startsAt.toISOString(),
           endsOn: endOf(args, schedule, startsAt),
           timezone: zone,
+          source: context.apiKey.name,
           ...(args.replaces && { replacesTransactionId: args.replaces }),
         };
         const created = await this.series.create(userId, groupId, input);
@@ -193,7 +194,7 @@ export class McpSeriesTools {
     );
   }
 
-  private updateSeries(server: McpServer, context: McpContext): void {
+  private updateSeries(server: ToolRegistry, context: McpContext): void {
     server.registerTool(
       'update_series',
       {
@@ -314,15 +315,16 @@ export class McpSeriesTools {
     );
   }
 
-  private endSeries(server: McpServer, context: McpContext): void {
+  private endSeries(server: ToolRegistry, context: McpContext): void {
     server.registerTool(
       'end_series',
       {
         title: 'End a repeating series',
         description:
           'End a series now: it makes no more payments, and its planned one goes, unless keepPlanned keeps it as a one-off ' +
-          "transaction. Payments that already happened stay. The app can't bring a series back, so only end what the person " +
-          'asked to; to stop it for a while, pause it with update_series, and to end it later, give it an endsOn.',
+          'transaction. Payments that already happened stay. Only end what the person asked to: the app has no undo, though ' +
+          'undo_changes can take it back. To stop it for a while, pause it with update_series, and to end it later, give it ' +
+          'an endsOn.',
         inputSchema: {
           id: z.string().uuid().describe("The series' id"),
           keepPlanned: z.boolean().optional().describe('Keep its planned payment as a one-off transaction'),

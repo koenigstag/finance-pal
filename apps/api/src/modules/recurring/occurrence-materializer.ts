@@ -47,9 +47,9 @@ const INSERT_OCCURRENCE_SQL = `
   INSERT INTO transactions (
     group_id, type, date, amount, currency_id, account_id, category_id, subcategory_id, to_account_id,
     note, recurring_rule_id, recurrence_date, is_customized, created_by,
-    percentage, percentage_base, percentage_as_of, round_balance_to, dest_amount, dest_amount_as_of
+    percentage, percentage_base, percentage_as_of, round_balance_to, dest_amount, dest_amount_as_of, source
   )
-  VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $3, false, $12, $13, $14, $15, $16, $17, $18)
+  VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $3, false, $12, $13, $14, $15, $16, $17, $18, $19)
   ON CONFLICT (recurring_rule_id, recurrence_date) WHERE recurring_rule_id IS NOT NULL DO NOTHING
   RETURNING id
 `;
@@ -256,6 +256,7 @@ export async function materializeOccurrences(
           rule.roundBalanceTo,
           rate !== null ? convertedDest(worked.amount, rate) : null,
           rate !== null ? now : null,
+          rule.source,
         ])
       : [];
     inserted += rows.length;

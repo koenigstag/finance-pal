@@ -1,6 +1,7 @@
 import { HttpException, type Logger } from '@nestjs/common';
-import type { CallToolResult } from '@modelcontextprotocol/sdk/types.js';
-import { z } from 'zod';
+import type { McpServer } from '@modelcontextprotocol/sdk/server/mcp.js';
+import type { CallToolResult, ToolAnnotations } from '@modelcontextprotocol/sdk/types.js';
+import { z, type ZodRawShape } from 'zod';
 import { externalAmountSchema, isValidTimezone, type ApiKeyScope } from '@ft/shared-contracts';
 import type { RequestApiKey } from '../../_core/authn/request-user';
 import type { CurrencyCodes } from '../external-lookup.service';
@@ -36,7 +37,7 @@ export const READS = { readOnlyHint: true, destructiveHint: false, idempotentHin
 export const ADDS = { readOnlyHint: false, destructiveHint: false, idempotentHint: false, openWorldHint: false } as const;
 // Changes what's there; asked twice, the second call finds it changed already.
 export const CHANGES = { readOnlyHint: false, destructiveHint: true, idempotentHint: true, openWorldHint: false } as const;
-// Deletes, which the app can't undo.
+// Deletes, which the app has no undo for: only undo_changes takes it back.
 export const DELETES = { readOnlyHint: false, destructiveHint: true, idempotentHint: true, openWorldHint: false } as const;
 
 export const timeZoneArg = z
@@ -61,15 +62,52 @@ export function toolHandler(logger: Logger) {
   return <A>(run: (args: A) => Promise<unknown>) =>
     async (args: A): Promise<CallToolResult> => {
       try {
-        return { content: [{ type: 'text', text: JSON.stringify(await run(args)) }] };
+        return toolAnswer(await run(args));
       } catch (error) {
-        if (error instanceof ToolInputError || (error instanceof HttpException && error.getStatus() < 500)) {
-          return { isError: true, content: [{ type: 'text', text: error.message }] };
-        }
-        logger.error(error instanceof Error ? error.stack : error);
-        return { isError: true, content: [{ type: 'text', text: 'Something went wrong on the server; try again later.' }] };
+        return toolError(logger, error);
       }
     };
+}
+
+export function toolAnswer(answer: unknown): CallToolResult {
+  return { content: [{ type: 'text', text: JSON.stringify(answer) }] };
+}
+
+/** A failed call as the assistant is told of it: what it can act on, or that the server failed. */
+export function toolError(logger: Logger, error: unknown): CallToolResult {
+  if (error instanceof ToolInputError || (error instanceof HttpException && error.getStatus() < 500)) {
+    return { isError: true, content: [{ type: 'text', text: error.message }] };
+  }
+  logger.error(error instanceof Error ? error.stack : error);
+  return { isError: true, content: [{ type: 'text', text: 'Something went wrong on the server; try again later.' }] };
+}
+
+/** The text of a tool's answer, or of its error. */
+export function textOf(result: CallToolResult): string {
+  const [first] = result.content;
+  return first?.type === 'text' ? first.text : '';
+}
+
+/** Where a tool is registered: the request's server, or a collector of the tools that write. */
+export type ToolRegistry = Pick<McpServer, 'registerTool'>;
+
+/** A tool as it was registered: what it's called, how it's described, and what it does. */
+export interface CollectedTool {
+  name: string;
+  config: { title?: string; description?: string; inputSchema: ZodRawShape; annotations?: ToolAnnotations };
+  handler: (args: Record<string, unknown>) => Promise<CallToolResult>;
+}
+
+/** The tools `register` registers, collected rather than offered, for something else to offer. */
+export function collectTools(register: (registry: ToolRegistry) => void): CollectedTool[] {
+  const tools: CollectedTool[] = [];
+  const collector = {
+    registerTool(name: string, config: CollectedTool['config'], handler: CollectedTool['handler']) {
+      tools.push({ name, config, handler });
+    },
+  };
+  register(collector as unknown as ToolRegistry);
+  return tools;
 }
 
 /** A tool call's time zone: the one it names, or the key's. */

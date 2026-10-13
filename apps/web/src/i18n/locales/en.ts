@@ -300,6 +300,7 @@ export const en = {
     roundsItsBalance: 'Rounds the balance to {{step}}',
     // Under a percentage of the balance, while that balance is still to come.
     percentageOnTheDay: 'Recalculated on the day',
+    addedVia: 'Added via {{source}}',
     percentageSeriesOnTheDay: 'Recalculated on each date',
     note: 'Note',
     recurring: 'Recurring',

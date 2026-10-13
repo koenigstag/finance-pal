@@ -11,6 +11,8 @@ export interface RequestApiKey {
   // The one group the key works in.
   groupId: string;
   scopes: string[];
+  // As its owner named it ("Claude", "iPhone shortcut"): what it adds names as its source.
+  name: string;
 }
 
 export interface AuthenticatedRequest {

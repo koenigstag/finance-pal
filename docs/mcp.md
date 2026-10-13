@@ -79,6 +79,9 @@ validation rule can't differ:
 | `delete_category`    | `categories:delete`                          | deletes a category; its transactions stay, uncategorized       |
 | `set_budget`         | `budgets:create`, or `budgets:update`        | adds a month's line, or changes the one it has                 |
 | `remove_budget_line` | `budgets:delete`                             | takes a line out of a month's budget                           |
+| `apply_changes`      | any of the above                             | makes several of those changes at once, all or nothing         |
+| `list_changes`       | any of the above                             | the changes made through API keys in the last 30 days          |
+| `undo_changes`       | the scopes the change's tools needed         | puts back what one change did                                  |
 
 Transactions are written only while planned, dated after now: an assistant schedules, moves and
 calls off payments to come. What already happened, the history balances are checked against, is
@@ -97,7 +100,37 @@ A series keeps one planned payment at a time, as in the app. `update_series` cha
 payment on and leaves what happened, and a payment edited on its own, as they were; to change only
 the next payment, `update_transaction` edits it. A series can end on a day, `endsOn`, or after so
 many payments, which is turned into the day of the last one, counted from the next. `end_series`
-ends it at once and can't be undone, so to stop one for a while it's paused instead.
+ends it at once, so to stop one for a while it's paused instead.
+
+Transactions and series an assistant adds keep the name of its key as their `source`: the app
+shows "Added via Claude" on them, and `search_transactions` can look for them by it.
+
+## Changes and undo
+
+Every tool call that changes something is kept as a change, and answers with its `changeId`.
+`apply_changes` takes several of those calls as steps (`{ "tool": "add_transaction", … }`, each
+with that tool's own arguments) and makes them one change: in order, each step seeing what the
+earlier ones made, and all of them or none. A step that fails rolls back the whole batch, and the
+answer names it. With `dryRun` the steps are made and rolled back, so the answer shows exactly what
+they would do and nothing is kept.
+
+An answer's `diff` lists every row the change touched, as it was and as it became, what the change
+took along included: a series' next payment, amounts the app worked out again from a balance,
+transactions a deleted category left uncategorized.
+
+`undo_changes` puts back every row one change touched, all of them or none, for 30 days. It's
+refused when something the change touched was changed since (by the person, by the app, or by a
+later change, which is then undone first), and when a transaction that was planned at the time
+has happened since: what has happened stays. It takes the scopes the change's tools needed.
+`list_changes` shows the key owner's changes, an assistant's and other apps', newest first.
+
+How it works: each change runs in a savepoint of the request's transaction, with
+`app.change_set_id` set. A trigger on the tables the tools write to (`transactions`, `accounts`,
+`categories`, `budgets`, `recurring_rules`, `category_rules`) records each row it writes into
+`change_set_rows`, before and after, while that's set; every other write skips it. Undoing writes
+the before images back with `undo_change_row()`, under the same policies as any write, then works
+the balance amounts out again. Live updates and notifications from a change wait for the request
+to commit, and a dry run's never go out.
 
 Totals are in the key owner's main currency, at the app's rates. A currency with no rate is left
 out of a total and named under `currenciesWithoutRate`.

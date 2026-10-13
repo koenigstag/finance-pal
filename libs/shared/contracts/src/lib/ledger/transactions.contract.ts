@@ -57,6 +57,9 @@ export const transactionSchema = z.object({
   recurrenceDate: z.string().datetime().nullable(),
   // True once a user edited this occurrence directly; regenerating the series leaves it alone.
   isCustomized: z.boolean(),
+  // The name of the API key it was added through ("Claude"), or that set up its series; null for
+  // what was added in the app. Read-only.
+  source: z.string().nullable(),
   createdAt: z.string().datetime(),
   updatedAt: z.string().datetime(),
 });

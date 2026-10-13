@@ -61,6 +61,8 @@ export const recurringRuleSchema = z.object({
   reminderDaysBefore: z.number().int().nullable(),
   timezone: z.string(),
   active: z.boolean(),
+  // The name of the API key it was set up through; null for one set up in the app. Read-only.
+  source: z.string().nullable(),
   createdAt: z.string().datetime(),
   updatedAt: z.string().datetime(),
 });
