@@ -50,8 +50,18 @@ export interface BudgetView {
   // lines are taken out, in the main currency: below zero the month means to give out more than it
   // brings in. Null without lines.
   available: string | null;
+  // The month under way only, in the main currency, over the accounts the total balance counts.
+  balance: MonthBalance | null;
   // Currencies no rate converts, whose amounts are left out of the sums they'd have gone into.
   missingCurrencyIds: number[];
+}
+
+export interface MonthBalance {
+  // What they held as the month began: today's balances less what was recorded on them since.
+  start: string;
+  // What they'll hold once it ends, should the rest of it go to plan: today's balances, what is
+  // already planned on them this month, and what the lines still leave to spend or receive.
+  forecast: string;
 }
 
 export interface BudgetViewInput {
@@ -64,6 +74,8 @@ export interface BudgetViewInput {
   mainCurrencyId: number | undefined;
   // The rate from one currency to another, or null without one. The same currency is '1'.
   rate: (fromCurrencyId: number, toCurrencyId: number) => string | null;
+  // Whether this is the month under way: only it can start from today's balances.
+  current?: boolean;
 }
 
 /**
@@ -73,7 +85,15 @@ export interface BudgetViewInput {
  * Money is converted into the currency it's compared with — a line's, or the main one for the
  * totals — at the app's rates. A currency without a rate is left out and named, never guessed.
  */
-export function buildBudgetView({ lines, totals, categories, accounts, mainCurrencyId, rate }: BudgetViewInput): BudgetView {
+export function buildBudgetView({
+  lines,
+  totals,
+  categories,
+  accounts,
+  mainCurrencyId,
+  rate,
+  current = false,
+}: BudgetViewInput): BudgetView {
   const missing = new Set<number>();
   // amount in `from` valued in `to`, or null (and `from` noted) without a rate.
   const convert = (amount: string, from: number, to: number): string | null => {
@@ -195,7 +215,45 @@ export function buildBudgetView({ lines, totals, categories, accounts, mainCurre
           }),
         ]);
 
-  return { sections, available, missingCurrencyIds: [...missing] };
+  let monthBalance: MonthBalance | null = null;
+  if (current && mainCurrencyId !== undefined) {
+    const toMain = (amount: string, currencyId: number) => convert(amount, currencyId, mainCurrencyId) ?? '0';
+    // As the total balance counts them: archived ones never, whatever their own flag still says.
+    const counted = accounts.filter((account) => account.isIncludedInBalance && !account.archived);
+    const countedIds = new Set(counted.map((account) => account.id));
+    const start = sumMoney([
+      '0',
+      ...counted.map((account) =>
+        toMain(sumMoney([account.balance, negate(accountMoney.get(account.id)?.recorded ?? '0')]), account.currencyId),
+      ),
+    ]);
+    const scheduled = sumMoney([
+      '0',
+      ...counted.map((account) => toMain(sumMoney([account.balance, accountMoney.get(account.id)?.planned ?? '0']), account.currencyId)),
+    ]);
+    // What a line still leaves once its recorded and planned money is counted; a line past its
+    // amount leaves nothing more. Spending is taken to come out of the counted accounts and income
+    // to go into them, so money put aside or paid off only leaves the total for an account outside it.
+    const toCome = rows.map(({ kind, row }) => {
+      if (moneySign(row.remaining) <= 0) {
+        return '0';
+      }
+      const amount = toMain(row.remaining, row.line.currencyId);
+      if (kind === 'income') {
+        return amount;
+      }
+      if (kind === 'expense') {
+        return negate(amount);
+      }
+      if (row.target.type === 'account' && countedIds.has(row.target.account.id)) {
+        return '0';
+      }
+      return row.incoming ? amount : negate(amount);
+    });
+    monthBalance = { start, forecast: sumMoney([scheduled, ...toCome]) };
+  }
+
+  return { sections, available, balance: monthBalance, missingCurrencyIds: [...missing] };
 }
 
 function unbudgetedRows(

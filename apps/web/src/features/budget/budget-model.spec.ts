@@ -10,8 +10,8 @@ const EUR = 3;
 
 const category = (id: string, type: Category['type'], sortOrder: number, archived = false) =>
   ({ id, name: id, type, parentId: null, sortOrder, archived, icon: null, color: null }) as Category;
-const account = (id: string, type: Account['type'], currencyId: number, balance = '0') =>
-  ({ id, name: id, type, currencyId, balance, sortOrder: 0, archived: false, icon: null, color: null }) as Account;
+const account = (id: string, type: Account['type'], currencyId: number, balance = '0', isIncludedInBalance = true, archived = false) =>
+  ({ id, name: id, type, currencyId, balance, isIncludedInBalance, sortOrder: 0, archived, icon: null, color: null }) as Account;
 const line = (id: string, target: { categoryId?: string; accountId?: string }, amount: string, currencyId = UAH) =>
   ({ id, month: '2026-10', categoryId: target.categoryId ?? null, accountId: target.accountId ?? null, amount, currencyId }) as Budget;
 
@@ -206,5 +206,82 @@ describe('buildBudgetView', () => {
     expect(sections[0].total).toBeNull();
     expect(sections[0].unbudgeted).toBeNull();
     expect(view([line('l1', { categoryId: groceries.id }, '15000')], {}, null).available).toBeNull();
+  });
+});
+
+describe('buildBudgetView balance', () => {
+  const card = account('card', 'regular', UAH, '20000.00');
+  const cash = account('cash', 'regular', USD, '100.00');
+  const savings = account('savings', 'savings', USD, '80.00');
+  // Left out of the total: by its own flag, and by being put away.
+  const hidden = account('hidden', 'regular', UAH, '5000.00', false);
+  const oldCard = account('oldCard', 'regular', UAH, '700.00', true, true);
+  const mortgage = account('mortgage', 'debt', UAH, '-60000.00', false);
+  const owedBack = account('owedBack', 'debt', UAH, '3000.00', false);
+  const accounts = [card, cash, savings, hidden, oldCard, mortgage, owedBack];
+
+  const totals: BudgetTotals = {
+    categories: [
+      { categoryId: groceries.id, type: 'expense', currencyId: UAH, recorded: '1300.00', planned: '500.00' },
+      { categoryId: transport.id, type: 'expense', currencyId: UAH, recorded: '1250.00', planned: '0' },
+    ],
+    accounts: [
+      { accountId: card.id, recorded: '-1800.00', planned: '-500.00' },
+      { accountId: cash.id, recorded: '20.00', planned: '0' },
+      { accountId: savings.id, recorded: '80.00', planned: '0' },
+      { accountId: hidden.id, recorded: '-900.00', planned: '-100.00' },
+      { accountId: mortgage.id, recorded: '1000.00', planned: '0' },
+      { accountId: owedBack.id, recorded: '-2000.00', planned: '0' },
+    ],
+  };
+  const lines = [
+    line('l1', { categoryId: groceries.id }, '15000'),
+    line('l2', { categoryId: transport.id }, '1000'),
+    line('l3', { categoryId: salary.id }, '35000'),
+    line('l4', { accountId: savings.id }, '200', USD),
+    line('l5', { accountId: mortgage.id }, '6000'),
+    line('l6', { accountId: owedBack.id }, '3000'),
+  ];
+  const balanceOf = (input: Partial<BudgetViewInput> = {}) =>
+    buildBudgetView({
+      lines,
+      totals,
+      categories: [groceries, transport, salary],
+      accounts,
+      mainCurrencyId: UAH,
+      rate,
+      current: true,
+      ...input,
+    });
+
+  it('starts from what the accounts in the total held before this month moved them', () => {
+    // 20 000 less 1 800 spent, 80 USD less 20 USD come in and 80 USD less 80 USD put aside, a dollar at 41.
+    expect(balanceOf().balance?.start).toBe('25080.00');
+  });
+
+  it('forecasts what they hold now, what is planned on them and what the lines still leave to come', () => {
+    // 19 500 on the card once its planned 500 has gone, 100 USD in cash and 80 USD put aside: 26 880.
+    // Groceries still leave 13 200 to spend and transport, past its limit, nothing; the salary brings
+    // 35 000. Savings stay in the total; 5 000 more paid off leaves it, and 1 000 owed back comes in.
+    expect(balanceOf().balance?.forecast).toBe('44680.00');
+  });
+
+  it('takes money put aside out of the total for an account outside it', () => {
+    const outside = { ...savings, isIncludedInBalance: false };
+    const { balance } = balanceOf({ accounts: [card, cash, outside, hidden, oldCard, mortgage, owedBack] });
+    // Its 80 USD is out of the forecast, and so are the 120 USD (4 920) still to go into it.
+    expect(balance?.forecast).toBe('36480.00');
+  });
+
+  it('is only worked out for the month under way, in a known main currency', () => {
+    expect(balanceOf({ current: false }).balance).toBeNull();
+    expect(balanceOf({ mainCurrencyId: undefined }).balance).toBeNull();
+  });
+
+  it('leaves out an account in a currency without a rate, and names it', () => {
+    const euros = account('euros', 'regular', EUR, '50.00');
+    const { balance, missingCurrencyIds } = balanceOf({ lines: [], accounts: [card, euros] });
+    expect(balance).toEqual({ start: '21800.00', forecast: '19500.00' });
+    expect(missingCurrencyIds).toEqual([EUR]);
   });
 });

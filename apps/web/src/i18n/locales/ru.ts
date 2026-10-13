@@ -788,6 +788,10 @@ export const ru: Catalog<typeof en> = {
     perDay: 'В день',
     perWeek: 'В неделю',
     month: 'За месяц',
+    balance: {
+      start: 'Начало месяца',
+      forecast: 'Прогноз',
+    },
     more: 'Ещё',
     noCategory: 'Без категории',
     debt: 'Долг',

@@ -10,9 +10,12 @@ import { Empty, EmptyDescription, EmptyHeader, EmptyMedia, EmptyTitle } from '@/
 import { Spinner } from '@/components/ui/spinner';
 import type { Account } from '@/features/accounts/queries';
 import type { Category } from '@/features/categories/queries';
+import { buildBudgetView, type MonthBalance } from '@/features/budget/budget-model';
+import { useBudgets, useBudgetTotals } from '@/features/budget/queries';
 import { useCurrencyCodes } from '@/features/currencies/queries';
 import { toMonthParam } from '@/lib/dates';
-import { formatMoney } from '@/lib/money';
+import { formatMoney, moneySign } from '@/lib/money';
+import { signColor } from '@/lib/money-colors';
 import { cn } from '@/lib/utils';
 import { DailyChart } from './daily-chart';
 import {
@@ -63,10 +66,15 @@ export function MonthOverview({
 }: MonthOverviewProps) {
   const { t, i18n } = useTranslation();
   const currencyCodes = useCurrencyCodes();
-  const days = useOverviewDays(groupId, toMonthParam(month));
+  const monthKey = toMonthParam(month);
+  const days = useOverviewDays(groupId, monthKey);
   const now = new Date();
   // The start of today: the averages move on with the date, not with every render.
   const today = startOfDay(now).getTime();
+  const isThisMonth = month.getFullYear() === now.getFullYear() && month.getMonth() === now.getMonth();
+  // The balance row's forecast goes by the budget, which only the month under way needs.
+  const budgetLines = useBudgets(groupId, monthKey, isThisMonth);
+  const budgetTotals = useBudgetTotals(groupId, monthKey, isThisMonth);
 
   const view = useMemo(
     () =>
@@ -75,13 +83,28 @@ export function MonthOverview({
         : null,
     [days.data, month, today, categories, accounts, mainCurrencyId, rate],
   );
+  const budget = useMemo(
+    () =>
+      isThisMonth && budgetLines.data && budgetTotals.data
+        ? buildBudgetView({
+            lines: budgetLines.data,
+            totals: budgetTotals.data,
+            categories,
+            accounts,
+            mainCurrencyId,
+            rate,
+            current: true,
+          })
+        : null,
+    [isThisMonth, budgetLines.data, budgetTotals.data, categories, accounts, mainCurrencyId, rate],
+  );
+  const missingCurrencyIds = [...new Set([...(view?.missingCurrencyIds ?? []), ...(budget?.missingCurrencyIds ?? [])])];
   const tab = view?.[type];
   const money = (amount: string) =>
     formatMoney(amount, currencyCodes.get(mainCurrencyId ?? -1), i18n.language, { currencyDisplay: 'narrowSymbol' });
   const sources = useMemo(() => new Map(tab?.rows.map((row) => [row.key, row.source])), [tab]);
   const nameOf = (source: OverviewSource | undefined) =>
     source?.kind === 'category' ? source.category.name : source?.kind === 'debt' ? source.account.name : t('overview.noCategory');
-  const isThisMonth = month.getFullYear() === now.getFullYear() && month.getMonth() === now.getMonth();
   const monthName = new Intl.DateTimeFormat(i18n.language, { month: 'long', year: 'numeric' }).format(month);
 
   return (
@@ -92,6 +115,7 @@ export function MonthOverview({
         <QueryError onRetry={() => void days.refetch()} />
       ) : (
         <div className="flex flex-col gap-6">
+          {budget?.balance && <Balance balance={budget.balance} money={money} />}
           {tab.rows.length === 0 ? (
             <Empty className="border">
               <EmptyHeader>
@@ -118,7 +142,8 @@ export function MonthOverview({
                 money={money}
                 label={t(`overview.chartLabel.${type}`, { month: monthName })}
               />
-              <dl className="grid grid-cols-3 gap-2">
+              {/* Each as wide as its figure needs, which never wraps: one too wide for the row moves under it. */}
+              <dl className="flex flex-wrap gap-2">
                 <Stat label={t('overview.perDay')} value={tab.perDay === null ? '—' : money(tab.perDay)} />
                 <Stat label={t('overview.perWeek')} value={tab.perWeek === null ? '—' : money(tab.perWeek)} />
                 <Stat label={t('overview.month')} value={money(tab.total)} />
@@ -126,11 +151,11 @@ export function MonthOverview({
               <Rows rows={tab.rows} money={money} nameOf={nameOf} onSelect={onSelect} />
             </>
           )}
-          {view.missingCurrencyIds.length > 0 && (
+          {missingCurrencyIds.length > 0 && (
             <Alert>
               <AlertDescription>
                 {t('overview.missingRates', {
-                  codes: view.missingCurrencyIds.map((id) => currencyCodes.get(id) ?? '?').join(', '),
+                  codes: missingCurrencyIds.map((id) => currencyCodes.get(id) ?? '?').join(', '),
                 })}
               </AlertDescription>
             </Alert>
@@ -141,12 +166,33 @@ export function MonthOverview({
   );
 }
 
+// Where the month started and where it's headed, side by side, each figure under its name.
+function Balance({ balance, money }: { balance: MonthBalance; money: (amount: string) => string }) {
+  const { t } = useTranslation();
+  const items = [
+    { key: 'start', label: t('overview.balance.start'), amount: balance.start },
+    { key: 'forecast', label: t('overview.balance.forecast'), amount: balance.forecast },
+  ];
+
+  return (
+    // The figures never wrap: in a window too narrow for both, the forecast moves under the start.
+    <dl className="flex flex-wrap justify-between gap-x-4 gap-y-2 rounded-xl border bg-muted/40 px-4 py-3">
+      {items.map(({ key, label, amount }) => (
+        <div key={key} className="flex flex-col gap-0.5 last:ml-auto last:items-end last:text-right">
+          <dt className="text-sm whitespace-nowrap text-muted-foreground">{label}</dt>
+          <dd className={cn('font-medium whitespace-nowrap tabular-nums', signColor(moneySign(amount)))}>{money(amount)}</dd>
+        </div>
+      ))}
+    </dl>
+  );
+}
+
 // Stacked rather than side by side: the label above, the figure under it.
 function Stat({ label, value }: { label: string; value: string }) {
   return (
-    <div className="flex min-w-0 flex-col gap-0.5 rounded-xl border px-3 py-2">
+    <div className="flex flex-auto flex-col gap-0.5 rounded-xl border px-3 py-2">
       <dt className="truncate text-xs text-muted-foreground">{label}</dt>
-      <dd className="text-sm font-medium tabular-nums [overflow-wrap:anywhere]">{value}</dd>
+      <dd className="text-sm font-medium whitespace-nowrap tabular-nums">{value}</dd>
     </div>
   );
 }
