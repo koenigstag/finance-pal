@@ -1,27 +1,34 @@
 import { z } from 'zod';
 import type { AppAbility, Subject } from '../authz/ability.js';
 
-// What an API key may touch, and how. There is no delete: a key lives in another app, often on a
-// phone, and whatever it could erase is better erased here, by a person.
+// What an API key may touch, and how. Deleting is an access of its own, never implied by another:
+// a key lives in another app, a phone's automation or an AI assistant, and what it may erase is
+// for its owner to tick, one resource at a time.
 export const API_KEY_RESOURCES = ['transactions', 'accounts', 'categories', 'budgets'] as const;
 export type ApiKeyResource = (typeof API_KEY_RESOURCES)[number];
 
-export const API_KEY_ACCESS_LEVELS = ['read', 'create', 'update'] as const;
+export const API_KEY_ACCESS_LEVELS = ['read', 'create', 'update', 'delete'] as const;
 export type ApiKeyAccess = (typeof API_KEY_ACCESS_LEVELS)[number];
 
-// Budgets are only read, by an assistant asked how the month is going: setting them is planning,
-// which stays in the app.
+// The external REST API offers no deletes and nothing on budgets yet; those scopes open the MCP
+// endpoint's tools. A scope with no route or tool behind it opens nothing.
 export const API_KEY_SCOPES = [
   'transactions:read',
   'transactions:create',
   'transactions:update',
+  'transactions:delete',
   'accounts:read',
   'accounts:create',
   'accounts:update',
+  'accounts:delete',
   'categories:read',
   'categories:create',
   'categories:update',
+  'categories:delete',
   'budgets:read',
+  'budgets:create',
+  'budgets:update',
+  'budgets:delete',
 ] as const satisfies readonly `${ApiKeyResource}:${ApiKeyAccess}`[];
 export type ApiKeyScope = (typeof API_KEY_SCOPES)[number];
 
@@ -34,7 +41,7 @@ export function isApiKeyScope(value: string): value is ApiKeyScope {
   return (API_KEY_SCOPES as readonly string[]).includes(value);
 }
 
-/** The scope for this access to this resource, or null where there is none (budgets:create). */
+/** The scope for this access to this resource, or null where there is none. */
 export function apiKeyScope(resource: ApiKeyResource, access: ApiKeyAccess): ApiKeyScope | null {
   const scope = `${resource}:${access}`;
   return isApiKeyScope(scope) ? scope : null;

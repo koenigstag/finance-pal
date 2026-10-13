@@ -17,17 +17,18 @@ describe('canGrantApiKeyScope', () => {
     const ability = defineAbilityFor({ role: 'owner', archived: true });
     expect(canGrantApiKeyScope(ability, 'transactions:read')).toBe(true);
     expect(canGrantApiKeyScope(ability, 'transactions:create')).toBe(false);
+    expect(canGrantApiKeyScope(ability, 'transactions:delete')).toBe(false);
   });
 });
 
 describe('apiKeyScope', () => {
-  it('names the scope for an access a resource has', () => {
+  it('names the scope for an access to a resource', () => {
     expect(apiKeyScope('budgets', 'read')).toBe('budgets:read');
     expect(apiKeyScope('transactions', 'update')).toBe('transactions:update');
   });
 
-  it("has none for an access a resource doesn't have", () => {
-    expect(apiKeyScope('budgets', 'create')).toBeNull();
+  it('has deleting as an access of its own', () => {
+    expect(apiKeyScope('accounts', 'delete')).toBe('accounts:delete');
   });
 });
 

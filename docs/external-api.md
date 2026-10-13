@@ -32,18 +32,23 @@ What a key may do is set per resource:
 | `transactions:read`    | listing and reading transactions              |
 | `transactions:create`  | recording transactions                        |
 | `transactions:update`  | changing transactions                         |
+| `transactions:delete`  | deleting transactions, on the MCP endpoint    |
 | `accounts:read`        | listing and reading accounts, with balances   |
 | `accounts:create`      | creating accounts                             |
 | `accounts:update`      | changing accounts                             |
+| `accounts:delete`      | deleting accounts, on the MCP endpoint        |
 | `categories:read`      | listing and reading categories                |
 | `categories:create`    | creating categories and subcategories         |
 | `categories:update`    | renaming and moving categories                |
+| `categories:delete`    | deleting categories, on the MCP endpoint      |
 | `budgets:read`         | reading a month's budget, on the MCP endpoint |
+| `budgets:create`       | adding budget lines, on the MCP endpoint      |
+| `budgets:update`       | changing budget lines, on the MCP endpoint    |
+| `budgets:delete`       | removing budget lines, on the MCP endpoint    |
 
-Nothing is ever deleted through this API: that stays in the app. Budgets are only ever read.
-
-AI assistants read a group through the [MCP endpoint](mcp.md) with the same keys, or with one
-they get by signing in.
+Nothing is ever deleted through this API's routes, and budgets have none: those scopes open the
+[MCP endpoint](mcp.md)'s tools, where AI assistants work with a group through the same keys, or
+with one they get by signing in.
 
 Recording transactions from notifications needs `transactions:create` only. Accounts and
 categories can be named without reading them.

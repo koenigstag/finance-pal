@@ -3,7 +3,7 @@ import { InjectDataSource, InjectRepository } from '@nestjs/typeorm';
 import { createHash, randomBytes } from 'node:crypto';
 import { DataSource, Repository } from 'typeorm';
 import { OauthCode } from '@ft/api-database';
-import { canGrantApiKeyScope, isApiKeyScope, type ApiKeyScope } from '@ft/shared-contracts';
+import { API_KEY_SCOPES, canGrantApiKeyScope, isApiKeyScope, type ApiKeyScope } from '@ft/shared-contracts';
 import { AbilityFactory } from '../_core/authz/ability.factory';
 import { withRlsUser } from '../_core/rls/with-rls-user';
 import { ApiKeysService } from '../api-keys/api-keys.service';
@@ -52,7 +52,7 @@ export class TokenError extends HttpException {
  * OAuth sign-in for apps that read a group through the MCP endpoint, an AI assistant above all.
  *
  * It ends in an ordinary API key: allowing an app makes a one-time code, and the app trades the
- * code for a key of its own, with viewing scopes only. The key is listed with the group's other
+ * code for a key of its own, with viewing scopes and whatever else the person ticked. The key is listed with the group's other
  * keys, under the app's name, and deleting it there disconnects the app. It doesn't expire —
  * nothing here hands out refresh tokens — so it works until it's deleted, like any key made in the
  * app without an expiry, or until the same app signs in to the group again and gets a new one.
@@ -95,16 +95,25 @@ export class OauthService {
       clientName: request.client.name,
       redirectHost: hostOf(request.redirectUri),
       scopes: request.scopes,
+      optionalScopes: request.optionalScopes,
       denyUrl: withParams(request.redirectUri, { error: 'access_denied', state: request.state }),
     };
   }
 
-  /** The person said yes: a code for the app, on the way back to it. */
-  async approve(userId: string, params: AuthorizationParams & { groupId: string; timeZone?: string }): Promise<string> {
+  /** The person said yes: a code for the app, on the way back to it, for viewing and what they ticked. */
+  async approve(
+    userId: string,
+    params: AuthorizationParams & { groupId: string; timeZone?: string; extraScopes?: ApiKeyScope[] },
+  ): Promise<string> {
     const request = this.authorizeOrBadRequest(params);
+    const unasked = (params.extraScopes ?? []).filter((scope) => !request.optionalScopes.includes(scope));
+    if (unasked.length > 0) {
+      throw new BadRequestException(`The app didn't ask for ${unasked.join(', ')}`);
+    }
+    const scopes = API_KEY_SCOPES.filter((scope) => request.scopes.includes(scope) || params.extraScopes?.includes(scope));
     // Also the 404 for a group the person isn't in.
     const { ability } = await this.abilities.forGroup(userId, params.groupId);
-    const refused = request.scopes.filter((scope) => !canGrantApiKeyScope(ability, scope));
+    const refused = scopes.filter((scope) => !canGrantApiKeyScope(ability, scope));
     if (refused.length > 0) {
       throw new ForbiddenException(`Your role in this group can't grant ${refused.join(', ')}`);
     }
@@ -118,7 +127,7 @@ export class OauthService {
       clientName: request.client.name,
       redirectUri: request.redirectUri,
       codeChallenge: request.codeChallenge,
-      scopes: request.scopes,
+      scopes,
       timeZone: params.timeZone ?? null,
       expiresAt: new Date(Date.now() + CODE_TTL_MS),
     });

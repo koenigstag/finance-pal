@@ -1,8 +1,6 @@
 import { TZDate } from '@date-fns/tz';
 import { endOfDay, endOfMonth, format } from 'date-fns';
-
-/** A request an assistant made that can't be read, said so it can ask again. */
-export class ToolInputError extends Error {}
+import { ToolInputError } from './mcp-tool';
 
 export interface Period {
   // Inclusive bounds, as the ledger's filters take them.
@@ -48,6 +46,30 @@ export function readBound(value: string, timeZone: string, edge: 'start' | 'end'
     }
   }
   throw new ToolInputError(`"${value}" isn't a date: expected YYYY-MM-DD, or a date and time with an offset`);
+}
+
+/**
+ * When a transaction a call records or moves is dated: an exact moment as given, or a calendar day
+ * the way the app dates a day picked for one — today at this moment, a day gone by at its very end,
+ * so it lands on top of that day's list, and a day to come at noon. A transaction moved within the
+ * day it's on keeps its time.
+ */
+export function transactionMoment(value: string, timeZone: string, now: Date, previous?: Date): Date {
+  const start = readBound(value, timeZone, 'start');
+  if (!DAY_PATTERN.test(value)) {
+    return start;
+  }
+  if (previous && localDay(previous, timeZone) === value) {
+    return previous;
+  }
+  if (localDay(now, timeZone) === value) {
+    return now;
+  }
+  if (start < now) {
+    return readBound(value, timeZone, 'end');
+  }
+  const [year, month, date] = value.split('-').map(Number);
+  return new Date(new TZDate(year, month - 1, date, 12, timeZone).getTime());
 }
 
 /** Both bounds, read as readBound reads them, in order. */

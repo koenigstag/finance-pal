@@ -1,11 +1,10 @@
-import { HttpException, Injectable, Logger, ServiceUnavailableException } from '@nestjs/common';
+import { Injectable, Logger, ServiceUnavailableException } from '@nestjs/common';
 import { InjectRepository } from '@nestjs/typeorm';
 import { McpServer } from '@modelcontextprotocol/sdk/server/mcp.js';
-import type { CallToolResult } from '@modelcontextprotocol/sdk/types.js';
 import { Repository } from 'typeorm';
 import { z } from 'zod';
-import { ApiKey, Profile, type Account, type Category, type Transaction } from '@ft/api-database';
-import { effectiveRates, isValidTimezone, type ApiKeyScope } from '@ft/shared-contracts';
+import { ApiKey, Profile } from '@ft/api-database';
+import { effectiveRates, isValidTimezone } from '@ft/shared-contracts';
 import type { RequestApiKey } from '../../_core/authn/request-user';
 import { AbilityFactory } from '../../_core/authz/ability.factory';
 import { AccountsService } from '../../ledger/accounts/accounts.service';
@@ -14,59 +13,36 @@ import { CategoriesService } from '../../ledger/categories/categories.service';
 import { ExchangeRatesService } from '../../ledger/exchange-rates/exchange-rates.service';
 import { OverviewService } from '../../ledger/overview/overview.service';
 import { TransactionsService } from '../../ledger/transactions/transactions.service';
-import { ExternalLookupService, type CurrencyCodes } from '../external-lookup.service';
-import { named } from '../references';
-import {
-  ToolInputError,
-  currentMonth,
-  daysCounted,
-  localDateTime,
-  localDay,
-  monthPeriod,
-  rangePeriod,
-  readBound,
-  type Period,
-} from './mcp-dates';
+import { ExternalLookupService } from '../external-lookup.service';
+import { currentMonth, daysCounted, localDay, monthPeriod, rangePeriod, readBound, type Period } from './mcp-dates';
+import { transactionDescriber } from './mcp-describe';
 import { Converter, accountsReport, budgetReport, categoryTree, moneyByCategory, type ReportContext } from './mcp-reports';
-
-/** Who is asking, and in what terms their answers are given. */
-interface McpContext {
-  apiKey: RequestApiKey;
-  groupName: string;
-  // The key's, or UTC for a key that has none.
-  timeZone: string;
-  // The key owner's: what reports are converted into. Null before they've set up their profile.
-  mainCurrencyId: number | null;
-  manualRates: Record<string, string> | null;
-  currencies: CurrencyCodes;
-}
-
-// Nothing here changes anything, asks the world outside, or answers differently when asked twice.
-const READ_ONLY = { readOnlyHint: true, destructiveHint: false, idempotentHint: true, openWorldHint: false } as const;
-
-const timeZoneArg = z
-  .string()
-  .optional()
-  .describe("An IANA time zone, like Europe/Kyiv, to count calendar days in. Left out, the key's own.");
-const monthArg = z
-  .string()
-  .regex(/^\d{4}-(0[1-9]|1[0-2])$/)
-  .optional()
-  .describe('A calendar month, YYYY-MM. Left out, the current one.');
-const dayArg = (edge: string) =>
-  z.string().optional().describe(`${edge}, as YYYY-MM-DD (the whole day counts) or a date and time with an offset`);
+import {
+  READS,
+  ToolInputError,
+  can,
+  dayArg,
+  findByNameOrId,
+  monthArg,
+  timeZoneArg,
+  timeZoneOf,
+  toolHandler,
+  type McpContext,
+} from './mcp-tool';
+import { McpWriteTools } from './mcp-write-tools';
 
 /**
  * The MCP endpoint's server: tools an AI assistant uses to answer questions about one group's
  * money — accounts, categories, transactions, budgets — as the key's owner sees them, and only
  * within the key's scopes. A tool the key has no scope for isn't offered at all.
  *
- * Every tool reads through the ledger's own services, under the request's RLS transaction, so an
- * assistant sees exactly what its owner would in the app. None of them writes.
+ * Every tool goes through the ledger's own services, under the request's RLS transaction, so an
+ * assistant sees and does exactly what its owner could in the app. The tools here read; those that
+ * write are McpWriteTools', offered only to a key with scopes beyond viewing.
  */
 @Injectable()
 export class FinanceMcpService {
-  private readonly logger = new Logger('McpTools');
+  private readonly tool = toolHandler(new Logger('McpTools'));
 
   constructor(
     @InjectRepository(ApiKey) private readonly apiKeys: Repository<ApiKey>,
@@ -79,6 +55,7 @@ export class FinanceMcpService {
     private readonly overview: OverviewService,
     private readonly rates: ExchangeRatesService,
     private readonly lookup: ExternalLookupService,
+    private readonly writes: McpWriteTools,
   ) {}
 
   /** A server for one request: the transport is stateless, so each request gets its own. */
@@ -100,19 +77,19 @@ export class FinanceMcpService {
       { name: 'finance-pal', title: 'Finance Pal', version: '1.0.0' },
       { instructions: instructionsFor(context) },
     );
-    const can = (scope: ApiKeyScope) => apiKey.scopes.includes(scope);
-    if (can('accounts:read')) {
+    if (can(context, 'accounts:read')) {
       this.addAccountTools(server, context);
     }
-    if (can('categories:read')) {
+    if (can(context, 'categories:read')) {
       this.addCategoryTools(server, context);
     }
-    if (can('transactions:read')) {
+    if (can(context, 'transactions:read')) {
       this.addTransactionTools(server, context);
     }
-    if (can('budgets:read')) {
+    if (can(context, 'budgets:read')) {
       this.addBudgetTools(server, context);
     }
+    this.writes.register(server, context);
     return server;
   }
 
@@ -126,7 +103,7 @@ export class FinanceMcpService {
           'the accounts marked to count in it, as the app shows it. A balance leaves out transactions dated later (planned ones); ' +
           'plannedBalance, where it differs, counts them in. Types: regular, savings, debt.',
         inputSchema: { includeArchived: z.boolean().optional().describe('Also list accounts put away in the archive') },
-        annotations: READ_ONLY,
+        annotations: READS,
       },
       this.tool(async ({ includeArchived }) => {
         const report = await this.reportContext(context);
@@ -148,7 +125,7 @@ export class FinanceMcpService {
           type: z.enum(['expense', 'income']).optional().describe('Only categories of this type'),
           includeArchived: z.boolean().optional().describe('Also list categories put away in the archive'),
         },
-        annotations: READ_ONLY,
+        annotations: READS,
       },
       this.tool(async ({ type, includeArchived }) => {
         const categories = await this.categories.list(context.apiKey.userId, context.apiKey.groupId, includeArchived ?? false);
@@ -181,10 +158,10 @@ export class FinanceMcpService {
           cursor: z.string().optional().describe("The previous page's nextCursor, for the page after it"),
           timeZone: timeZoneArg,
         },
-        annotations: READ_ONLY,
+        annotations: READS,
       },
       this.tool(async (args) => {
-        const timeZone = this.timeZoneOf(context, args.timeZone);
+        const timeZone = timeZoneOf(context, args.timeZone);
         const { userId, groupId } = context.apiKey;
         const accounts = await this.lookup.accountsOf(groupId);
         const categories = await this.lookup.categoriesOf(groupId);
@@ -221,10 +198,10 @@ export class FinanceMcpService {
           byDay: z.boolean().optional().describe('Also give the total of each day'),
           timeZone: timeZoneArg,
         },
-        annotations: READ_ONLY,
+        annotations: READS,
       },
       this.tool(async (args) => {
-        const timeZone = this.timeZoneOf(context, args.timeZone);
+        const timeZone = timeZoneOf(context, args.timeZone);
         const period = this.periodOf(args, timeZone);
         const report = await this.reportContext(context);
         const { userId, groupId } = context.apiKey;
@@ -263,10 +240,10 @@ export class FinanceMcpService {
           'main currency, and notInBudget is the money in categories with no line. Months are set one at a time: a month nobody ' +
           'set has no lines.',
         inputSchema: { month: monthArg, timeZone: timeZoneArg },
-        annotations: READ_ONLY,
+        annotations: READS,
       },
       this.tool(async (args) => {
-        const timeZone = this.timeZoneOf(context, args.timeZone);
+        const timeZone = timeZoneOf(context, args.timeZone);
         const month = args.month ?? currentMonth(new Date(), timeZone);
         const period = monthPeriod(month, timeZone);
         const report = await this.reportContext(context);
@@ -277,34 +254,6 @@ export class FinanceMcpService {
         return { month, timeZone, currency: report.codeOf(report.mainCurrencyId), ...budgetReport(lines, totals, names, report) };
       }),
     );
-  }
-
-  /**
-   * A tool's handler: its answer as JSON text, or the reason it couldn't give one as a tool error,
-   * which the assistant reads and can act on. Anything unexpected is logged here and not described.
-   */
-  private tool<A>(run: (args: A) => Promise<unknown>): (args: A) => Promise<CallToolResult> {
-    return async (args) => {
-      try {
-        return { content: [{ type: 'text', text: JSON.stringify(await run(args)) }] };
-      } catch (error) {
-        if (error instanceof ToolInputError || (error instanceof HttpException && error.getStatus() < 500)) {
-          return { isError: true, content: [{ type: 'text', text: error.message }] };
-        }
-        this.logger.error(error instanceof Error ? error.stack : error);
-        return { isError: true, content: [{ type: 'text', text: 'Something went wrong on the server; try again later.' }] };
-      }
-    };
-  }
-
-  private timeZoneOf(context: McpContext, requested: string | undefined): string {
-    if (requested === undefined) {
-      return context.timeZone;
-    }
-    if (!isValidTimezone(requested)) {
-      throw new ToolInputError(`"${requested}" isn't a time zone: expected an IANA name, like Europe/Kyiv`);
-    }
-    return requested;
   }
 
   private periodOf(args: { month?: string; from?: string; to?: string }, timeZone: string): Period {
@@ -343,69 +292,22 @@ export class FinanceMcpService {
   }
 }
 
-function instructionsFor({ groupName, timeZone, mainCurrencyId, currencies, apiKey }: McpContext): string {
+function instructionsFor(context: McpContext): string {
+  const { groupName, timeZone, mainCurrencyId, currencies, apiKey } = context;
   const main = mainCurrencyId === null ? null : currencies.of(mainCurrencyId);
+  const writes = apiKey.scopes.some((scope) => !scope.endsWith(':read'));
   const lines = [
-    `Finance Pal, a money tracker. These tools read the group "${groupName}", as its member who connected them sees it, and change nothing.`,
+    writes
+      ? `Finance Pal, a money tracker. These tools work in the group "${groupName}", as its member who connected them. Some of them change it: add, update and delete what the person asks for, and say what you changed. Deleting can't be undone in the app. Transactions can only be added, changed or deleted while planned, dated after now; ones that already happened are the person's to change in the app.`
+      : `Finance Pal, a money tracker. These tools read the group "${groupName}", as its member who connected them sees it, and change nothing.`,
     'Amounts are decimal strings, each beside its currency (an ISO 4217 code).' +
       (main ? ` Totals are in the main currency, ${main}, converted at current rates; a currency with no rate is left out of a total and named in currenciesWithoutRate.` : ''),
     `Dates are read and given in ${timeZone} unless a call names another timeZone; today there is ${localDay(new Date(), timeZone)}.`,
     'Transactions dated after now are planned: scheduled, or the next of a repeating series. Balances and totals count what is dated up to now, unless they say otherwise.',
     'Accounts and categories can be named by their name or their id.',
   ];
-  if (!apiKey.scopes.some((scope) => scope.endsWith(':read'))) {
-    lines.push('This key may not view anything, so there are no tools to call.');
+  if (apiKey.scopes.length === 0) {
+    lines.push('This key may do nothing, so there are no tools to call.');
   }
   return lines.join('\n');
-}
-
-/**
- * The account or category a call names: by id, or by name as the app compares names (case and
- * surrounding spaces aside, active ones before archived ones). A name a top-level category shares
- * with a subcategory means the category.
- */
-function findByNameOrId<T extends { id: string; name: string; archived: boolean; parentId?: string | null }>(
-  items: T[],
-  value: string,
-  what: 'account' | 'category',
-): T {
-  const byId = items.find((item) => item.id === value);
-  if (byId) {
-    return byId;
-  }
-  const matches = named(items, value);
-  const topLevel = matches.filter((item) => item.parentId === null);
-  const picked = topLevel.length === 1 ? topLevel : matches;
-  if (picked.length === 1) {
-    return picked[0];
-  }
-  if (picked.length === 0) {
-    throw new ToolInputError(`No ${what} is named "${value}"`);
-  }
-  throw new ToolInputError(`More than one ${what} is named "${value}"; pass one of their ids: ${picked.map((item) => item.id).join(', ')}`);
-}
-
-function transactionDescriber(accounts: Account[], categories: Category[], currencies: CurrencyCodes, timeZone: string, now: Date) {
-  const accountsById = new Map(accounts.map((account) => [account.id, account]));
-  const categoriesById = new Map(categories.map((category) => [category.id, category]));
-  return (transaction: Transaction) => {
-    const toAccount = transaction.toAccountId ? accountsById.get(transaction.toAccountId) : undefined;
-    const category = transaction.categoryId ? categoriesById.get(transaction.categoryId) : undefined;
-    const subcategory = transaction.subcategoryId ? categoriesById.get(transaction.subcategoryId) : undefined;
-    return {
-      id: transaction.id,
-      date: localDateTime(transaction.date, timeZone),
-      type: transaction.type,
-      amount: transaction.amount,
-      currency: currencies.of(transaction.currencyId),
-      account: accountsById.get(transaction.accountId)?.name ?? null,
-      ...(toAccount && { toAccount: toAccount.name }),
-      ...(toAccount &&
-        transaction.destAmount !== null && { received: { amount: transaction.destAmount, currency: currencies.of(toAccount.currencyId) } }),
-      ...(category && { category: category.name }),
-      ...(subcategory && { subcategory: subcategory.name }),
-      ...(transaction.note && { note: transaction.note }),
-      ...(transaction.date > now && { planned: true }),
-    };
-  };
 }

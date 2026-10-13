@@ -1,16 +1,7 @@
 import { CheckIcon, CopyIcon, PencilIcon, PlusIcon, Trash2Icon, TriangleAlertIcon } from 'lucide-react';
-import { Fragment, useEffect, useState } from 'react';
+import { useEffect, useState } from 'react';
 import { useTranslation } from 'react-i18next';
-import {
-  API_KEY_ACCESS_LEVELS,
-  API_KEY_RESOURCES,
-  API_KEY_SCOPES,
-  apiKeyScope,
-  canGrantApiKeyScope,
-  defineAbilityFor,
-  type ApiKeyScope,
-  type AppAbility,
-} from '@ft/shared-contracts';
+import { API_KEY_SCOPES, canGrantApiKeyScope, defineAbilityFor, type ApiKeyScope, type AppAbility } from '@ft/shared-contracts';
 import { QueryError } from '@/components/query-error';
 import { Alert, AlertDescription } from '@/components/ui/alert';
 import {
@@ -25,7 +16,6 @@ import {
 } from '@/components/ui/alert-dialog';
 import { Badge } from '@/components/ui/badge';
 import { Button } from '@/components/ui/button';
-import { Checkbox } from '@/components/ui/checkbox';
 import { Field, FieldDescription, FieldGroup, FieldLabel, FieldLegend, FieldSet } from '@/components/ui/field';
 import { Input } from '@/components/ui/input';
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select';
@@ -34,13 +24,13 @@ import { useAccounts } from '@/features/accounts/queries';
 import type { Group } from '@/features/groups/queries';
 import { API_ORIGIN } from '@/lib/api/api-url';
 import { cn } from '@/lib/utils';
+import { AccessGrid } from './access-grid';
 import {
   EXPIRY_OPTIONS,
   accessByResource,
   exampleRequest,
   expiresAtFor,
   externalApiBaseUrl,
-  withScope,
   type ExpiryOption,
 } from './api-key-access';
 import { useApiKeys, useCreateApiKey, useDeleteApiKey, useUpdateApiKey, type ApiKey } from './queries';
@@ -246,55 +236,6 @@ function ApiKeyForm({ group, ability, apiKey, onCancel, onSaved, onCreated }: Ap
         </Button>
       </div>
     </form>
-  );
-}
-
-// One row per resource, one column per kind of access. What the role can't grant stays off.
-function AccessGrid({
-  ability,
-  scopes,
-  onChange,
-}: {
-  ability: AppAbility;
-  scopes: ApiKeyScope[];
-  onChange: (scopes: ApiKeyScope[]) => void;
-}) {
-  const { t } = useTranslation();
-
-  return (
-    <div className="grid grid-cols-[minmax(0,1fr)_repeat(3,4.75rem)] items-center gap-y-3 text-sm">
-      <span />
-      {API_KEY_ACCESS_LEVELS.map((level) => (
-        <span key={level} className="text-center text-xs text-muted-foreground">
-          {t(`apiKeys.columns.${level}`)}
-        </span>
-      ))}
-      {API_KEY_RESOURCES.map((resource) => (
-        <Fragment key={resource}>
-          <span className="truncate">{t(`apiKeys.resources.${resource}`)}</span>
-          {API_KEY_ACCESS_LEVELS.map((level) => {
-            const scope = apiKeyScope(resource, level);
-            // Budgets are only viewed: there is nothing to tick for adding or editing them.
-            if (!scope) {
-              return <span key={level} />;
-            }
-            return (
-              <div key={level} className="flex justify-center">
-                <Checkbox
-                  checked={scopes.includes(scope)}
-                  disabled={!canGrantApiKeyScope(ability, scope)}
-                  aria-label={t('apiKeys.scope', {
-                    resource: t(`apiKeys.resources.${resource}`),
-                    level: t(`apiKeys.levels.${level}`),
-                  })}
-                  onCheckedChange={(checked) => onChange(withScope(scopes, scope, checked === true))}
-                />
-              </div>
-            );
-          })}
-        </Fragment>
-      ))}
-    </div>
   );
 }
 

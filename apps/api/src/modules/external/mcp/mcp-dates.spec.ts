@@ -1,4 +1,5 @@
-import { ToolInputError, currentMonth, daysCounted, localDateTime, monthPeriod, rangePeriod, readBound } from './mcp-dates';
+import { currentMonth, daysCounted, localDateTime, monthPeriod, rangePeriod, readBound, transactionMoment } from './mcp-dates';
+import { ToolInputError } from './mcp-tool';
 
 const KYIV = 'Europe/Kyiv';
 
@@ -64,5 +65,31 @@ describe('local dates', () => {
   it('give the date and time as the person reads them', () => {
     expect(localDateTime(new Date('2026-10-11T22:30:00Z'), KYIV)).toBe('2026-10-12T01:30+03:00');
     expect(currentMonth(new Date('2026-09-30T22:30:00Z'), KYIV)).toBe('2026-10');
+  });
+});
+
+describe('transactionMoment', () => {
+  // Noon on October 12th in Kyiv.
+  const now = new Date('2026-10-12T09:00:00Z');
+
+  it('dates today at this moment, as the app does', () => {
+    expect(transactionMoment('2026-10-12', KYIV, now)).toEqual(now);
+  });
+
+  it('dates a day gone by at its very end, so it lands on top of that day', () => {
+    expect(transactionMoment('2026-10-03', KYIV, now).toISOString()).toBe('2026-10-03T20:59:59.999Z');
+  });
+
+  it('dates a day to come at noon, after the clocks change too', () => {
+    expect(transactionMoment('2026-10-28', KYIV, now).toISOString()).toBe('2026-10-28T10:00:00.000Z');
+  });
+
+  it('keeps the time of a transaction moved within its own day', () => {
+    const previous = new Date('2026-10-03T07:15:00Z');
+    expect(transactionMoment('2026-10-03', KYIV, now, previous)).toEqual(previous);
+  });
+
+  it('takes an exact moment as it is', () => {
+    expect(transactionMoment('2026-10-03T10:15:00+03:00', KYIV, now).toISOString()).toBe('2026-10-03T07:15:00.000Z');
   });
 });

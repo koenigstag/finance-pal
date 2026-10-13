@@ -1,6 +1,6 @@
 import { useMutation, useQuery } from '@tanstack/react-query';
 import type { ClientInferRequest } from '@ts-rest/core';
-import type { oauthContract } from '@ft/shared-contracts';
+import type { ApiKeyScope, oauthContract } from '@ft/shared-contracts';
 import { api, unwrap } from '@/lib/api/client';
 import { deviceTimezone } from '@/lib/dates';
 import { queryKeys } from '@/lib/query-keys';
@@ -44,7 +44,7 @@ export function useConsent(request: AuthorizationRequest) {
 /** Resolves with where to send the browser: back to the app, with its code. */
 export function useApprove(request: AuthorizationRequest) {
   return useMutation({
-    mutationFn: (groupId: string) =>
-      unwrap(api.oauth.approve({ body: { ...request, groupId, timeZone: deviceTimezone() } }), 200),
+    mutationFn: ({ groupId, extraScopes }: { groupId: string; extraScopes: ApiKeyScope[] }) =>
+      unwrap(api.oauth.approve({ body: { ...request, groupId, extraScopes, timeZone: deviceTimezone() } }), 200),
   });
 }

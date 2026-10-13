@@ -32,8 +32,11 @@ export const oauthConsentSchema = z.object({
   clientName: z.string(),
   // Where allowing sends the person, and the app's code with them: the host is what identifies the app.
   redirectHost: z.string(),
-  // What the app gets to see. It is never given more than viewing.
+  // What the app gets to see, whatever the person ticks.
   scopes: z.array(apiKeyScopeSchema),
+  // What else the app asked to do — add, edit, delete — which it gets only where the person ticks
+  // it. Their role in the group they pick decides which they may tick.
+  optionalScopes: z.array(apiKeyScopeSchema),
   // Where Cancel goes: back to the app, telling it the person said no.
   denyUrl: z.string(),
 });
@@ -43,6 +46,8 @@ const approveBodySchema = oauthAuthorizationRequestSchema.extend({
   groupId: z.string().uuid(),
   // The person's own, from their browser: where the app's reports count their days.
   timeZone: timezoneSchema.optional(),
+  // The optional scopes the person ticked; none, left out.
+  extraScopes: z.array(apiKeyScopeSchema).max(20).optional(),
 });
 
 export const oauthContract = c.router(
@@ -66,7 +71,7 @@ export const oauthContract = c.router(
         404: errorSchema,
         503: errorSchema,
       },
-      summary: 'Let an app see one group, read-only; the response says where to send the browser',
+      summary: 'Let an app into one group, to view and to do what was ticked; the response says where to send the browser',
     },
   },
   { pathPrefix: '/api' },

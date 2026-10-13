@@ -3,7 +3,7 @@ import {
   AuthorizationError,
   authorizationParams,
   codeChallengeOf,
-  grantedScopes,
+  requestedScopes,
   isValidCodeVerifier,
   validateAuthorization,
   type AuthorizationParams,
@@ -49,6 +49,7 @@ describe('validateAuthorization', () => {
       codeChallenge: codeChallengeOf(verifier),
       state: 'xyz',
       scopes: ['transactions:read', 'accounts:read'],
+      optionalScopes: [],
     });
   });
 
@@ -73,18 +74,23 @@ describe('validateAuthorization', () => {
   });
 });
 
-describe('grantedScopes', () => {
+describe('requestedScopes', () => {
+  const ALL_VIEWING = ['transactions:read', 'accounts:read', 'categories:read', 'budgets:read'];
+
   it('grants the viewing scopes asked for', () => {
-    expect(grantedScopes('budgets:read accounts:read')).toEqual(['accounts:read', 'budgets:read']);
+    expect(requestedScopes('budgets:read accounts:read')).toEqual({ scopes: ['accounts:read', 'budgets:read'], optionalScopes: [] });
   });
 
   it('grants every viewing scope when asked for none it knows', () => {
-    expect(grantedScopes(undefined)).toEqual(['transactions:read', 'accounts:read', 'categories:read', 'budgets:read']);
-    expect(grantedScopes('openid profile')).toEqual(['transactions:read', 'accounts:read', 'categories:read', 'budgets:read']);
+    expect(requestedScopes(undefined)).toEqual({ scopes: ALL_VIEWING, optionalScopes: [] });
+    expect(requestedScopes('openid profile')).toEqual({ scopes: ALL_VIEWING, optionalScopes: [] });
   });
 
-  it('never grants more than viewing', () => {
-    expect(grantedScopes('transactions:create transactions:read')).toEqual(['transactions:read']);
+  it('leaves anything beyond viewing for the person to tick', () => {
+    expect(requestedScopes('budgets:delete transactions:create transactions:read')).toEqual({
+      scopes: ['transactions:read'],
+      optionalScopes: ['transactions:create', 'budgets:delete'],
+    });
   });
 });
 

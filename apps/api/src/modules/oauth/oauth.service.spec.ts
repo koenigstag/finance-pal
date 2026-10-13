@@ -58,6 +58,7 @@ describe('OauthService', () => {
       clientName: 'Claude',
       redirectHost: 'claude.ai',
       scopes: ['transactions:read', 'accounts:read', 'categories:read', 'budgets:read'],
+      optionalScopes: [],
       denyUrl: `${redirectUri}?error=access_denied&state=xyz`,
     });
   });
@@ -78,6 +79,23 @@ describe('OauthService', () => {
     expect(inserted).toHaveLength(1);
     expect(inserted[0]).toMatchObject({ userId: 'user-1', groupId, clientName: 'Claude', timeZone: 'Europe/Kyiv' });
     expect(JSON.stringify(inserted[0])).not.toContain(code);
+  });
+
+  it('grants viewing and what the person ticked, and nothing the app didn’t ask for', async () => {
+    const { service, inserted, params } = setup();
+    const asking = { ...params, scope: 'transactions:read transactions:create transactions:delete' };
+    await service.approve('user-1', { ...asking, groupId, extraScopes: ['transactions:create'] });
+    expect(inserted[0].scopes).toEqual(['transactions:read', 'transactions:create']);
+    await expect(service.approve('user-1', { ...asking, groupId, extraScopes: ['accounts:delete'] })).rejects.toThrow(
+      "The app didn't ask for accounts:delete",
+    );
+  });
+
+  it('keeps a viewer from ticking more than viewing', async () => {
+    const { service, params } = setup('viewer');
+    await expect(
+      service.approve('user-1', { ...params, scope: 'transactions:create', groupId, extraScopes: ['transactions:create'] }),
+    ).rejects.toThrow(ForbiddenException);
   });
 
   it('lets a viewer connect an app: it only views', async () => {

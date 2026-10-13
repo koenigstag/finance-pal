@@ -1,6 +1,6 @@
 import { Body, Controller, Get, HttpCode, HttpException, Post, Query, Req, Res } from '@nestjs/common';
 import type { Request, Response } from 'express';
-import { API_KEY_READ_SCOPES } from '@ft/shared-contracts';
+import { API_KEY_SCOPES } from '@ft/shared-contracts';
 import { Public } from '../_core/authn/public.decorator';
 import { AuthorizationError, authorizationParams } from './oauth-authorization';
 import { RegistrationError } from './oauth-clients';
@@ -34,7 +34,7 @@ export class OauthProtocolController {
       grant_types_supported: ['authorization_code'],
       code_challenge_methods_supported: ['S256'],
       token_endpoint_auth_methods_supported: ['none'],
-      scopes_supported: API_KEY_READ_SCOPES,
+      scopes_supported: API_KEY_SCOPES,
       // RFC 9207: the redirect back names this server, so an app signed in at several can tell.
       authorization_response_iss_parameter_supported: true,
     };
@@ -48,7 +48,7 @@ export class OauthProtocolController {
     return {
       resource: endpoints.resource,
       authorization_servers: [endpoints.issuer],
-      scopes_supported: API_KEY_READ_SCOPES,
+      scopes_supported: API_KEY_SCOPES,
       bearer_methods_supported: ['header'],
       resource_name: 'Finance Pal',
     };
