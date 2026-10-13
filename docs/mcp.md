@@ -1,9 +1,9 @@
 # MCP endpoint
 
-AI assistants can read a group's money through `/api/mcp`, an [MCP](https://modelcontextprotocol.io)
-server: ask Claude what went on groceries this month, how the budget is holding up, or what a
-transfer last week was for. It only reads: nothing an assistant does through it adds, changes or
-deletes anything.
+AI assistants can work with a group's money through `/api/mcp`, an
+[MCP](https://modelcontextprotocol.io) server: ask Claude what went on groceries this month or how
+the budget is holding up, or have it record a coffee, fix a category or set next month's budget.
+It views by default. Adding, editing and deleting are separate permissions, each off until ticked.
 
 In production the address is `https://finance-api.tfc-russia.xyz/api/mcp`.
 
@@ -15,7 +15,7 @@ In production the address is `https://finance-api.tfc-russia.xyz/api/mcp`.
 2. Name it, say *Finance Pal*, and enter the address above. Leave the authentication settings
    as they are.
 3. Choose **Connect**. Claude opens Finance Pal's consent page. Sign in if asked, pick the group
-   Claude may see, and choose **Allow**.
+   Claude may work in, tick what it may do besides viewing, and choose **Allow**.
 
 The connector then works wherever you use Claude. A connector added on the web shows up in the
 desktop and phone apps too.
@@ -39,12 +39,15 @@ claude mcp add --transport http finance-pal https://finance-api.tfc-russia.xyz/a
 
 ## What an assistant gets
 
-Signing in gives the assistant an API key of its own. It sees one group, as the person who
-allowed it, with every view scope and nothing else. The key is listed in the group's settings
+Signing in gives the assistant an API key of its own. It works in one group, as the person who
+allowed it. It gets every view scope, and only the add, edit and delete scopes ticked on the consent
+page, within what the person's role allows. The key is listed in the group's settings
 under **API keys**, by the name the assistant gave itself, usually *Claude*. Deleting it there
 disconnects the assistant at once. The key doesn't expire otherwise. When the same assistant
 connects to the group again, its new key replaces the old one. The assistant is known by its name
-and the address it signs in through. Keys made in the app are never replaced.
+and the address it signs in through. Keys made in the app are never replaced. To give a connected
+assistant more or less to do, edit its key's permissions there. Its next call goes by them, though
+an assistant may only list new tools in a new chat.
 
 Each tool needs a scope, and a key only gets the tools it has scopes for:
 
@@ -55,6 +58,28 @@ Each tool needs a scope, and a key only gets the tools it has scopes for:
 | `search_transactions`   | `transactions:read` | transactions by dates, type, account, category or note, a page at a time  |
 | `summarize_by_category` | `transactions:read` | a month's or a range's spending and income by category, as the overview   |
 | `get_budget`            | `budgets:read`      | a month's budget lines against what was recorded and planned              |
+
+And the tools that change the group, each through the same service as the app, so a role or a
+validation rule can't differ:
+
+| Tool                 | Scope                                        | Does                                                           |
+| -------------------- | -------------------------------------------- | -------------------------------------------------------------- |
+| `add_transaction`    | `transactions:create`                        | plans an expense, an income or a transfer, by names            |
+| `update_transaction` | `transactions:update`                        | changes a planned one; null clears a category                  |
+| `delete_transaction` | `transactions:delete`                        | deletes a planned one                                          |
+| `add_account`        | `accounts:create`                            | creates an account, in the main currency unless named          |
+| `update_account`     | `accounts:update`                            | renames, retypes, archives or brings back an account           |
+| `delete_account`     | `accounts:delete` and `transactions:delete`  | deletes an account with no history, and counts its plans       |
+| `add_category`       | `categories:create`                          | creates a category or a subcategory                            |
+| `update_category`    | `categories:update`                          | renames, moves, archives or brings back a category             |
+| `delete_category`    | `categories:delete`                          | deletes a category; its transactions stay, uncategorized       |
+| `set_budget`         | `budgets:create`, or `budgets:update`        | adds a month's line, or changes the one it has                 |
+| `remove_budget_line` | `budgets:delete`                             | takes a line out of a month's budget                           |
+
+Transactions are written only while planned, dated after now: an assistant schedules, moves and
+calls off payments to come. What already happened, the history balances are checked against, is
+only changed in the app, and an account with any of it is only deleted there. A date given as a
+day is dated at noon, as the app dates a day to come. A change is answered only once it's saved.
 
 Totals are in the key owner's main currency, at the app's rates. A currency with no rate is left
 out of a total and named under `currenciesWithoutRate`.

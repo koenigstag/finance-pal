@@ -674,6 +674,7 @@ export const en = {
   oauth: {
     title: 'Connect {{name}}',
     description: '{{name}} asks to see your money in Finance Pal.',
+    descriptionWork: '{{name}} asks to work with your money in Finance Pal.',
     group: 'Group',
     canView: 'It will be able to view:',
     resources: {
@@ -683,6 +684,9 @@ export const en = {
       budgets: 'Budgets',
     },
     readOnly: "It can't add, change or delete anything.",
+    mayDo: 'What it may do',
+    mayDoHint: 'Viewing comes with connecting. Anything else stays off unless you tick it, and you can change it later in the group’s settings under API keys.',
+    deleteWarning: "What it deletes can't be brought back in the app. It never adds, changes or deletes transactions that already happened.",
     redirect: 'Allowing sends you back to {{host}}.',
     selfNamed: 'Apps choose their own names: allow only one you started connecting yourself.',
     disconnect: 'To disconnect it later, delete its key, “{{name}}”, in the group’s settings under API keys.',
@@ -713,11 +717,13 @@ export const en = {
       read: 'View',
       create: 'Add',
       update: 'Edit',
+      delete: 'Delete',
     },
     levels: {
       read: 'view',
       create: 'add',
       update: 'edit',
+      delete: 'delete',
     },
     scope: '{{resource}}: {{level}}',
     summary: '{{resource}}: {{levels}}',

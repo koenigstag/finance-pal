@@ -17,6 +17,7 @@ import { ExternalLookupService } from './external-lookup.service';
 import { ExternalTransactionsController } from './external-transactions.controller';
 import { ExternalTransactionsService } from './external-transactions.service';
 import { FinanceMcpService } from './mcp/finance-mcp.service';
+import { McpWriteTools } from './mcp/mcp-write-tools';
 import { McpController } from './mcp/mcp.controller';
 import { McpUnauthorizedFilter } from './mcp/mcp-unauthorized.filter';
 import { ExternalNotificationsController } from './notifications/external-notifications.controller';
@@ -27,7 +28,7 @@ import { PlainTextNotificationMiddleware } from './notifications/plain-text-noti
  * The external API (/api/external/v1): what other apps reach with an API key. It holds no ledger
  * logic of its own — it translates requests for the same services the web app goes through, so
  * permissions, validation, balances and realtime updates can't differ between the two. The MCP
- * endpoint (/api/mcp), where AI assistants read a group, is part of it on the same terms.
+ * endpoint (/api/mcp), where AI assistants read and change a group, is part of it on the same terms.
  */
 @Module({
   imports: [
@@ -54,6 +55,7 @@ import { PlainTextNotificationMiddleware } from './notifications/plain-text-noti
     ExternalTransactionsService,
     ExternalNotificationsService,
     FinanceMcpService,
+    McpWriteTools,
     McpUnauthorizedFilter,
   ],
 })

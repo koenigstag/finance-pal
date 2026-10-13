@@ -1,5 +1,5 @@
 import { createHash } from 'node:crypto';
-import { API_KEY_READ_SCOPES, isApiKeyScope, type ApiKeyScope } from '@ft/shared-contracts';
+import { API_KEY_READ_SCOPES, API_KEY_SCOPES, isApiKeyScope, type ApiKeyScope } from '@ft/shared-contracts';
 import { decodeClientId, isRegisteredRedirect, type OauthClient } from './oauth-clients';
 
 /** An authorization request's parameters as they came: strings, or missing. */
@@ -20,7 +20,10 @@ export interface ValidAuthorization {
   redirectUri: string;
   codeChallenge: string;
   state: string | undefined;
+  // Granted on the person's yes.
   scopes: ApiKeyScope[];
+  // Asked for, and granted only where the person ticks them.
+  optionalScopes: ApiKeyScope[];
 }
 
 /**
@@ -89,19 +92,24 @@ export function validateAuthorization(
     redirectUri,
     codeChallenge: params.code_challenge,
     state: params.state,
-    scopes: grantedScopes(params.scope),
+    ...requestedScopes(params.scope),
   };
 }
 
 /**
- * What an app gets to see: the viewing scopes it asks for, or all of them when it asks for none
- * this server knows — the scope request is the app's wish, which RFC 6749 lets the server narrow
- * or fill in (section 3.3). Asking for more than viewing never gets more.
+ * What an app asks for, as the consent page offers it. Viewing comes with any yes: the viewing
+ * scopes it asks for, or all of them when it asks for none this server knows — the scope request
+ * is the app's wish, which RFC 6749 lets the server narrow or fill in (section 3.3). Anything more
+ * it asks for — adding, editing, deleting — is the person's to tick, one scope at a time; what it
+ * doesn't ask for isn't offered.
  */
-export function grantedScopes(scope: string | undefined): ApiKeyScope[] {
+export function requestedScopes(scope: string | undefined): { scopes: ApiKeyScope[]; optionalScopes: ApiKeyScope[] } {
   const asked = new Set((scope ?? '').split(' ').filter(isApiKeyScope));
-  const granted = API_KEY_READ_SCOPES.filter((candidate) => asked.has(candidate));
-  return granted.length > 0 ? granted : [...API_KEY_READ_SCOPES];
+  const viewing = API_KEY_READ_SCOPES.filter((candidate) => asked.has(candidate));
+  return {
+    scopes: viewing.length > 0 ? viewing : [...API_KEY_READ_SCOPES],
+    optionalScopes: API_KEY_SCOPES.filter((candidate) => asked.has(candidate) && !candidate.endsWith(':read')),
+  };
 }
 
 // The same URL, give or take a trailing slash, which people add or leave off when they paste one.
