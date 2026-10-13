@@ -281,6 +281,7 @@ const rule = (overrides: Partial<RecurringRule>): RecurringRule => ({
   startsAt: new Date(2026, 0, 5, 12).toISOString(),
   nextRunDate: new Date(2026, 10, 5, 12).toISOString(),
   nextOccurrence: new Date(2026, 9, 5, 12).toISOString(),
+  endsOn: null,
   reminderDaysBefore: null,
   timezone: 'Europe/Kyiv',
   active: true,
@@ -374,8 +375,13 @@ describe('toRecurringRuleBody', () => {
       intervalValue: 2,
       // Local noon: the time of day each of its transactions comes at.
       startsAt: new Date(2026, 9, 5, 12).toISOString(),
+      endsOn: null,
       timezone: 'Europe/Kyiv',
     });
+  });
+
+  it('ends the series on its last day, when it has one', () => {
+    expect(toRecurringRuleBody(values({ repeat: 'month:1', endsOn: '2027-09-20' }), accounts, now, 'UTC').endsOn).toBe('2027-09-20');
   });
 
   it('carries a percentage, with the amount it comes to now', () => {
@@ -459,7 +465,7 @@ describe('plannedToRecurringRuleBody', () => {
       percentageBase: null,
       roundBalanceTo: null,
     } as Transaction;
-    expect(plannedToRecurringRuleBody(planned, { day: '2026-10-01', repeat: 'month:1' }, now, 'UTC')).toEqual({
+    expect(plannedToRecurringRuleBody(planned, { day: '2026-10-01', repeat: 'month:1', endsOn: '2027-03-01' }, now, 'UTC')).toEqual({
       type: 'expense',
       amount: '42.00',
       currencyId: 1,
@@ -474,6 +480,7 @@ describe('plannedToRecurringRuleBody', () => {
       intervalUnit: 'month',
       intervalValue: 1,
       startsAt: planned.date,
+      endsOn: '2027-03-01',
       timezone: 'UTC',
       replacesTransactionId: planned.id,
     });
@@ -482,7 +489,8 @@ describe('plannedToRecurringRuleBody', () => {
 
 describe('toRecurringRulePatch', () => {
   it("shows a series with its next date and how often it repeats", () => {
-    expect(ruleToFormValues(rule({}))).toMatchObject({ day: '2026-10-05', repeat: 'month:1', amount: '9000.00', note: '' });
+    expect(ruleToFormValues(rule({}))).toMatchObject({ day: '2026-10-05', repeat: 'month:1', amount: '9000.00', note: '', endsOn: '' });
+    expect(ruleToFormValues(rule({ endsOn: '2027-01-05' }))).toMatchObject({ endsOn: '2027-01-05' });
   });
 
   it('shows the percentage a series is worked out from', () => {
@@ -513,6 +521,7 @@ describe('toRecurringRulePatch', () => {
       roundBalanceTo: null,
       intervalUnit: 'month',
       intervalValue: 1,
+      endsOn: null,
     });
   });
 
@@ -529,15 +538,28 @@ describe('toRecurringRulePatch', () => {
 
 describe('schedulePatch', () => {
   it("keeps the series' own repeat for no repeat, leaving how it stops to the caller", () => {
-    expect(schedulePatch(rule({}), { day: '2026-10-05', repeat: '' }, now, 'UTC')).toEqual({ intervalUnit: 'month', intervalValue: 1 });
+    expect(schedulePatch(rule({}), { day: '2026-10-05', repeat: '', endsOn: '' }, now, 'UTC')).toEqual({
+      intervalUnit: 'month',
+      intervalValue: 1,
+      endsOn: null,
+    });
   });
 
   it('moves the start with the next date', () => {
-    expect(schedulePatch(rule({}), { day: '2026-10-09', repeat: 'month:1' }, now, 'UTC')).toEqual({
+    expect(schedulePatch(rule({}), { day: '2026-10-09', repeat: 'month:1', endsOn: '' }, now, 'UTC')).toEqual({
       intervalUnit: 'month',
       intervalValue: 1,
+      endsOn: null,
       startsAt: new Date(2026, 9, 9, 12).toISOString(),
       timezone: 'UTC',
+    });
+  });
+
+  it('sends the last day as chosen, leaving the start where it was', () => {
+    expect(schedulePatch(rule({}), { day: '2026-10-05', repeat: 'month:1', endsOn: '2027-04-05' }, now, 'UTC')).toEqual({
+      intervalUnit: 'month',
+      intervalValue: 1,
+      endsOn: '2027-04-05',
     });
   });
 });

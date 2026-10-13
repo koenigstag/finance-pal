@@ -1,3 +1,4 @@
+import { MinusIcon, PlusIcon } from 'lucide-react';
 import { useEffect, useState } from 'react';
 import { useTranslation } from 'react-i18next';
 import { MonthCalendar } from '@/components/month-calendar';
@@ -9,16 +10,26 @@ import { Spinner } from '@/components/ui/spinner';
 import { ToggleGroup, ToggleGroupItem } from '@/components/ui/toggle-group';
 import { useProfile } from '@/features/profile/queries';
 import { todayInput } from '@/lib/dates';
-import { repeatChoices, toRepeatKey, useRepeatLabel, type Repeat } from './repeat';
+import { formatDay, lastPaymentDay, parseRepeatKey, repeatChoices, toRepeatKey, useRepeatLabel, type Repeat } from './repeat';
 
 // The chips' value for "never": a toggle group reports '' when its item is tapped off.
 const NEVER = 'never';
+
+// How a series ends: never, on a day picked from a calendar, or after so many payments — kept, like
+// the day, as the date its last payment falls on.
+type EndMode = 'never' | 'date' | 'count';
+const END_MODES: readonly EndMode[] = ['never', 'date', 'count'];
+// What "After N times" starts at: a year of a monthly series.
+const DEFAULT_PAYMENTS = 12;
+const MAX_PAYMENTS = 999;
 
 export interface DateChoice {
   // yyyy-MM-dd.
   day: string;
   // As toRepeatKey writes it; '' for no repeat.
   repeat: string;
+  // A series' last day, yyyy-MM-dd; '' for one that never ends.
+  endsOn: string;
 }
 
 interface DateSheetProps {
@@ -34,6 +45,8 @@ interface DateSheetProps {
   repeatBlocked?: string;
   // A series' own repeat, kept among the choices even if it's none of the presets.
   currentRepeat?: Repeat | null;
+  // A series' first ever payment day, which its payments are counted from while its schedule stays.
+  anchorDay?: string;
   // The earliest day on offer, yyyy-MM-dd.
   minDay?: string;
   // A new series dated in the past records every date since: say so while that's chosen.
@@ -56,6 +69,7 @@ export function DateSheet({
   canRepeat,
   repeatBlocked,
   currentRepeat,
+  anchorDay,
   minDay,
   warnsOfPastDates,
   pending,
@@ -67,14 +81,34 @@ export function DateSheet({
   const repeatLabel = useRepeatLabel();
   const [day, setDay] = useState(value.day);
   const [repeat, setRepeat] = useState(value.repeat);
+  const [endMode, setEndMode] = useState<EndMode>(value.endsOn ? 'date' : 'never');
+  const [endDay, setEndDay] = useState(value.endsOn);
+  const [payments, setPayments] = useState(DEFAULT_PAYMENTS);
 
   // Every opening starts from what's set now, not from what the last visit left unsaved.
   useEffect(() => {
     if (open) {
       setDay(value.day);
       setRepeat(value.repeat);
+      setEndMode(value.endsOn ? 'date' : 'never');
+      setEndDay(value.endsOn);
+      setPayments(DEFAULT_PAYMENTS);
     }
-  }, [open, value.day, value.repeat]);
+  }, [open, value.day, value.repeat, value.endsOn]);
+
+  const repeats = parseRepeatKey(repeat);
+  // Counted from the series' own first payment while its schedule stays, as the API counts; from the
+  // day picked once it starts afresh there.
+  const anchor = anchorDay && day === value.day && repeat === value.repeat ? anchorDay : day;
+  const countedEnd = repeats ? lastPaymentDay(anchor, repeats, day, payments) : '';
+  const lastDay = !repeats || endMode === 'never' ? '' : endMode === 'count' ? countedEnd : endDay < day ? day : endDay;
+  const chooseEndMode = (mode: EndMode) => {
+    setEndMode(mode);
+    // A calendar opening on the day a year of payments would come to, rather than on nothing.
+    if (mode === 'date' && (!endDay || endDay < day) && repeats) {
+      setEndDay(lastPaymentDay(anchor, repeats, day, DEFAULT_PAYMENTS));
+    }
+  };
 
   const backfillFrom = warnsOfPastDates && repeat && day < todayInput() ? day : null;
 
@@ -131,6 +165,65 @@ export function DateSheet({
               )}
             </section>
           )}
+          {canRepeat && !repeatBlocked && repeats && (
+            <section aria-labelledby="date-sheet-ends" className="flex flex-col gap-2">
+              <h3 id="date-sheet-ends" className="text-sm font-medium">
+                {t('transactions.ends.label')}
+              </h3>
+              <ToggleGroup
+                type="single"
+                variant="outline"
+                className="w-full flex-wrap justify-start"
+                aria-labelledby="date-sheet-ends"
+                value={endMode}
+                onValueChange={(next) => next && chooseEndMode(next as EndMode)}
+              >
+                {END_MODES.map((mode) => (
+                  <ToggleGroupItem key={mode} value={mode} className="rounded-full data-[state=on]:border-foreground/60">
+                    {t(mode === 'never' ? 'transactions.ends.never' : mode === 'date' ? 'transactions.ends.onDate' : 'transactions.ends.afterCount')}
+                  </ToggleGroupItem>
+                ))}
+              </ToggleGroup>
+              {endMode === 'date' && (
+                <MonthCalendar
+                  value={lastDay}
+                  onChange={setEndDay}
+                  weekStartsOn={profile.data?.startDayOfWeek ?? 1}
+                  min={day}
+                  locale={i18n.language}
+                  labels={{ previousMonth: t('transactions.dateSheet.previousMonth'), nextMonth: t('transactions.dateSheet.nextMonth') }}
+                />
+              )}
+              {endMode === 'count' && (
+                <div className="flex items-center justify-center gap-4">
+                  <Button
+                    type="button"
+                    variant="outline"
+                    size="icon"
+                    aria-label={t('transactions.ends.fewer')}
+                    disabled={payments <= 1}
+                    onClick={() => setPayments((count) => Math.max(1, count - 1))}
+                  >
+                    <MinusIcon />
+                  </Button>
+                  <span className="min-w-28 text-center font-medium tabular-nums" aria-live="polite">
+                    {t('transactions.ends.payments', { count: payments })}
+                  </span>
+                  <Button
+                    type="button"
+                    variant="outline"
+                    size="icon"
+                    aria-label={t('transactions.ends.more')}
+                    disabled={payments >= MAX_PAYMENTS}
+                    onClick={() => setPayments((count) => Math.min(MAX_PAYMENTS, count + 1))}
+                  >
+                    <PlusIcon />
+                  </Button>
+                </div>
+              )}
+              {lastDay && <FieldDescription>{t('transactions.ends.lastPayment', { date: formatDay(lastDay, i18n.language) })}</FieldDescription>}
+            </section>
+          )}
           {error && (
             <Alert variant="destructive">
               <AlertDescription>{error}</AlertDescription>
@@ -138,7 +231,7 @@ export function DateSheet({
           )}
         </div>
         <DialogFooter>
-          <Button type="button" disabled={pending} onClick={() => onDone({ day, repeat })}>
+          <Button type="button" disabled={pending} onClick={() => onDone({ day, repeat, endsOn: lastDay })}>
             {pending && <Spinner />}
             {t('transactions.dateSheet.done')}
           </Button>

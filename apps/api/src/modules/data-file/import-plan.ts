@@ -5,9 +5,10 @@ import {
   TRANSACTION_TYPES,
   isRoundBalanceStep,
   isValidTimezone,
+  seriesEndSchema,
 } from '@ft/shared-contracts';
 import { normalizeName } from '../external/references';
-import { firstIndexAtOrAfter, occurrenceAt, type Schedule } from '../recurring/recurrence-dates';
+import { firstIndexAtOrAfter, localDayOf, occurrenceAt, type Schedule } from '../recurring/recurrence-dates';
 import {
   ACCOUNTS,
   CATEGORIES,
@@ -218,6 +219,8 @@ export interface PlannedSeries extends PlannedMovement {
   startsAt: Date;
   // The first date the series is yet to write: where it carries on from.
   nextRunDate: Date;
+  // Its last day, YYYY-MM-DD, or null for one that never ends.
+  endsOn: string | null;
   timezone: string;
   active: boolean;
   reminderDaysBefore: number | null;
@@ -816,6 +819,12 @@ function readSeries(table: TableRead, context: Context): SeriesRead[] {
     }
     const active = row.read('active', readBoolean) ?? true;
     const reminderDaysBefore = row.read('remindDaysBefore', readInteger);
+    const endsOn = row.read('ends', readText);
+    if (endsOn !== null && !seriesEndSchema.safeParse(endsOn).success) {
+      row.problem(`Ends: "${endsOn}" isn't a date like 2027-09-20`);
+    } else if (endsOn !== null && startsAt !== null && endsOn < localDayOf(startsAt, zone)) {
+      row.problem(`Ends: ${endsOn} comes before the series starts`);
+    }
 
     if (movement && Number(movement.movement.amount) === 0 && !isFromBalance(movement.movement)) {
       row.problem('Amount must be greater than zero');
@@ -838,6 +847,7 @@ function readSeries(table: TableRead, context: Context): SeriesRead[] {
         startsAt,
         // Settled once the transactions are read (see planSeries).
         nextRunDate: startsAt,
+        endsOn,
         timezone: zone,
         active,
         reminderDaysBefore,

@@ -7,6 +7,7 @@ import {
   differenceInCalendarDays,
   differenceInCalendarMonths,
   differenceInCalendarYears,
+  format,
   startOfDay,
 } from 'date-fns';
 import type { RECURRENCE_UNITS } from '@ft/shared-contracts';
@@ -91,4 +92,28 @@ export function firstOccurrenceAtOrAfter(schedule: Schedule, bound: Date): Date 
 /** Midnight at the start of `now`'s calendar day in the zone. */
 export function startOfLocalDay(now: Date, timezone: string): Date {
   return new Date(startOfDay(new TZDate(now, timezone)).getTime());
+}
+
+/** The calendar day `date` falls on in the zone, YYYY-MM-DD. */
+export function localDayOf(date: Date, timezone: string): string {
+  return format(new TZDate(date, timezone), 'yyyy-MM-dd');
+}
+
+/**
+ * Whether a payment on `date` falls after the series' last day (`endsOn`, YYYY-MM-DD in its zone,
+ * or null for one that never ends). The day decides, not the moment: a series ending on the 20th
+ * still pays at 23:30 on the 20th.
+ */
+export function isPastEnd(endsOn: string | null, date: Date, timezone: string): boolean {
+  return endsOn !== null && localDayOf(date, timezone) > endsOn;
+}
+
+/**
+ * The last day of a series that is to make `count` more payments, the first of them its occurrence
+ * at or after `from`: the day its count-th falls on. How "after 12 payments" is kept, as the date it
+ * comes to.
+ */
+export function endsOnAfter(schedule: Schedule, from: Date, count: number): string {
+  const first = firstIndexAtOrAfter(schedule, from);
+  return localDayOf(occurrenceAt(schedule, first + count - 1), schedule.timezone);
 }

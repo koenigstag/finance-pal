@@ -1,6 +1,7 @@
 import type { Account, Budget, Category, RecurringRule, Transaction } from '@ft/api-database';
 import { sumMoney } from '@ft/shared-contracts';
 import type { AccountWithBalance } from '../../ledger/accounts/accounts.service';
+import type { RecurringRuleView } from '../../recurring/recurring-rules.service';
 import type { CurrencyCodes } from '../external-lookup.service';
 import { localDateTime } from './mcp-dates';
 
@@ -54,7 +55,13 @@ export function transactionDescriber({ accounts, categories, series, currencies,
       ...(transaction.date > now && { planned: true }),
       ...amountSourceOf(transaction, currencies),
       ...(rule && {
-        series: { every: rule.intervalValue, unit: rule.intervalUnit, ...(!rule.active && { paused: true }) },
+        series: {
+          id: rule.id,
+          every: rule.intervalValue,
+          unit: rule.intervalUnit,
+          ...(rule.endsOn !== null && { endsOn: rule.endsOn }),
+          ...(!rule.active && { paused: true }),
+        },
         // Edited on its own: changing the series no longer changes this one.
         ...(transaction.isCustomized && { editedApartFromSeries: true }),
       }),
@@ -88,6 +95,54 @@ export function amountSourceOf(transaction: Transaction, currencies: CurrencyCod
     return { amountFrom: { roundsBalanceTo: transaction.roundBalanceTo, ...flag } };
   }
   return {};
+}
+
+/**
+ * A repeating series as an assistant reads it: what each payment is and how it's worked out, how
+ * often it comes, its next payment, and its end. ended is one past its last day, which has no next
+ * payment and makes none; paused, one on hold until resumed.
+ */
+export function describeSeries(
+  { rule, nextOccurrence }: RecurringRuleView,
+  { accounts, categories, currencies, timeZone }: Pick<DescribeContext, 'accounts' | 'categories' | 'currencies' | 'timeZone'>,
+) {
+  const accountName = (id: string | null) => accounts.find((account) => account.id === id)?.name;
+  const categoryName = (id: string | null) => categories.find((category) => category.id === id)?.name;
+  const toAccount = accountName(rule.toAccountId);
+  const category = categoryName(rule.categoryId);
+  const subcategory = categoryName(rule.subcategoryId);
+  return {
+    id: rule.id,
+    type: rule.type,
+    amount: cents(rule.amount),
+    currency: currencies.of(rule.currencyId),
+    account: accountName(rule.accountId) ?? null,
+    ...(toAccount && { toAccount }),
+    ...(category && { category }),
+    ...(subcategory && { subcategory }),
+    ...(rule.note && { note: rule.note }),
+    ...seriesAmountSource(rule, currencies),
+    every: rule.intervalValue,
+    unit: rule.intervalUnit,
+    firstPayment: localDateTime(rule.startsAt, timeZone),
+    nextPayment: nextOccurrence ? localDateTime(nextOccurrence, timeZone) : null,
+    ...(rule.endsOn !== null && { endsOn: rule.endsOn }),
+    ...(!rule.active && { paused: true }),
+    ...(rule.active && nextOccurrence === null && { ended: true }),
+  };
+}
+
+// How a series works out each payment: as on a transaction, worked out afresh on each payment's date.
+function seriesAmountSource(rule: RecurringRuleView['rule'], currencies: CurrencyCodes) {
+  if (rule.percentage !== null) {
+    return {
+      amountFrom: {
+        percentage: plainNumber(rule.percentage),
+        of: rule.percentageBase === null ? ('balance' as const) : { amount: cents(rule.percentageBase), currency: currencies.of(rule.currencyId) },
+      },
+    };
+  }
+  return rule.roundBalanceTo !== null ? { amountFrom: { roundsBalanceTo: rule.roundBalanceTo } } : {};
 }
 
 // numeric(7,4) reads back padded: "3.5000" is 3.5.

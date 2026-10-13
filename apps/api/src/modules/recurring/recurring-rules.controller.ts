@@ -24,6 +24,7 @@ function toRecurringRuleDto({ rule, nextOccurrence }: RecurringRuleView) {
     intervalUnit: rule.intervalUnit,
     intervalValue: rule.intervalValue,
     startsAt: rule.startsAt.toISOString(),
+    endsOn: rule.endsOn,
     nextRunDate: rule.nextRunDate.toISOString(),
     nextOccurrence: nextOccurrence?.toISOString() ?? null,
     reminderDaysBefore: rule.reminderDaysBefore,

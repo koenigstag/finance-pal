@@ -303,9 +303,23 @@ export const en = {
     percentageSeriesOnTheDay: 'Recalculated on each date',
     note: 'Note',
     recurring: 'Recurring',
+    ends: {
+      label: 'Ends',
+      never: 'Never',
+      onDate: 'On a date',
+      afterCount: 'After N times',
+      payments_one: '{{count}} payment',
+      payments_few: '{{count}} payments',
+      payments_many: '{{count}} payments',
+      payments_other: '{{count}} payments',
+      fewer: 'One payment fewer',
+      more: 'One payment more',
+      lastPayment: 'Last payment: {{date}}',
+    },
     repeat: {
       label: 'Repeat',
       never: 'Never',
+      until: 'Until {{date}}',
       every: {
         day: 'Every day',
         week: 'Every week',

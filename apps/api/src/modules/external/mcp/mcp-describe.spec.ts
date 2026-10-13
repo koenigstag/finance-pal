@@ -80,7 +80,7 @@ describe('transactionDescriber', () => {
 
   it('says a paused series is paused', () => {
     const paused = transactionDescriber({ accounts: [card], categories: [interest], series: [{ ...monthly, active: false } as RecurringRule], currencies, timeZone: 'UTC', now });
-    expect(paused(transaction({ recurringRuleId: monthly.id })).series).toEqual({ every: 1, unit: 'month', paused: true });
+    expect(paused(transaction({ recurringRuleId: monthly.id })).series).toEqual({ id: monthly.id, every: 1, unit: 'month', paused: true });
   });
 
   it('leaves out what a plain transaction has none of', () => {

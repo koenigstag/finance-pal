@@ -1,3 +1,4 @@
+import { addDays, addMonths, addWeeks, addYears, format } from 'date-fns';
 import { useCallback } from 'react';
 import { useTranslation } from 'react-i18next';
 import { RECURRENCE_UNITS } from '@ft/shared-contracts';
@@ -64,4 +65,47 @@ export function useRepeatLabel(): (repeat: Repeat) => string {
         : t(`transactions.repeat.everyN.${repeat.unit}`, { count: repeat.value }),
     [t],
   );
+}
+
+/**
+ * "Until 20 September 2027": a series' last day, on a line of its own under its repeat, so neither
+ * gets cut short on a phone.
+ */
+export function useUntilLabel(): (endsOn: string) => string {
+  const { t, i18n } = useTranslation();
+  return useCallback((endsOn: string) => t('transactions.repeat.until', { date: formatDay(endsOn, i18n.language) }), [t, i18n.language]);
+}
+
+/** "20 September 2027", for a yyyy-MM-dd day. */
+export function formatDay(day: string, locale: string): string {
+  return new Intl.DateTimeFormat(locale, { day: 'numeric', month: 'long', year: 'numeric' }).format(new Date(`${day}T00:00`));
+}
+
+/**
+ * The day a series' `count`-th payment falls on, the first of them its payment on or after
+ * `fromDay`, for a series counted from `anchorDay` (its first ever payment). Worked out from the
+ * anchor, as the API does, so a series begun on the 31st keeps the 31st after a short month.
+ * yyyy-MM-dd days, on the device's calendar.
+ */
+export function lastPaymentDay(anchorDay: string, repeat: Repeat, fromDay: string, count: number): string {
+  const anchor = new Date(`${anchorDay}T00:00`);
+  const dayOf = (k: number) => format(shift(anchor, repeat.unit, k * repeat.value), 'yyyy-MM-dd');
+  let first = 0;
+  while (dayOf(first) < fromDay) {
+    first++;
+  }
+  return dayOf(first + count - 1);
+}
+
+function shift(date: Date, unit: RecurrenceUnit, amount: number): Date {
+  switch (unit) {
+    case 'day':
+      return addDays(date, amount);
+    case 'week':
+      return addWeeks(date, amount);
+    case 'month':
+      return addMonths(date, amount);
+    case 'year':
+      return addYears(date, amount);
+  }
 }

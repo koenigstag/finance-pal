@@ -123,6 +123,7 @@ export class ExportService {
         intervalValue: rule.intervalValue,
         startsAt: rule.startsAt,
         nextOccurrence: nextOccurrence(rule, planned.get(rule.id), now),
+        endsOn: rule.endsOn,
         timezone: rule.timezone,
         active: rule.active,
         reminderDaysBefore: rule.reminderDaysBefore,

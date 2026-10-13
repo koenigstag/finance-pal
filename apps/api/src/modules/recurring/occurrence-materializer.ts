@@ -4,7 +4,7 @@ import { isPositiveMoney } from '@ft/shared-contracts';
 import type { RateLookup } from '../ledger/exchange-rates/exchange-rates.service';
 import { convertedDest } from '../ledger/transactions/dest-amount';
 import { derivedAmount, isFromBalance } from './derived-amount';
-import { firstIndexAtOrAfter, firstOccurrenceAtOrAfter, occurrenceAt, startOfLocalDay, type Schedule } from './recurrence-dates';
+import { firstIndexAtOrAfter, firstOccurrenceAtOrAfter, isPastEnd, occurrenceAt, startOfLocalDay, type Schedule } from './recurrence-dates';
 
 // A series writes one row per run, a few when it has some catching up to do. This only exists to
 // stop a runaway loop from a bad schedule; hitting it leaves the frontier where it stopped, and the
@@ -186,6 +186,9 @@ function scheduleOf(rule: RecurringRule): Schedule {
  * has landed — its date has passed and it counts like any other transaction — so a series shows
  * one upcoming transaction at a time, and until then this writes nothing.
  *
+ * A series with an end writes nothing dated after its last day: past that, it has no planned
+ * transaction, and its frontier waits there in case the end moves later.
+ *
  * Nothing is skipped on the way. An occurrence that fell due while the scheduler wasn't running, or
  * between a start date in the past and today, is written as one that happened — unless it's a
  * percentage or a rounding of a balance that came to nothing then (see occurrenceAmount). A date
@@ -229,6 +232,9 @@ export async function materializeOccurrences(
   let inserted = 0;
   for (let i = 0; i < MAX_OCCURRENCES_PER_RUN; i++) {
     const date = occurrenceAt(schedule, k);
+    if (isPastEnd(rule.endsOn, date, rule.timezone)) {
+      break;
+    }
     const worked = await occurrenceAmount(manager, rule, date, now);
     const rows: { id: string }[] = worked
       ? await manager.query(INSERT_OCCURRENCE_SQL, [
@@ -319,7 +325,7 @@ export async function plannedOccurrenceDates(manager: EntityManager, ruleIds: st
 /**
  * When the series next produces a transaction: the scheduled date of its planned occurrence (see
  * plannedOccurrenceDates), or — in the minutes between one landing and the next being written —
- * the schedule's next date from its frontier on. Null while it's paused.
+ * the schedule's next date from its frontier on. Null while it's paused, and once it's past its end.
  */
 export function nextOccurrence(rule: RecurringRule, planned: Date | undefined, now: Date): Date | null {
   if (!rule.active) {
@@ -329,7 +335,8 @@ export function nextOccurrence(rule: RecurringRule, planned: Date | undefined, n
     return planned;
   }
   const bound = rule.nextRunDate.getTime() > now.getTime() ? rule.nextRunDate : now;
-  return firstOccurrenceAtOrAfter(scheduleOf(rule), bound);
+  const next = firstOccurrenceAtOrAfter(scheduleOf(rule), bound);
+  return isPastEnd(rule.endsOn, next, rule.timezone) ? null : next;
 }
 
 async function moveFrontier(manager: EntityManager, rule: RecurringRule, frontier: Date): Promise<void> {

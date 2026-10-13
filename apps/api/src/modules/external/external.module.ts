@@ -10,6 +10,7 @@ import { ExchangeRatesModule } from '../ledger/exchange-rates/exchange-rates.mod
 import { OverviewModule } from '../ledger/overview/overview.module';
 import { TransactionsModule } from '../ledger/transactions/transactions.module';
 import { OauthModule } from '../oauth/oauth.module';
+import { RecurringModule } from '../recurring/recurring.module';
 import { ExternalAccountsController } from './external-accounts.controller';
 import { ExternalCategoriesController } from './external-categories.controller';
 import { ExternalKeyController } from './external-key.controller';
@@ -17,6 +18,7 @@ import { ExternalLookupService } from './external-lookup.service';
 import { ExternalTransactionsController } from './external-transactions.controller';
 import { ExternalTransactionsService } from './external-transactions.service';
 import { FinanceMcpService } from './mcp/finance-mcp.service';
+import { McpSeriesTools } from './mcp/mcp-series-tools';
 import { McpWriteTools } from './mcp/mcp-write-tools';
 import { McpController } from './mcp/mcp.controller';
 import { McpUnauthorizedFilter } from './mcp/mcp-unauthorized.filter';
@@ -40,6 +42,7 @@ import { PlainTextNotificationMiddleware } from './notifications/plain-text-noti
     ExchangeRatesModule,
     OverviewModule,
     TransactionsModule,
+    RecurringModule,
     OauthModule,
   ],
   controllers: [
@@ -56,6 +59,7 @@ import { PlainTextNotificationMiddleware } from './notifications/plain-text-noti
     ExternalNotificationsService,
     FinanceMcpService,
     McpWriteTools,
+    McpSeriesTools,
     McpUnauthorizedFilter,
   ],
 })

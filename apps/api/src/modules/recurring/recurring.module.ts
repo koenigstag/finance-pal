@@ -22,5 +22,7 @@ import { RecurringRulesService } from './recurring-rules.service';
   ],
   controllers: [RecurringRulesController],
   providers: [RecurringRulesService, RecurringProcessorService],
+  // To the MCP endpoint, whose series tools go through it as the app does.
+  exports: [RecurringRulesService],
 })
 export class RecurringModule {}

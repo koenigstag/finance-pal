@@ -37,7 +37,7 @@ import {
   type RecurringRule,
   type Transaction,
 } from './queries';
-import { parseRepeatKey, repeatOf, useRepeatLabel } from './repeat';
+import { parseRepeatKey, repeatOf, useRepeatLabel, useUntilLabel } from './repeat';
 import {
   crossConversion,
   derivedAmount,
@@ -160,7 +160,7 @@ export function TransactionDialog({
     defaultValues: defaultTransactionFormValues({}),
   });
   const errors = form.formState.errors;
-  const [type, accountId, toAccountId, categoryId, day, repeat, amount, destAmount, percentage, percentageBase, roundBalanceTo] =
+  const [type, accountId, toAccountId, categoryId, day, repeat, amount, destAmount, percentage, percentageBase, roundBalanceTo, endsOn] =
     useWatch({
       control: form.control,
       name: [
@@ -175,6 +175,7 @@ export function TransactionDialog({
         'percentage',
         'percentageBase',
         'roundBalanceTo',
+        'endsOn',
       ],
     });
 
@@ -500,6 +501,7 @@ export function TransactionDialog({
                   caption={t(rule ? 'transactions.nextDate' : 'transactions.date')}
                   day={day}
                   repeat={repeat}
+                  endsOn={endsOn}
                   invalid={!!errors.day || !!errors.repeat}
                   onClick={() => {
                     setLayer((current) => current + 1);
@@ -553,9 +555,10 @@ export function TransactionDialog({
         open={open && dateSheetOpen}
         onOpenChange={setDateSheetOpen}
         title={t(rule ? 'transactions.nextDate' : 'transactions.date')}
-        value={{ day, repeat }}
+        value={{ day, repeat, endsOn }}
         canRepeat={canRepeat}
         currentRepeat={rule ? repeatOf(rule) : null}
+        anchorDay={rule ? toDayInput(rule.startsAt) : undefined}
         // A series moves on from today: its next date can't be in the past.
         minDay={rule ? todayInput() : undefined}
         warnsOfPastDates={mode === 'new'}
@@ -563,6 +566,7 @@ export function TransactionDialog({
           const validate = { shouldValidate: form.formState.isSubmitted };
           form.setValue('day', choice.day, validate);
           form.setValue('repeat', choice.repeat, validate);
+          form.setValue('endsOn', choice.endsOn, validate);
           setDateSheetOpen(false);
         }}
       />
@@ -665,17 +669,20 @@ function DateCard({
   caption,
   day,
   repeat,
+  endsOn,
   invalid,
   onClick,
 }: {
   caption: string;
   day: string;
   repeat: string;
+  endsOn: string;
   invalid?: boolean;
   onClick: () => void;
 }) {
   const { i18n } = useTranslation();
   const repeatLabel = useRepeatLabel();
+  const untilLabel = useUntilLabel();
   const repeats = parseRepeatKey(repeat);
   const dayText = day
     ? capitalizeFirst(
@@ -708,6 +715,7 @@ function DateCard({
             <span className="truncate">{repeatLabel(repeats)}</span>
           </span>
         )}
+        {repeats && endsOn && <span className="truncate ps-4.5 text-sm text-muted-foreground">{untilLabel(endsOn)}</span>}
       </span>
       <ChevronRightIcon className="size-4 shrink-0 text-muted-foreground" />
     </button>

@@ -57,6 +57,7 @@ Each tool needs a scope, and a key only gets the tools it has scopes for:
 | `list_categories`       | `categories:read`   | categories with their subcategories                                       |
 | `search_transactions`   | `transactions:read` | transactions by dates, type, account, category or note, a page at a time  |
 | `summarize_by_category` | `transactions:read` | a month's or a range's spending and income by category, as the overview   |
+| `list_series`           | `transactions:read` | repeating series: each payment, how often, the next one and when it ends  |
 | `get_budget`            | `budgets:read`      | a month's budget lines against what was recorded and planned              |
 
 And the tools that change the group, each through the same service as the app, so a role or a
@@ -67,6 +68,9 @@ validation rule can't differ:
 | `add_transaction`    | `transactions:create`                        | plans an expense, an income or a transfer, by names            |
 | `update_transaction` | `transactions:update`                        | changes a planned one; null clears a category                  |
 | `delete_transaction` | `transactions:delete`                        | deletes a planned one                                          |
+| `add_series`         | `transactions:create`                        | sets up a repeating series, starting after now                 |
+| `update_series`      | `transactions:update`                        | changes a series from its next payment on, ends or pauses it   |
+| `end_series`         | `transactions:delete`                        | ends a series now, its planned payment kept if asked           |
 | `add_account`        | `accounts:create`                            | creates an account, in the main currency unless named          |
 | `update_account`     | `accounts:update`                            | renames, retypes, archives or brings back an account           |
 | `delete_account`     | `accounts:delete` and `transactions:delete`  | deletes an account with no history, and counts its plans       |
@@ -86,8 +90,14 @@ fixed amount or of the account balance, or `roundsBalanceTo`, whatever leaves th
 round multiple. With `followsBalance` it's a planned amount still recalculated each time the
 balance changes, until its date, so it moves on its own. One from a repeating series names the
 series under `series`, and `editedApartFromSeries` when that occurrence was edited on its own. Such
-an amount can't be typed over through `update_transaction`; how it's worked out is changed in the
-app.
+an amount can't be typed over through `update_transaction`; how it's worked out is changed with
+`update_series`, or in the app for a one-off.
+
+A series keeps one planned payment at a time, as in the app. `update_series` changes it from that
+payment on and leaves what happened, and a payment edited on its own, as they were; to change only
+the next payment, `update_transaction` edits it. A series can end on a day, `endsOn`, or after so
+many payments, which is turned into the day of the last one, counted from the next. `end_series`
+ends it at once and can't be undone, so to stop one for a while it's paused instead.
 
 Totals are in the key owner's main currency, at the app's rates. A currency with no rate is left
 out of a total and named under `currenciesWithoutRate`.

@@ -196,6 +196,7 @@ export class ImportService {
           intervalValue: series.intervalValue,
           startsAt: series.startsAt,
           nextRunDate: series.nextRunDate,
+          endsOn: series.endsOn,
           reminderDaysBefore: series.reminderDaysBefore,
           timezone: series.timezone,
           active: series.active,

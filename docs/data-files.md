@@ -150,6 +150,7 @@ names it, of the transaction's type.
 | Every              | Every how many of those. 1 by default.                                        |
 | Start              | The first date, which every later one is counted from.                        |
 | Next date          | When it next produces a transaction.                                          |
+| Ends               | The last day it may produce one on, `YYYY-MM-DD`. Never, if empty.            |
 | Time zone          | Its dates are local times in this zone, like `Europe/Kyiv`.                   |
 | Active             | A paused series isn't. Yes by default.                                        |
 | Remind days before |                                                                               |

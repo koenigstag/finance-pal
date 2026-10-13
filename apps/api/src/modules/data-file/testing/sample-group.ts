@@ -124,6 +124,7 @@ export function sampleSnapshot(): GroupSnapshot {
         timezone: 'Asia/Tokyo',
         active: true,
         reminderDaysBefore: null,
+        endsOn: null,
       },
     ],
   };
