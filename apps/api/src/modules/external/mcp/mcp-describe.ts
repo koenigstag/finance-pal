@@ -1,4 +1,4 @@
-import type { Account, Budget, Category, Transaction } from '@ft/api-database';
+import type { Account, Budget, Category, RecurringRule, Transaction } from '@ft/api-database';
 import { sumMoney } from '@ft/shared-contracts';
 import type { AccountWithBalance } from '../../ledger/accounts/accounts.service';
 import type { CurrencyCodes } from '../external-lookup.service';
@@ -7,14 +7,29 @@ import { localDateTime } from './mcp-dates';
 // How the MCP endpoint's tools put one thing in an answer: names in place of ids, each amount
 // beside its currency, dates as the person reads them.
 
+/** What a transaction is described against: the group's accounts, categories and series. */
+export interface DescribeContext {
+  // Archived ones included, so an old transaction still names its own.
+  accounts: Account[];
+  categories: Category[];
+  series: RecurringRule[];
+  currencies: CurrencyCodes;
+  timeZone: string;
+  now: Date;
+}
+
 /**
- * A transaction as an assistant reads it, given the group's accounts and categories (archived and
- * deleted ones included, so an old transaction still names its own).
+ * A transaction as an assistant reads it. Besides what it is, it says how its amount was worked out
+ * when the app works it out — a percentage, or rounding the balance — and when that amount still
+ * follows its account's balance: such a planned amount changes on its own whenever the balance
+ * does, until its date, and an assistant that can't see why takes it for a mistake.
  */
-export function transactionDescriber(accounts: Account[], categories: Category[], currencies: CurrencyCodes, timeZone: string, now: Date) {
+export function transactionDescriber({ accounts, categories, series, currencies, timeZone, now }: DescribeContext) {
   const accountsById = new Map(accounts.map((account) => [account.id, account]));
   const categoriesById = new Map(categories.map((category) => [category.id, category]));
+  const seriesById = new Map(series.map((rule) => [rule.id, rule]));
   return (transaction: Transaction) => {
+    const rule = transaction.recurringRuleId ? seriesById.get(transaction.recurringRuleId) : undefined;
     const toAccount = transaction.toAccountId ? accountsById.get(transaction.toAccountId) : undefined;
     const category = transaction.categoryId ? categoriesById.get(transaction.categoryId) : undefined;
     const subcategory = transaction.subcategoryId ? categoriesById.get(transaction.subcategoryId) : undefined;
@@ -37,8 +52,47 @@ export function transactionDescriber(accounts: Account[], categories: Category[]
         otherAmount !== null && { inCategoryCurrency: { amount: otherAmount, currency: currencies.of(category.currencyId) } }),
       ...(transaction.note && { note: transaction.note }),
       ...(transaction.date > now && { planned: true }),
+      ...amountSourceOf(transaction, currencies),
+      ...(rule && {
+        series: { every: rule.intervalValue, unit: rule.intervalUnit, ...(!rule.active && { paused: true }) },
+        // Edited on its own: changing the series no longer changes this one.
+        ...(transaction.isCustomized && { editedApartFromSeries: true }),
+      }),
     };
   };
+}
+
+/**
+ * How the app works a transaction's amount out, when it does: as a percentage of a fixed amount or
+ * of the account's balance, or as whatever leaves the balance on a round multiple. An amount from
+ * the balance worked out before its date is an estimate, recalculated each time the balance
+ * changes until the date comes, when it's worked out a last time.
+ */
+export function amountSourceOf(transaction: Transaction, currencies: CurrencyCodes) {
+  const followsBalance =
+    transaction.percentageAsOf !== null && transaction.percentageAsOf.getTime() < transaction.date.getTime();
+  const flag = followsBalance ? { followsBalance: true as const } : {};
+  if (transaction.percentage !== null) {
+    return {
+      amountFrom: {
+        percentage: plainNumber(transaction.percentage),
+        of:
+          transaction.percentageBase === null
+            ? ('balance' as const)
+            : { amount: cents(transaction.percentageBase), currency: currencies.of(transaction.currencyId) },
+        ...flag,
+      },
+    };
+  }
+  if (transaction.roundBalanceTo !== null) {
+    return { amountFrom: { roundsBalanceTo: transaction.roundBalanceTo, ...flag } };
+  }
+  return {};
+}
+
+// numeric(7,4) reads back padded: "3.5000" is 3.5.
+function plainNumber(value: string): string {
+  return value.includes('.') ? value.replace(/0+$/, '').replace(/\.$/, '') : value;
 }
 
 // "30000" as the ledger reads it back, "30000.00": a write hands back the amount as it was typed.
