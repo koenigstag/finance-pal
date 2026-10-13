@@ -1,7 +1,7 @@
 import { BadRequestException, Injectable } from '@nestjs/common';
 import { InjectRepository } from '@nestjs/typeorm';
 import { Repository } from 'typeorm';
-import { Account, Category, CategoryRule, Currency } from '@ft/api-database';
+import { Account, Category, CategoryRule, Currency, RecurringRule } from '@ft/api-database';
 
 /**
  * What the external API reads besides the ledger services themselves: a group's accounts and
@@ -16,6 +16,7 @@ export class ExternalLookupService {
     @InjectRepository(Category) private readonly categories: Repository<Category>,
     @InjectRepository(Currency) private readonly currencies: Repository<Currency>,
     @InjectRepository(CategoryRule) private readonly categoryRules: Repository<CategoryRule>,
+    @InjectRepository(RecurringRule) private readonly recurringRules: Repository<RecurringRule>,
   ) {}
 
   // Archived ones included: a request may still name them, if nothing active has the name.
@@ -25,6 +26,11 @@ export class ExternalLookupService {
 
   categoriesOf(groupId: string): Promise<Category[]> {
     return this.categories.find({ where: { groupId }, order: { sortOrder: 'ASC', createdAt: 'ASC' } });
+  }
+
+  // The repeating series, which a transaction they made names by id. A deleted one is no series.
+  seriesOf(groupId: string): Promise<RecurringRule[]> {
+    return this.recurringRules.find({ where: { groupId } });
   }
 
   categoryRulesOf(groupId: string): Promise<CategoryRule[]> {

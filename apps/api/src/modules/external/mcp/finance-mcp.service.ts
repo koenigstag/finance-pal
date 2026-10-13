@@ -143,7 +143,10 @@ export class FinanceMcpService {
           'Transactions, newest first, a page at a time, filtered by any of: dates, type, account, category, text in the note. ' +
           'Each one comes with its account and category names, its local date and time, and planned: true when it is dated later ' +
           '(scheduled, not happened yet). A transfer moves money between two accounts: received is what arrived when their currencies differ. ' +
-          'To total money up, use summarize_by_category instead of adding pages up.',
+          'amountFrom says how the app works the amount out, when it does: a percentage of a fixed amount or of the account balance, ' +
+          'or roundsBalanceTo, whatever leaves the balance on a round multiple. With followsBalance, the amount is recalculated each ' +
+          'time the account balance changes, until its date: it changes on its own, and that is expected. series is the repeating ' +
+          'series it belongs to. To total money up, use summarize_by_category instead of adding pages up.',
         inputSchema: {
           from: dayArg('The earliest'),
           to: dayArg('The latest'),
@@ -165,6 +168,7 @@ export class FinanceMcpService {
         const { userId, groupId } = context.apiKey;
         const accounts = await this.lookup.accountsOf(groupId);
         const categories = await this.lookup.categoriesOf(groupId);
+        const series = await this.lookup.seriesOf(groupId);
         const page = await this.transactions.list(userId, groupId, {
           dateFrom: args.from ? readBound(args.from, timeZone, 'start').toISOString() : undefined,
           dateTo: args.to ? readBound(args.to, timeZone, 'end').toISOString() : undefined,
@@ -175,7 +179,7 @@ export class FinanceMcpService {
           limit: args.limit,
           cursor: args.cursor,
         });
-        const describe = transactionDescriber(accounts, categories, context.currencies, timeZone, new Date());
+        const describe = transactionDescriber({ accounts, categories, series, currencies: context.currencies, timeZone, now: new Date() });
         return { timeZone, transactions: page.items.map(describe), nextCursor: page.nextCursor };
       }),
     );
@@ -304,6 +308,7 @@ function instructionsFor(context: McpContext): string {
       (main ? ` Totals are in the main currency, ${main}, converted at current rates; a currency with no rate is left out of a total and named in currenciesWithoutRate.` : ''),
     `Dates are read and given in ${timeZone} unless a call names another timeZone; today there is ${localDay(new Date(), timeZone)}.`,
     'Transactions dated after now are planned: scheduled, or the next of a repeating series. Balances and totals count what is dated up to now, unless they say otherwise.',
+    "Some amounts are worked out by the app from the account balance, a percentage of it or a rounding (amountFrom); planned ones with followsBalance are recalculated whenever that balance changes, until their date, so they move on their own.",
     'Accounts and categories can be named by their name or their id.',
   ];
   if (apiKey.scopes.length === 0) {

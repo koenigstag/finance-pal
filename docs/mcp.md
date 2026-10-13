@@ -81,6 +81,14 @@ calls off payments to come. What already happened, the history balances are chec
 only changed in the app, and an account with any of it is only deleted there. A date given as a
 day is dated at noon, as the app dates a day to come. A change is answered only once it's saved.
 
+A transaction whose amount the app works out says how, under `amountFrom`: a percentage of a
+fixed amount or of the account balance, or `roundsBalanceTo`, whatever leaves the balance on a
+round multiple. With `followsBalance` it's a planned amount still recalculated each time the
+balance changes, until its date, so it moves on its own. One from a repeating series names the
+series under `series`, and `editedApartFromSeries` when that occurrence was edited on its own. Such
+an amount can't be typed over through `update_transaction`; how it's worked out is changed in the
+app.
+
 Totals are in the key owner's main currency, at the app's rates. A currency with no rate is left
 out of a total and named under `currenciesWithoutRate`.
 

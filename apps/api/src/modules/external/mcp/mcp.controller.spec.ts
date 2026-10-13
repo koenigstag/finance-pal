@@ -41,6 +41,12 @@ const coffee = {
   toAccountId: null,
   destAmount: null,
   note: 'Flat white',
+  percentage: null,
+  percentageBase: null,
+  roundBalanceTo: null,
+  percentageAsOf: null,
+  recurringRuleId: null,
+  isCustomized: false,
 } as unknown as Transaction;
 // The same coffee, planned: dated well after any day these specs run on.
 const plannedCoffee = { ...coffee, id: 'tx-2', date: new Date('2030-11-03T10:00:00Z') } as Transaction;
@@ -76,6 +82,7 @@ function setup(scopes: ApiKeyScope[] = VIEW) {
     currencyCodes: jest.fn().mockResolvedValue(new CurrencyCodes(new Map([[UAH, 'UAH']]))),
     accountsOf: jest.fn().mockResolvedValue([card]),
     categoriesOf: jest.fn().mockResolvedValue([food, cafe]),
+    seriesOf: jest.fn().mockResolvedValue([]),
   };
   const writes = new McpWriteTools(
     external as unknown as ExternalTransactionsService,
@@ -342,6 +349,19 @@ describe('McpController', () => {
       transactions.get.mockResolvedValue({ transaction: plannedCoffee, tagIds: [] });
       await expect(callTool('update_transaction', { id: plannedCoffee.id, date: '2026-10-01' })).resolves.toMatchObject({ isError: true });
       expect(external.update).not.toHaveBeenCalled();
+    });
+
+    it('leave an amount the app works out to the app, saying how it is worked out', async () => {
+      const { callTool, external, transactions } = setup(['transactions:update']);
+      const interest = { ...plannedCoffee, percentage: '3.5000', percentageAsOf: new Date('2026-10-12T08:00:00Z') } as Transaction;
+      transactions.get.mockResolvedValue({ transaction: interest, tagIds: [] });
+      const refused = await callTool('update_transaction', { id: '44444444-4444-4444-8444-444444444444', amount: '3520' });
+      expect(refused.isError).toBe(true);
+      expect(refused.text).toContain('"percentage":"3.5","of":"balance","followsBalance":true');
+      expect(external.update).not.toHaveBeenCalled();
+      // What isn't the amount still changes.
+      await callTool('update_transaction', { id: '44444444-4444-4444-8444-444444444444', note: 'Interest' });
+      expect(external.update).toHaveBeenCalled();
     });
 
     it('change only what a call names, clearing a category with null', async () => {

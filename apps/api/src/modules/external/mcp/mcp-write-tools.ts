@@ -12,7 +12,7 @@ import { ExternalLookupService } from '../external-lookup.service';
 import { ExternalTransactionsService } from '../external-transactions.service';
 import { findParentId } from '../references';
 import { currentMonth, transactionMoment } from './mcp-dates';
-import { describeAccount, describeBudgetLine, describeCategory, transactionDescriber } from './mcp-describe';
+import { amountSourceOf, describeAccount, describeBudgetLine, describeCategory, transactionDescriber } from './mcp-describe';
 import {
   ADDS,
   CHANGES,
@@ -164,6 +164,7 @@ export class McpWriteTools {
         description:
           'Change a planned transaction (one dated after now) found with search_transactions; one that already happened can ' +
           'only be changed in the app. Only what the call names changes; its type stays, and a new date must lie after now too. ' +
+          'An amount the app works out (amountFrom in search_transactions) can only be changed in the app, by changing how it is worked out. ' +
           'A new category drops a subcategory the call does not name again, null clears the category or the subcategory, and ' +
           'an empty note clears the note.',
         inputSchema: {
@@ -186,6 +187,14 @@ export class McpWriteTools {
         const existing = await this.plannedTransaction(context, args.id);
         const body: UpdateTransactionBody = {};
         if (args.amount !== undefined) {
+          const { amountFrom } = amountSourceOf(existing, context.currencies);
+          if (amountFrom) {
+            // The app would work the amount out again at once, from the balance or the base: a typed
+            // one wouldn't hold, and the call would look as if it had.
+            throw new ToolInputError(
+              `This amount is worked out by the app (${JSON.stringify(amountFrom)}), so a typed one wouldn't hold; how it's worked out can only be changed in the app`,
+            );
+          }
           body.amount = amountOf(args.amount);
         }
         if (args.date !== undefined) {
@@ -574,13 +583,14 @@ export class McpWriteTools {
   // As search_transactions lists it, with the names it has after the change.
   private async describeTransaction(context: McpContext, transaction: Transaction, timeZone: string) {
     const { groupId } = context.apiKey;
-    const describe = transactionDescriber(
-      await this.lookup.accountsOf(groupId),
-      await this.lookup.categoriesOf(groupId),
-      context.currencies,
+    const describe = transactionDescriber({
+      accounts: await this.lookup.accountsOf(groupId),
+      categories: await this.lookup.categoriesOf(groupId),
+      series: await this.lookup.seriesOf(groupId),
+      currencies: context.currencies,
       timeZone,
-      new Date(),
-    );
+      now: new Date(),
+    });
     return describe(transaction);
   }
 }

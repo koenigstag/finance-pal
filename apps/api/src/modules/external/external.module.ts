@@ -1,6 +1,6 @@
 import { Module, RequestMethod, type MiddlewareConsumer, type NestModule } from '@nestjs/common';
 import { TypeOrmModule } from '@nestjs/typeorm';
-import { Account, ApiKey, Category, CategoryRule, Currency, Group, Profile, Transaction } from '@ft/api-database';
+import { Account, ApiKey, Category, CategoryRule, Currency, Group, Profile, RecurringRule, Transaction } from '@ft/api-database';
 import { externalContract } from '@ft/shared-contracts';
 import { AuthzModule } from '../_core/authz/authz.module';
 import { AccountsModule } from '../ledger/accounts/accounts.module';
@@ -32,7 +32,7 @@ import { PlainTextNotificationMiddleware } from './notifications/plain-text-noti
  */
 @Module({
   imports: [
-    TypeOrmModule.forFeature([ApiKey, Group, Account, Category, CategoryRule, Currency, Profile, Transaction]),
+    TypeOrmModule.forFeature([ApiKey, Group, Account, Category, CategoryRule, Currency, Profile, RecurringRule, Transaction]),
     AuthzModule,
     AccountsModule,
     BudgetsModule,
