@@ -9,7 +9,7 @@ import type { ReceivingAccountLike } from './receiving-account';
 jest.mock('./notification-parsers', () => ({ NOTIFICATION_PARSERS: { abank: jest.fn() } }));
 const parse = NOTIFICATION_PARSERS.abank as jest.Mock;
 
-const apiKey = { id: 'key-1', userId: 'user-1', groupId: 'group-1', scopes: ['transactions:create'] };
+const apiKey = { id: 'key-1', userId: 'user-1', groupId: 'group-1', scopes: ['transactions:create'], name: 'iPhone' };
 const card: ReceivingAccountLike = { id: 'card', archived: false, currencyId: 1, notificationBank: 'abank' };
 
 function serviceWith(accounts: ReceivingAccountLike[] = [card], rules: RuleLike[] = [], categories: RuleCategoryLike[] = []) {

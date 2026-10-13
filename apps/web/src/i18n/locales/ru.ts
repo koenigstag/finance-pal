@@ -294,6 +294,7 @@ export const ru: Catalog<typeof en> = {
     roundsBalanceOf: 'Округляет баланс счёта «{{account}}» до {{step}}',
     roundsItsBalance: 'Округляет баланс до {{step}}',
     percentageOnTheDay: 'Пересчитается в день операции',
+    addedVia: 'Добавлено через {{source}}',
     percentageSeriesOnTheDay: 'Пересчитывается в день каждой операции',
     note: 'Заметка',
     recurring: 'Повторяющаяся',

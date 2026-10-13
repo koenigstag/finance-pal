@@ -1,6 +1,6 @@
 import { Module, RequestMethod, type MiddlewareConsumer, type NestModule } from '@nestjs/common';
 import { TypeOrmModule } from '@nestjs/typeorm';
-import { Account, ApiKey, Category, CategoryRule, Currency, Group, Profile, RecurringRule, Transaction } from '@ft/api-database';
+import { Account, ApiKey, Category, CategoryRule, ChangeSet, Currency, Group, Profile, RecurringRule, Transaction } from '@ft/api-database';
 import { externalContract } from '@ft/shared-contracts';
 import { AuthzModule } from '../_core/authz/authz.module';
 import { AccountsModule } from '../ledger/accounts/accounts.module';
@@ -10,7 +10,9 @@ import { ExchangeRatesModule } from '../ledger/exchange-rates/exchange-rates.mod
 import { OverviewModule } from '../ledger/overview/overview.module';
 import { TransactionsModule } from '../ledger/transactions/transactions.module';
 import { OauthModule } from '../oauth/oauth.module';
+import { RealtimeModule } from '../realtime/realtime.module';
 import { RecurringModule } from '../recurring/recurring.module';
+import { ChangeSetsService } from './changes/change-sets.service';
 import { ExternalAccountsController } from './external-accounts.controller';
 import { ExternalCategoriesController } from './external-categories.controller';
 import { ExternalKeyController } from './external-key.controller';
@@ -18,6 +20,7 @@ import { ExternalLookupService } from './external-lookup.service';
 import { ExternalTransactionsController } from './external-transactions.controller';
 import { ExternalTransactionsService } from './external-transactions.service';
 import { FinanceMcpService } from './mcp/finance-mcp.service';
+import { McpChangeTools } from './mcp/mcp-change-tools';
 import { McpSeriesTools } from './mcp/mcp-series-tools';
 import { McpWriteTools } from './mcp/mcp-write-tools';
 import { McpController } from './mcp/mcp.controller';
@@ -34,7 +37,7 @@ import { PlainTextNotificationMiddleware } from './notifications/plain-text-noti
  */
 @Module({
   imports: [
-    TypeOrmModule.forFeature([ApiKey, Group, Account, Category, CategoryRule, Currency, Profile, RecurringRule, Transaction]),
+    TypeOrmModule.forFeature([ApiKey, Group, Account, Category, CategoryRule, ChangeSet, Currency, Profile, RecurringRule, Transaction]),
     AuthzModule,
     AccountsModule,
     BudgetsModule,
@@ -44,6 +47,7 @@ import { PlainTextNotificationMiddleware } from './notifications/plain-text-noti
     TransactionsModule,
     RecurringModule,
     OauthModule,
+    RealtimeModule,
   ],
   controllers: [
     ExternalKeyController,
@@ -58,6 +62,8 @@ import { PlainTextNotificationMiddleware } from './notifications/plain-text-noti
     ExternalTransactionsService,
     ExternalNotificationsService,
     FinanceMcpService,
+    ChangeSetsService,
+    McpChangeTools,
     McpWriteTools,
     McpSeriesTools,
     McpUnauthorizedFilter,

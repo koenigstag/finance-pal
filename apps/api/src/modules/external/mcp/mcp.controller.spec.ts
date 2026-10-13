@@ -12,10 +12,12 @@ import type { ExchangeRatesService } from '../../ledger/exchange-rates/exchange-
 import type { OverviewService } from '../../ledger/overview/overview.service';
 import type { TransactionsService } from '../../ledger/transactions/transactions.service';
 import type { RecurringRulesService } from '../../recurring/recurring-rules.service';
+import { UndoBlockedError, type ChangeSetsService } from '../changes/change-sets.service';
 import { CurrencyCodes, type ExternalLookupService } from '../external-lookup.service';
 import type { ExternalTransactionsService } from '../external-transactions.service';
 import { FinanceMcpService } from './finance-mcp.service';
 import { McpController } from './mcp.controller';
+import { McpChangeTools } from './mcp-change-tools';
 import { McpSeriesTools } from './mcp-series-tools';
 import { McpWriteTools } from './mcp-write-tools';
 
@@ -118,6 +120,16 @@ function setup(scopes: ApiKeyScope[] = VIEW) {
     update: jest.fn(async () => ({ rule: payday, nextOccurrence: new Date('2030-01-20T10:00:00Z') })),
     remove: jest.fn(async () => ({ rule: payday, nextOccurrence: null })),
   };
+  // Each write is kept as a change; here it's simply run, and kept unless it's a dry run.
+  const changes = {
+    record: jest.fn(async (_apiKey: RequestApiKey, request: { dryRun?: boolean }, run: () => Promise<unknown>) => ({
+      result: await run(),
+      changeId: request.dryRun ? null : 'change-1',
+      touched: [],
+    })),
+    list: jest.fn().mockResolvedValue([]),
+    undo: jest.fn(),
+  };
   const writes = new McpWriteTools(
     external as unknown as ExternalTransactionsService,
     transactions as unknown as TransactionsService,
@@ -139,8 +151,9 @@ function setup(scopes: ApiKeyScope[] = VIEW) {
     lookup as unknown as ExternalLookupService,
     writes,
     new McpSeriesTools(recurring as unknown as RecurringRulesService, lookup as unknown as ExternalLookupService),
+    new McpChangeTools(changes as unknown as ChangeSetsService),
   );
-  const apiKey: RequestApiKey = { id: 'key-1', userId: 'user-1', groupId, scopes };
+  const apiKey: RequestApiKey = { id: 'key-1', userId: 'user-1', groupId, scopes, name: 'Claude' };
   const controller = new McpController(service);
 
   // One JSON-RPC message, posted the way an MCP client posts it, and the answer it gets.
@@ -179,7 +192,7 @@ function setup(scopes: ApiKeyScope[] = VIEW) {
   const toolNames = async () =>
     ((await call('tools/list')).message.result.tools as { name: string }[]).map((tool) => tool.name).sort();
 
-  return { call, callTool, toolNames, transactions, external, categories, accounts, budgets, recurring };
+  return { call, callTool, toolNames, transactions, external, categories, accounts, budgets, recurring, changes };
 }
 
 describe('McpController', () => {
@@ -296,19 +309,29 @@ describe('McpController', () => {
       expect(await toolNames()).toEqual([
         'add_series',
         'add_transaction',
+        'apply_changes',
         'get_budget',
         'list_accounts',
         'list_categories',
+        'list_changes',
         'list_series',
         'search_transactions',
         'set_budget',
         'summarize_by_category',
+        'undo_changes',
       ]);
     });
 
     it("don't offer deleting an account without deleting its transactions", async () => {
       await expect(setup(['accounts:delete']).call('tools/list')).resolves.toMatchObject({ message: { error: expect.anything() } });
-      expect(await setup(['accounts:delete', 'transactions:delete']).toolNames()).toEqual(['delete_account', 'delete_transaction', 'end_series']);
+      expect(await setup(['accounts:delete', 'transactions:delete']).toolNames()).toEqual([
+        'apply_changes',
+        'delete_account',
+        'delete_transaction',
+        'end_series',
+        'list_changes',
+        'undo_changes',
+      ]);
     });
 
     it('say they change things, and the instructions say so too', async () => {
@@ -429,7 +452,10 @@ describe('McpController', () => {
       const { callTool, budgets } = setup(['budgets:create']);
       const { text } = await callTool('set_budget', { month: '2026-11', category: 'food', amount: 5000 });
       expect(budgets.create).toHaveBeenCalledWith('user-1', groupId, { month: '2026-11', categoryId: food.id, amount: '5000' });
-      expect(JSON.parse(text)).toEqual({ added: { id: 'line-1', month: '2026-11', for: 'Food', budgeted: '5000', currency: 'UAH' } });
+      expect(JSON.parse(text)).toEqual({
+        added: { id: 'line-1', month: '2026-11', for: 'Food', budgeted: '5000', currency: 'UAH' },
+        changeId: 'change-1',
+      });
     });
 
     it('refuse to change a line with a key that may only add them', async () => {
@@ -546,6 +572,120 @@ describe('McpController', () => {
       const { text } = await callTool('end_series', { id: payday.id, keepPlanned: true });
       expect(recurring.remove).toHaveBeenCalledWith('user-1', groupId, payday.id, true);
       expect(JSON.parse(text)).toMatchObject({ ended: { id: payday.id, nextPayment: null, ended: true }, keptPlanned: true });
+    });
+  });
+
+  describe('changes', () => {
+    const PLANS: ApiKeyScope[] = ['transactions:create', 'budgets:create'];
+    const plan = { tool: 'add_transaction', type: 'expense', amount: 85, date: '2030-11-01', note: 'Coffee' };
+    const budget = { tool: 'set_budget', month: '2030-11', category: 'Food', amount: 5000 };
+
+    it('keep each write as a change of its own, and answer with its id', async () => {
+      const { callTool, changes } = setup(PLANS);
+      const { isError, text } = await callTool('add_transaction', { type: 'expense', amount: 85, date: '2030-11-01' });
+      expect(isError).toBe(false);
+      expect(changes.record).toHaveBeenCalledWith(
+        expect.objectContaining({ name: 'Claude' }),
+        { steps: [{ tool: 'add_transaction', args: { type: 'expense', amount: 85, date: '2030-11-01' } }] },
+        expect.any(Function),
+      );
+      expect(JSON.parse(text)).toMatchObject({ added: { id: coffee.id }, changeId: 'change-1' });
+    });
+
+    it('make several at once as one change, each step answering as its tool does', async () => {
+      const { callTool, changes, external, budgets } = setup(PLANS);
+      const { isError, text } = await callTool('apply_changes', { steps: [plan, budget], description: 'November plans' });
+      expect(isError).toBe(false);
+      expect(changes.record).toHaveBeenCalledTimes(1);
+      expect(changes.record).toHaveBeenCalledWith(
+        expect.anything(),
+        {
+          steps: [
+            { tool: 'add_transaction', args: { type: 'expense', amount: 85, date: '2030-11-01', note: 'Coffee' } },
+            { tool: 'set_budget', args: { month: '2030-11', category: 'Food', amount: 5000 } },
+          ],
+          description: 'November plans',
+          dryRun: false,
+        },
+        expect.any(Function),
+      );
+      expect(external.create).toHaveBeenCalledTimes(1);
+      expect(budgets.create).toHaveBeenCalledTimes(1);
+      const answer = JSON.parse(text);
+      expect(answer).toMatchObject({ changeId: 'change-1', diff: [] });
+      expect(answer.results).toEqual([
+        expect.objectContaining({ step: 1, tool: 'add_transaction', added: expect.objectContaining({ id: coffee.id }) }),
+        expect.objectContaining({ step: 2, tool: 'set_budget', added: expect.objectContaining({ id: 'line-1' }) }),
+      ]);
+    });
+
+    it('try them out with dryRun, keeping nothing', async () => {
+      const { callTool, changes } = setup(PLANS);
+      const { text } = await callTool('apply_changes', { steps: [plan], dryRun: true });
+      expect(changes.record).toHaveBeenCalledWith(expect.anything(), expect.objectContaining({ dryRun: true }), expect.any(Function));
+      const answer = JSON.parse(text);
+      expect(answer).toMatchObject({ dryRun: true, kept: false });
+      expect(answer).not.toHaveProperty('changeId');
+    });
+
+    it('stop at the first step that fails, and say nothing was changed', async () => {
+      const { callTool, budgets } = setup(PLANS);
+      const { isError, text } = await callTool('apply_changes', { steps: [plan, { tool: 'set_budget', amount: 5000 }, budget] });
+      expect(isError).toBe(true);
+      expect(text).toBe('Step 2 (set_budget) failed, so nothing was changed: Name a category or an account, one of the two');
+      // The step after it never ran.
+      expect(budgets.create).not.toHaveBeenCalled();
+    });
+
+    it('take only steps of the tools the key has', async () => {
+      const { callTool, changes } = setup(PLANS);
+      await expect(callTool('apply_changes', { steps: [{ tool: 'delete_transaction', id: coffee.id }] })).resolves.toMatchObject({
+        isError: true,
+      });
+      expect(changes.record).not.toHaveBeenCalled();
+    });
+
+    it('undo one, with the permissions its tools needed', async () => {
+      const { callTool, changes } = setup(PLANS);
+      changes.undo.mockResolvedValue({
+        changeSet: {
+          id: 'change-1',
+          createdAt: new Date('2026-10-13T12:00:00Z'),
+          source: 'Claude',
+          description: null,
+          steps: [{ tool: 'add_transaction', args: {} }],
+        },
+        touched: [],
+      });
+      const { isError, text } = await callTool('undo_changes', { changeId: '66666666-6666-4666-8666-666666666666' });
+      expect(isError).toBe(false);
+      expect(JSON.parse(text)).toEqual({
+        undone: true,
+        change: { changeId: 'change-1', madeAt: '2026-10-13T15:00+03:00', source: 'Claude', tools: ['add_transaction'] },
+        diff: [],
+      });
+      const [, changeId, options] = changes.undo.mock.calls[0] as [unknown, string, { dryRun: boolean; mayUndo: (tool: string) => boolean }];
+      expect(changeId).toBe('66666666-6666-4666-8666-666666666666');
+      expect(options.dryRun).toBe(false);
+      expect(options.mayUndo('add_transaction')).toBe(true);
+      expect(options.mayUndo('delete_account')).toBe(false);
+    });
+
+    it('say what stands in the way of undoing one', async () => {
+      const { callTool, changes } = setup(PLANS);
+      changes.undo.mockRejectedValue(
+        new UndoBlockedError([{ what: 'transaction', id: coffee.id, label: 'expense 85.00 Coffee on 2030-11-01', reason: 'it has been changed since' }]),
+      );
+      const { isError, text } = await callTool('undo_changes', { changeId: '66666666-6666-4666-8666-666666666666' });
+      expect(isError).toBe(true);
+      expect(text).toBe(
+        'Nothing was undone: the change can’t be taken back as things are now.\n' +
+          `- transaction "expense 85.00 Coffee on 2030-11-01" (${coffee.id}): it has been changed since`,
+      );
+    });
+
+    it('are not offered to a key that only reads', async () => {
+      expect(await setup().toolNames()).not.toContain('apply_changes');
     });
   });
 });

@@ -20,3 +20,4 @@ export * from './push-subscription.entity.js';
 export * from './scheduled-notification.entity.js';
 export * from './category-rule.entity.js';
 export * from './budget.entity.js';
+export * from './change-set.entity.js';

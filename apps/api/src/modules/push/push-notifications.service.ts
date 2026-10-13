@@ -1,11 +1,11 @@
 import { Injectable, Logger } from '@nestjs/common';
 import { InjectRepository } from '@nestjs/typeorm';
 import { Repository } from 'typeorm';
-import { runOnTransactionCommit } from 'typeorm-transactional';
 import { Currency, Profile, TransactionType } from '@ft/api-database';
 import { renderPushMessage, topicFor, type PushMessage } from './push-messages';
 import { PushSenderService, type PushTarget } from './push-sender.service';
 import { PushSubscriptionsService } from './push-subscriptions.service';
+import { afterCommit } from '../_core/database/after-commit';
 
 export interface TransactionRecordedInput {
   groupId: string;
@@ -45,7 +45,7 @@ export interface PlannedRecordedInput {
  * whether anyone hears about it, on which devices and in which words. The mirror of
  * RealtimeEmitterService, for the case the socket can't cover — nobody has the app open.
  *
- * Like that service, the work is deferred to `runOnTransactionCommit()`, so a rollback later in
+ * Like that service, the work is deferred to `afterCommit()`, so a rollback later in
  * the same request never produces a notification for money nobody spent. Unlike it, the work is
  * a network call to someone else's server: it is never awaited by the request, and a failure is
  * logged rather than raised. A missed notification is a nuisance; a transaction that fails to
@@ -162,7 +162,7 @@ export class PushNotificationsService {
   // surface as an unhandled rejection long after the request it came from.
   private onCommit(deliver: () => Promise<unknown>): void {
     try {
-      runOnTransactionCommit(() => {
+      afterCommit(() => {
         void deliver().catch((error: unknown) => {
           this.logger.error('Sending notifications failed', error instanceof Error ? error.stack : error);
         });

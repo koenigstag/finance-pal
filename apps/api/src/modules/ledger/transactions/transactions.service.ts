@@ -40,9 +40,11 @@ export interface CreateTransactionInput {
   roundBalanceTo?: number | null;
   note?: string;
   tagIds?: string[];
+  // The API key it's added through, by name; set once, when it's created.
+  source?: string | null;
 }
 
-export type UpdateTransactionInput = Partial<CreateTransactionInput>;
+export type UpdateTransactionInput = Partial<Omit<CreateTransactionInput, 'source'>>;
 
 // Stored with a transaction the external API records for a request carrying an idempotency key,
 // both as sha256 digests: the key, unique per group, and what the request asked for. See
@@ -62,6 +64,8 @@ export interface ListTransactionsFilter {
   dateFrom?: string;
   dateTo?: string;
   search?: string;
+  // Only what was added through the API key of this name, case aside.
+  source?: string;
 }
 
 export interface TransactionPage {
@@ -132,6 +136,9 @@ export class TransactionsService {
     }
     if (filter.search) {
       qb.andWhere('t.note ILIKE :search', { search: `%${filter.search}%` });
+    }
+    if (filter.source) {
+      qb.andWhere('lower(t.source) = lower(:source)', { source: filter.source });
     }
     if (filter.tagId) {
       qb.andWhere(
@@ -248,6 +255,7 @@ export class TransactionsService {
         isCustomized: false,
         idempotencyKey: idempotency?.key ?? null,
         idempotencyFingerprint: idempotency?.fingerprint ?? null,
+        source: input.source ?? null,
         createdBy: userId,
       }),
     );

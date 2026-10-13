@@ -174,6 +174,11 @@ export class Transaction {
   @Column({ type: 'text', name: 'idempotency_fingerprint', nullable: true })
   idempotencyFingerprint!: string | null;
 
+  // The name of the API key it was added through ("Claude", a phone's shortcut), or of the key that
+  // set up the series it comes from; null for what was added in the app.
+  @Column({ type: 'text', nullable: true })
+  source!: string | null;
+
   @Column({ type: 'uuid', name: 'created_by' })
   createdBy!: string;
 

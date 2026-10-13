@@ -56,9 +56,13 @@ export interface CreateRecurringRuleInput {
   reminderDaysBefore?: number | null;
   timezone?: string;
   replacesTransactionId?: string;
+  // The API key it's set up through, by name; its occurrences carry it too.
+  source?: string | null;
 }
 
-export type UpdateRecurringRuleInput = Partial<Omit<CreateRecurringRuleInput, 'replacesTransactionId'>> & { active?: boolean };
+export type UpdateRecurringRuleInput = Partial<Omit<CreateRecurringRuleInput, 'replacesTransactionId' | 'source'>> & {
+  active?: boolean;
+};
 
 // A rule as the API shows it: with the date its series next produces a transaction.
 export interface RecurringRuleView {
@@ -192,6 +196,7 @@ export class RecurringRulesService {
       reminderDaysBefore: input.reminderDaysBefore ?? null,
       timezone: input.timezone ?? 'UTC',
       active: true,
+      source: input.source ?? null,
       createdBy: userId,
     });
     assertEndsAfterStart(rule);

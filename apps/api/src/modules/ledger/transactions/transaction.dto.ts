@@ -26,6 +26,7 @@ export function toTransactionDto(transaction: Transaction, tagIds: string[]) {
     recurringRuleId: transaction.recurringRuleId,
     recurrenceDate: transaction.recurrenceDate?.toISOString() ?? null,
     isCustomized: transaction.isCustomized,
+    source: transaction.source,
     createdAt: transaction.createdAt.toISOString(),
     updatedAt: transaction.updatedAt.toISOString(),
   };

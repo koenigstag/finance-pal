@@ -193,6 +193,10 @@ export function TransactionActionsSheet({
               {transaction.note && (
                 <p className="text-left text-sm break-words whitespace-pre-line italic">{transaction.note}</p>
               )}
+              {/* The app it came from, by its key's name: what an assistant added says so. */}
+              {transaction.source && (
+                <p className="text-left text-sm text-muted-foreground">{t('transactions.addedVia', { source: transaction.source })}</p>
+              )}
             </DialogHeader>
             <ul className="-mx-2 flex flex-col">
               {actions.map(({ action, label, icon: Icon, tone }) => (

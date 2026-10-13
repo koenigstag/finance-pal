@@ -119,6 +119,11 @@ export class RecurringRule {
   @Column({ type: 'date', name: 'ends_on', nullable: true })
   endsOn!: string | null;
 
+  // The name of the API key it was set up through, which its occurrences carry too; null for one
+  // set up in the app.
+  @Column({ type: 'text', nullable: true })
+  source!: string | null;
+
   // first occurrence not yet materialized as a transaction (the scheduler's frontier)
   @Column({ type: 'timestamptz', name: 'next_run_date' })
   nextRunDate!: Date;

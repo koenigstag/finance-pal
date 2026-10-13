@@ -53,6 +53,8 @@ export function transactionDescriber({ accounts, categories, series, currencies,
         otherAmount !== null && { inCategoryCurrency: { amount: otherAmount, currency: currencies.of(category.currencyId) } }),
       ...(transaction.note && { note: transaction.note }),
       ...(transaction.date > now && { planned: true }),
+      // The API key it was added through, by name: "Claude" for what an assistant added.
+      ...(transaction.source && { source: transaction.source }),
       ...amountSourceOf(transaction, currencies),
       ...(rule && {
         series: {
@@ -121,6 +123,7 @@ export function describeSeries(
     ...(category && { category }),
     ...(subcategory && { subcategory }),
     ...(rule.note && { note: rule.note }),
+    ...(rule.source && { source: rule.source }),
     ...seriesAmountSource(rule, currencies),
     every: rule.intervalValue,
     unit: rule.intervalUnit,

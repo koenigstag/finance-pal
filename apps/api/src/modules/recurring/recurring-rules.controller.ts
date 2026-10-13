@@ -30,6 +30,7 @@ function toRecurringRuleDto({ rule, nextOccurrence }: RecurringRuleView) {
     reminderDaysBefore: rule.reminderDaysBefore,
     timezone: rule.timezone,
     active: rule.active,
+    source: rule.source,
     createdAt: rule.createdAt.toISOString(),
     updatedAt: rule.updatedAt.toISOString(),
   };

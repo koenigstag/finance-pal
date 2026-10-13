@@ -12,6 +12,7 @@ interface AuthenticatedKeyRow {
   user_id: string;
   group_id: string;
   scopes: string[];
+  name: string;
 }
 
 /**
@@ -60,11 +61,11 @@ export class ApiKeyAuthGuard implements CanActivate {
 
   private async authenticate(token: string): Promise<RequestApiKey | null> {
     const rows: AuthenticatedKeyRow[] = await this.dataSource.query(
-      'SELECT key_id, user_id, group_id, scopes FROM authenticate_api_key($1)',
+      'SELECT key_id, user_id, group_id, scopes, name FROM authenticate_api_key($1)',
       [hashApiKey(token)],
     );
     const [row] = rows;
-    return row ? { id: row.key_id, userId: row.user_id, groupId: row.group_id, scopes: row.scopes } : null;
+    return row ? { id: row.key_id, userId: row.user_id, groupId: row.group_id, scopes: row.scopes, name: row.name } : null;
   }
 }
 

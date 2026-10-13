@@ -21,6 +21,7 @@ import {
   READS,
   ToolInputError,
   can,
+  collectTools,
   dayArg,
   findByNameOrId,
   monthArg,
@@ -29,6 +30,7 @@ import {
   toolHandler,
   type McpContext,
 } from './mcp-tool';
+import { McpChangeTools } from './mcp-change-tools';
 import { McpSeriesTools } from './mcp-series-tools';
 import { McpWriteTools } from './mcp-write-tools';
 
@@ -58,6 +60,7 @@ export class FinanceMcpService {
     private readonly lookup: ExternalLookupService,
     private readonly writes: McpWriteTools,
     private readonly seriesTools: McpSeriesTools,
+    private readonly changeTools: McpChangeTools,
   ) {}
 
   /** A server for one request: the transport is stateless, so each request gets its own. */
@@ -91,8 +94,20 @@ export class FinanceMcpService {
     if (can(context, 'budgets:read')) {
       this.addBudgetTools(server, context);
     }
-    this.writes.register(server, context);
-    this.seriesTools.register(server, context);
+    // The tools that write are kept as changes, which can be batched and undone; the series' list
+    // comes along with them, and is offered as it is.
+    const collected = collectTools((registry) => {
+      this.writes.register(registry, context);
+      this.seriesTools.register(registry, context);
+    });
+    for (const tool of collected.filter((tool) => tool.config.annotations?.readOnlyHint)) {
+      server.registerTool(tool.name, tool.config, tool.handler);
+    }
+    this.changeTools.register(
+      server,
+      context,
+      collected.filter((tool) => !tool.config.annotations?.readOnlyHint),
+    );
     return server;
   }
 
@@ -149,7 +164,8 @@ export class FinanceMcpService {
           'amountFrom says how the app works the amount out, when it does: a percentage of a fixed amount or of the account balance, ' +
           'or roundsBalanceTo, whatever leaves the balance on a round multiple. With followsBalance, the amount is recalculated each ' +
           'time the account balance changes, until its date: it changes on its own, and that is expected. series is the repeating ' +
-          'series it belongs to. To total money up, use summarize_by_category instead of adding pages up.',
+          'series it belongs to, and source the app it was added through ("Claude" for what you added). To total money ' +
+          'up, use summarize_by_category instead of adding pages up.',
         inputSchema: {
           from: dayArg('The earliest'),
           to: dayArg('The latest'),
@@ -160,6 +176,10 @@ export class FinanceMcpService {
             .optional()
             .describe('A category or subcategory, by name or id. A category takes in its subcategories'),
           note: z.string().optional().describe('Text the note contains, ignoring case'),
+          source: z
+            .string()
+            .optional()
+            .describe('Only transactions added through the app of this name, like "Claude" (a transaction\'s source)'),
           limit: z.number().int().min(1).max(200).optional().describe('How many per page; 50 when left out'),
           cursor: z.string().optional().describe("The previous page's nextCursor, for the page after it"),
           timeZone: timeZoneArg,
@@ -179,6 +199,7 @@ export class FinanceMcpService {
           accountId: args.account ? findByNameOrId(accounts, args.account, 'account').id : undefined,
           categoryId: args.category ? findByNameOrId(categories, args.category, 'category').id : undefined,
           search: args.note,
+          source: args.source,
           limit: args.limit,
           cursor: args.cursor,
         });
@@ -305,7 +326,7 @@ function instructionsFor(context: McpContext): string {
   const writes = apiKey.scopes.some((scope) => !scope.endsWith(':read'));
   const lines = [
     writes
-      ? `Finance Pal, a money tracker. These tools work in the group "${groupName}", as its member who connected them. Some of them change it: add, update and delete what the person asks for, and say what you changed. Deleting can't be undone in the app. Transactions can only be added, changed or deleted while planned, dated after now; ones that already happened are the person's to change in the app.`
+      ? `Finance Pal, a money tracker. These tools work in the group "${groupName}", as its member who connected them. Some of them change it: add, update and delete what the person asks for, and say what you changed. Transactions can only be added, changed or deleted while planned, dated after now; ones that already happened are the person's to change in the app.`
       : `Finance Pal, a money tracker. These tools read the group "${groupName}", as its member who connected them sees it, and change nothing.`,
     'Amounts are decimal strings, each beside its currency (an ISO 4217 code).' +
       (main ? ` Totals are in the main currency, ${main}, converted at current rates; a currency with no rate is left out of a total and named in currenciesWithoutRate.` : ''),
@@ -315,6 +336,11 @@ function instructionsFor(context: McpContext): string {
     'A repeating series keeps one planned payment at a time, its next; a transaction from one names it under series. list_series shows the series themselves, and their ends.',
     'Accounts and categories can be named by their name or their id.',
   ];
+  if (writes) {
+    lines.push(
+      'Every change answers with a changeId: undo_changes takes it back, for 30 days, unless what it touched changed since. To make several changes together, all or nothing, use apply_changes, and with dryRun to show the person what it would do before it does it. What you add is marked as added by this app (source).',
+    );
+  }
   if (apiKey.scopes.length === 0) {
     lines.push('This key may do nothing, so there are no tools to call.');
   }
