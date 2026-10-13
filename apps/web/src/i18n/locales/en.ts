@@ -805,6 +805,12 @@ export const en = {
     perDay: 'Per day',
     perWeek: 'Per week',
     month: 'This month',
+    // Above the chart, this month only: what the accounts in the total held as it began, and will as it
+    // ends should the rest of the budget go to plan.
+    balance: {
+      start: 'Start of month',
+      forecast: 'Forecast',
+    },
     // The row the smaller categories and debts fold into.
     more: 'More',
     noCategory: 'No category',

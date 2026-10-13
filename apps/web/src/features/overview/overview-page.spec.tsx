@@ -6,6 +6,7 @@ import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import { defineAbilityFor } from '@ft/shared-contracts';
 import '@/i18n';
 import type { Account } from '@/features/accounts/queries';
+import type { Budget, BudgetTotals } from '@/features/budget/queries';
 import type { Category } from '@/features/categories/queries';
 import { GroupScopeContext } from '@/features/groups/group-context';
 import { queryKeys } from '@/lib/query-keys';
@@ -60,6 +61,16 @@ const loan = {
   updatedAt: '2026-01-01T00:00:00.000Z',
 } satisfies Account;
 
+const card = {
+  ...loan,
+  id: 'card',
+  type: 'regular',
+  name: 'Card',
+  sortOrder: 1,
+  balance: '20000.00',
+  plannedBalance: '19200.00',
+} satisfies Account;
+
 const spent = (day: string, amount: string, target: { categoryId?: string; accountId?: string } = {}): OverviewDays[number] => ({
   day: `2026-10-${day}`,
   type: 'expense',
@@ -79,6 +90,23 @@ const october: OverviewDays = [
   { ...spent('05', '9000.00', { categoryId: 'salary' }), type: 'income' },
 ];
 
+const budgetLine = (id: string, categoryId: string, amount: string): Budget => ({
+  id,
+  groupId,
+  month: '2026-10',
+  categoryId,
+  accountId: null,
+  amount,
+  currencyId: UAH,
+  createdAt: '2026-10-01T00:00:00.000Z',
+  updatedAt: '2026-10-01T00:00:00.000Z',
+});
+const octoberBudget = [budgetLine('l1', 'groceries', '15000.00'), budgetLine('l2', 'salary', '35000.00')];
+const octoberBudgetTotals: BudgetTotals = {
+  categories: [{ categoryId: 'groceries', type: 'expense', currencyId: UAH, recorded: '500.00', planned: '800.00' }],
+  accounts: [{ accountId: 'card', recorded: '-1230.00', planned: '-800.00' }],
+};
+
 // Where a row leads, read off the URL.
 function Location() {
   const location = useLocation();
@@ -94,7 +122,9 @@ const renderPage = (entry: string, stores = new RootStore()) => {
   queryClient.setQueryData(queryKeys.currencies, [{ id: UAH, code: 'UAH', name: 'Hryvnia', symbol: '₴' }]);
   queryClient.setQueryData(queryKeys.exchangeRates, { base: 'UAH', rates: {}, publishedOn: '2026-10-12', provider: 'test', attribution: null });
   queryClient.setQueryData(queryKeys.allCategories(groupId), categories);
-  queryClient.setQueryData(queryKeys.allAccounts(groupId), [loan]);
+  queryClient.setQueryData(queryKeys.allAccounts(groupId), [loan, card]);
+  queryClient.setQueryData(queryKeys.budgetLines(groupId, '2026-10'), octoberBudget);
+  queryClient.setQueryData(queryKeys.budgetTotals(groupId, '2026-10'), octoberBudgetTotals);
   for (const month of ['2026-08', '2026-09', '2026-10', '2026-11', '2026-12']) {
     queryClient.setQueryData(queryKeys.overviewDays(groupId, month), month === '2026-10' ? october : []);
   }
@@ -134,6 +164,26 @@ describe('OverviewPage', () => {
     expect(screen.getByText('₴102.50')).toBeTruthy();
     expect(screen.getByText('₴717.50')).toBeTruthy();
     expect(screen.getByText('₴1,230.00')).toBeTruthy();
+  });
+
+  it('shows where the month started and where it is headed, on either tab', () => {
+    renderPage(`/g/${groupId}/overview?month=2026-10`);
+
+    // The card held 20 000 and the 1 230 that has gone from it since the month began.
+    expect(screen.getByText('Start of month').parentElement?.textContent).toContain('₴21,230.00');
+    // 19 200 once the planned 800 has gone, less the 13 700 groceries still leave, and the 35 000 of salary to come.
+    expect(screen.getByText('Forecast').parentElement?.textContent).toContain('₴40,500.00');
+
+    fireEvent.mouseDown(screen.getByRole('tab', { name: 'Income' }), { button: 0 });
+    expect(screen.getByText('Forecast').parentElement?.textContent).toContain('₴40,500.00');
+  });
+
+  it('shows the balance for the month under way only', () => {
+    vi.setSystemTime(new Date(2026, 11, 13, 12));
+    renderPage(`/g/${groupId}/overview?month=2026-10`);
+
+    expect(screen.queryByText('Start of month')).toBeNull();
+    expect(screen.queryByText('Forecast')).toBeNull();
   });
 
   it('lists the three largest with their share, and folds the rest into one row that opens', () => {

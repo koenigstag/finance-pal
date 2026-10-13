@@ -9,19 +9,24 @@ export type Budget = ClientInferResponseBody<typeof budgetsContract.list, 200>[n
 export type BudgetTotals = ClientInferResponseBody<typeof budgetsContract.totals, 200>;
 export type CreateBudgetBody = ClientInferRequest<typeof budgetsContract.create>['body'];
 
-/** A month's lines, by its YYYY-MM. */
-export function useBudgets(groupId: string, month: string) {
+/** A month's lines, by its YYYY-MM. Not fetched while `enabled` is false. */
+export function useBudgets(groupId: string, month: string, enabled = true) {
   return useQuery({
     queryKey: queryKeys.budgetLines(groupId, month),
     queryFn: () => unwrap(api.budgets.list({ params: { groupId }, query: { month } }), 200),
+    enabled,
   });
 }
 
-/** What moved in the month, as this device's calendar has it — the same bounds the transactions list uses. */
-export function useBudgetTotals(groupId: string, month: string) {
+/**
+ * What moved in the month, as this device's calendar has it — the same bounds the transactions list
+ * uses. Not fetched while `enabled` is false.
+ */
+export function useBudgetTotals(groupId: string, month: string, enabled = true) {
   return useQuery({
     queryKey: queryKeys.budgetTotals(groupId, month),
     queryFn: () => unwrap(api.budgets.totals({ params: { groupId }, query: monthRange(parseMonthParam(month)) }), 200),
+    enabled,
   });
 }
 
