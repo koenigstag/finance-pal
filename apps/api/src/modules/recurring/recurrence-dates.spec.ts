@@ -1,4 +1,12 @@
-import { firstIndexAtOrAfter, firstOccurrenceAtOrAfter, occurrenceAt, startOfLocalDay, type Schedule } from './recurrence-dates';
+import {
+  endsOnAfter,
+  firstIndexAtOrAfter,
+  firstOccurrenceAtOrAfter,
+  isPastEnd,
+  occurrenceAt,
+  startOfLocalDay,
+  type Schedule,
+} from './recurrence-dates';
 
 const iso = (date: Date) => date.toISOString();
 
@@ -95,5 +103,31 @@ describe('startOfLocalDay', () => {
     const now = new Date('2027-01-15T23:30:00Z');
     expect(iso(startOfLocalDay(now, 'Europe/Moscow'))).toBe('2027-01-15T21:00:00.000Z');
     expect(iso(startOfLocalDay(now, 'UTC'))).toBe('2027-01-15T00:00:00.000Z');
+  });
+});
+
+describe('isPastEnd', () => {
+  it('goes by the day in the zone, so a late payment on the last day still counts', () => {
+    // 23:30 on October 20th in Kyiv.
+    expect(isPastEnd('2026-10-20', new Date('2026-10-20T20:30:00Z'), 'Europe/Kyiv')).toBe(false);
+    expect(isPastEnd('2026-10-20', new Date('2026-10-20T21:30:00Z'), 'Europe/Kyiv')).toBe(true);
+  });
+
+  it('never ends a series with no end', () => {
+    expect(isPastEnd(null, new Date('2099-01-01T00:00:00Z'), 'UTC')).toBe(false);
+  });
+});
+
+describe('endsOnAfter', () => {
+  const schedule: Schedule = { startsAt: new Date('2026-10-20T09:00:00Z'), intervalUnit: 'month', intervalValue: 1, timezone: 'Europe/Kyiv' };
+
+  it('is the day of the last of so many payments, counting from the next one', () => {
+    expect(endsOnAfter(schedule, new Date('2026-10-13T00:00:00Z'), 12)).toBe('2027-09-20');
+    // Two payments in, twelve more.
+    expect(endsOnAfter(schedule, new Date('2026-12-01T00:00:00Z'), 12)).toBe('2027-11-20');
+  });
+
+  it('is the next payment itself for one', () => {
+    expect(endsOnAfter(schedule, new Date('2026-10-13T00:00:00Z'), 1)).toBe('2026-10-20');
   });
 });

@@ -11,10 +11,12 @@ import type { CategoriesService } from '../../ledger/categories/categories.servi
 import type { ExchangeRatesService } from '../../ledger/exchange-rates/exchange-rates.service';
 import type { OverviewService } from '../../ledger/overview/overview.service';
 import type { TransactionsService } from '../../ledger/transactions/transactions.service';
+import type { RecurringRulesService } from '../../recurring/recurring-rules.service';
 import { CurrencyCodes, type ExternalLookupService } from '../external-lookup.service';
 import type { ExternalTransactionsService } from '../external-transactions.service';
 import { FinanceMcpService } from './finance-mcp.service';
 import { McpController } from './mcp.controller';
+import { McpSeriesTools } from './mcp-series-tools';
 import { McpWriteTools } from './mcp-write-tools';
 
 // The controller answers once the request's transaction commits; these calls have none, so at once.
@@ -53,6 +55,28 @@ const plannedCoffee = { ...coffee, id: 'tx-2', date: new Date('2030-11-03T10:00:
 
 const VIEW: ApiKeyScope[] = ['accounts:read', 'categories:read', 'transactions:read', 'budgets:read'];
 
+// Payday on the 20th, every month, in Kyiv: a series planned well after any day these specs run on.
+const payday = {
+  id: '55555555-5555-4555-8555-555555555555',
+  type: 'income',
+  amount: '50000.00',
+  currencyId: UAH,
+  accountId: card.id,
+  categoryId: food.id,
+  subcategoryId: null,
+  toAccountId: null,
+  note: 'Salary',
+  percentage: null,
+  percentageBase: null,
+  roundBalanceTo: null,
+  intervalUnit: 'month',
+  intervalValue: 1,
+  startsAt: new Date('2030-01-20T10:00:00Z'),
+  endsOn: null,
+  timezone: 'Europe/Kyiv',
+  active: true,
+};
+
 function setup(scopes: ApiKeyScope[] = VIEW) {
   const transactions = {
     list: jest.fn().mockResolvedValue({ items: [coffee], nextCursor: null, tagsByTransactionId: new Map() }),
@@ -84,6 +108,16 @@ function setup(scopes: ApiKeyScope[] = VIEW) {
     categoriesOf: jest.fn().mockResolvedValue([food, cafe]),
     seriesOf: jest.fn().mockResolvedValue([]),
   };
+  const recurring = {
+    list: jest.fn().mockResolvedValue([{ rule: payday, nextOccurrence: new Date('2030-01-20T10:00:00Z') }]),
+    get: jest.fn().mockResolvedValue({ rule: payday, nextOccurrence: new Date('2030-01-20T10:00:00Z') }),
+    create: jest.fn(async (_userId: string, _groupId: string, input: Record<string, unknown>) => ({
+      rule: { ...payday, ...input, startsAt: new Date(input.startsAt as string) },
+      nextOccurrence: new Date(input.startsAt as string),
+    })),
+    update: jest.fn(async () => ({ rule: payday, nextOccurrence: new Date('2030-01-20T10:00:00Z') })),
+    remove: jest.fn(async () => ({ rule: payday, nextOccurrence: null })),
+  };
   const writes = new McpWriteTools(
     external as unknown as ExternalTransactionsService,
     transactions as unknown as TransactionsService,
@@ -104,6 +138,7 @@ function setup(scopes: ApiKeyScope[] = VIEW) {
     {} as ExchangeRatesService,
     lookup as unknown as ExternalLookupService,
     writes,
+    new McpSeriesTools(recurring as unknown as RecurringRulesService, lookup as unknown as ExternalLookupService),
   );
   const apiKey: RequestApiKey = { id: 'key-1', userId: 'user-1', groupId, scopes };
   const controller = new McpController(service);
@@ -144,7 +179,7 @@ function setup(scopes: ApiKeyScope[] = VIEW) {
   const toolNames = async () =>
     ((await call('tools/list')).message.result.tools as { name: string }[]).map((tool) => tool.name).sort();
 
-  return { call, callTool, toolNames, transactions, external, categories, accounts, budgets };
+  return { call, callTool, toolNames, transactions, external, categories, accounts, budgets, recurring };
 }
 
 describe('McpController', () => {
@@ -172,6 +207,7 @@ describe('McpController', () => {
       'get_budget',
       'list_accounts',
       'list_categories',
+      'list_series',
       'search_transactions',
       'summarize_by_category',
     ]);
@@ -258,10 +294,12 @@ describe('McpController', () => {
     it('are offered only for the scopes the key has', async () => {
       const { toolNames } = setup([...VIEW, 'transactions:create', 'budgets:update']);
       expect(await toolNames()).toEqual([
+        'add_series',
         'add_transaction',
         'get_budget',
         'list_accounts',
         'list_categories',
+        'list_series',
         'search_transactions',
         'set_budget',
         'summarize_by_category',
@@ -270,7 +308,7 @@ describe('McpController', () => {
 
     it("don't offer deleting an account without deleting its transactions", async () => {
       await expect(setup(['accounts:delete']).call('tools/list')).resolves.toMatchObject({ message: { error: expect.anything() } });
-      expect(await setup(['accounts:delete', 'transactions:delete']).toolNames()).toEqual(['delete_account', 'delete_transaction']);
+      expect(await setup(['accounts:delete', 'transactions:delete']).toolNames()).toEqual(['delete_account', 'delete_transaction', 'end_series']);
     });
 
     it('say they change things, and the instructions say so too', async () => {
@@ -399,6 +437,115 @@ describe('McpController', () => {
       budgets.list.mockResolvedValue([{ id: 'line-1', categoryId: food.id, accountId: null }]);
       await expect(callTool('set_budget', { month: '2026-11', category: 'Food', amount: 6000 })).resolves.toMatchObject({ isError: true });
       expect(budgets.update).not.toHaveBeenCalled();
+    });
+  });
+
+  describe('series tools', () => {
+    it('go by the transaction scopes', async () => {
+      expect(await setup(['transactions:read']).toolNames()).toEqual(['list_series', 'search_transactions', 'summarize_by_category']);
+      const all = await setup(['transactions:read', 'transactions:create', 'transactions:update', 'transactions:delete']).toolNames();
+      expect(all).toEqual(expect.arrayContaining(['add_series', 'update_series', 'end_series']));
+    });
+
+    it('list a series with its next payment and how often it comes', async () => {
+      const { callTool } = setup(['transactions:read']);
+      const { text } = await callTool('list_series', {});
+      expect(JSON.parse(text).series[0]).toEqual({
+        id: payday.id,
+        type: 'income',
+        amount: '50000.00',
+        currency: 'UAH',
+        account: 'Card',
+        category: 'Food',
+        note: 'Salary',
+        every: 1,
+        unit: 'month',
+        firstPayment: '2030-01-20T12:00+02:00',
+        nextPayment: '2030-01-20T12:00+02:00',
+      });
+    });
+
+    it('set one up from a day ahead, ending after so many payments', async () => {
+      const { callTool, recurring } = setup(['transactions:create']);
+      const { isError, text } = await callTool('add_series', {
+        type: 'expense',
+        amount: '30 000',
+        firstDate: '2030-11-20',
+        unit: 'month',
+        payments: 3,
+        account: 'Card',
+        note: 'Card payment',
+      });
+      expect(isError).toBe(false);
+      expect(recurring.create).toHaveBeenCalledWith(
+        'user-1',
+        groupId,
+        expect.objectContaining({
+          type: 'expense',
+          amount: '30000',
+          accountId: card.id,
+          intervalUnit: 'month',
+          intervalValue: 1,
+          // Noon in Kyiv.
+          startsAt: '2030-11-20T10:00:00.000Z',
+          // The third: November, December, January.
+          endsOn: '2031-01-20',
+          timezone: 'Europe/Kyiv',
+        }),
+      );
+      expect(JSON.parse(text).added).toMatchObject({ endsOn: '2031-01-20', every: 1, unit: 'month' });
+    });
+
+    it('only plan: a series starting now or before is refused', async () => {
+      const { callTool, recurring } = setup(['transactions:create']);
+      await expect(callTool('add_series', { type: 'expense', amount: 10, firstDate: '2026-10-01', unit: 'day' })).resolves.toMatchObject({
+        isError: true,
+      });
+      expect(recurring.create).not.toHaveBeenCalled();
+    });
+
+    it('work a percentage out from its base, and leave one of the balance at nothing for now', async () => {
+      const { callTool, recurring } = setup(['transactions:create']);
+      await callTool('add_series', { type: 'expense', percentage: 3.5, percentageOf: 10000, firstDate: '2030-11-01', unit: 'month' });
+      expect(recurring.create).toHaveBeenLastCalledWith(
+        'user-1',
+        groupId,
+        expect.objectContaining({ amount: '350.00', percentage: '3.5', percentageBase: '10000' }),
+      );
+      await callTool('add_series', { type: 'expense', percentage: '3.5', firstDate: '2030-11-01', unit: 'day' });
+      expect(recurring.create).toHaveBeenLastCalledWith('user-1', groupId, expect.objectContaining({ amount: '0', percentageBase: null }));
+    });
+
+    it('end a series on a day, or after so many more payments from the next', async () => {
+      const { callTool, recurring } = setup(['transactions:update']);
+      await callTool('update_series', { id: payday.id, endsOn: '2030-06-30' });
+      expect(recurring.update).toHaveBeenLastCalledWith('user-1', groupId, payday.id, { endsOn: '2030-06-30' });
+      await callTool('update_series', { id: payday.id, payments: 2 });
+      expect(recurring.update).toHaveBeenLastCalledWith('user-1', groupId, payday.id, { endsOn: '2030-02-20' });
+      await callTool('update_series', { id: payday.id, paused: true });
+      expect(recurring.update).toHaveBeenLastCalledWith('user-1', groupId, payday.id, { active: false });
+    });
+
+    it('refuse a typed amount on a series that works its amount out', async () => {
+      const { callTool, recurring } = setup(['transactions:update']);
+      recurring.get.mockResolvedValue({ rule: { ...payday, percentage: '3.5000' }, nextOccurrence: null });
+      await expect(callTool('update_series', { id: payday.id, amount: '3520' })).resolves.toMatchObject({ isError: true });
+      expect(recurring.update).not.toHaveBeenCalled();
+      // With percentage null the amount is fixed from then on.
+      await callTool('update_series', { id: payday.id, amount: '3520', percentage: null });
+      expect(recurring.update).toHaveBeenLastCalledWith(
+        'user-1',
+        groupId,
+        payday.id,
+        expect.objectContaining({ amount: '3520', percentage: null, percentageBase: null, roundBalanceTo: null }),
+      );
+    });
+
+    it('end one, keeping its planned payment when asked', async () => {
+      const { callTool, recurring } = setup(['transactions:delete']);
+      const { text } = await callTool('end_series', { id: payday.id, keepPlanned: true });
+      expect(recurring.remove).toHaveBeenCalledWith('user-1', groupId, payday.id, true);
+      expect(JSON.parse(text)).toMatchObject({ ended: { id: payday.id, nextPayment: null, ended: true }, keptPlanned: true });
     });
   });
 });

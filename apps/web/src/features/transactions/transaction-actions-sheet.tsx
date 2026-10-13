@@ -22,7 +22,7 @@ import { cn } from '@/lib/utils';
 import { useAmountSourceLabel } from './amount-source-label';
 import { filedUnder } from './filed-under';
 import type { RecurringRule, Transaction } from './queries';
-import { repeatOf, useRepeatLabel } from './repeat';
+import { repeatOf, useRepeatLabel, useUntilLabel } from './repeat';
 import { isAhead, isPlannedOccurrence } from './transaction-form-model';
 
 export type TransactionAction = 'edit' | 'date' | 'add-now' | 'skip' | 'duplicate' | 'delete';
@@ -77,6 +77,7 @@ export function TransactionActionsSheet({
   const { t, i18n } = useTranslation();
   const currencyCodes = useCurrencyCodes();
   const repeatLabel = useRepeatLabel();
+  const untilLabel = useUntilLabel();
   const amountSourceLabel = useAmountSourceLabel();
 
   // While a transaction is still to come, where it came from is part of what it is, so a series
@@ -163,6 +164,7 @@ export function TransactionActionsSheet({
                           <span className="truncate">{repeatLabel(repeatOf(rule))}</span>
                         </p>
                       )}
+                      {ahead && rule?.endsOn && <p className="truncate ps-4.5">{untilLabel(rule.endsOn)}</p>}
                       <p className="truncate">{account?.name ?? '—'}</p>
                       {/* The other side of a transfer gets its own line too, rather than two
                           half-readable names sharing one. */}

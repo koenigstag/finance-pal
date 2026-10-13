@@ -157,6 +157,8 @@ export const SERIES = table({
     { key: 'every', header: 'Every', type: 'integer', width: 7, aliases: ['interval'] },
     { key: 'start', header: 'Start', type: 'datetime', width: 17, aliases: ['startsat', 'startdate'] },
     { key: 'nextDate', header: 'Next date', type: 'datetime', width: 17, aliases: ['next'] },
+    // The last day a payment may fall on, as text: a date with no time to it, YYYY-MM-DD.
+    { key: 'ends', header: 'Ends', type: 'text', width: 11, aliases: ['endson', 'enddate', 'until'] },
     { key: 'timezone', header: 'Time zone', type: 'text', width: 16 },
     { key: 'active', header: 'Active', type: 'boolean', width: 8 },
     { key: 'remindDaysBefore', header: 'Remind days before', type: 'integer', width: 10, aliases: ['reminder'] },

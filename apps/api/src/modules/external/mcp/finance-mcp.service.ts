@@ -29,6 +29,7 @@ import {
   toolHandler,
   type McpContext,
 } from './mcp-tool';
+import { McpSeriesTools } from './mcp-series-tools';
 import { McpWriteTools } from './mcp-write-tools';
 
 /**
@@ -56,6 +57,7 @@ export class FinanceMcpService {
     private readonly rates: ExchangeRatesService,
     private readonly lookup: ExternalLookupService,
     private readonly writes: McpWriteTools,
+    private readonly seriesTools: McpSeriesTools,
   ) {}
 
   /** A server for one request: the transport is stateless, so each request gets its own. */
@@ -90,6 +92,7 @@ export class FinanceMcpService {
       this.addBudgetTools(server, context);
     }
     this.writes.register(server, context);
+    this.seriesTools.register(server, context);
     return server;
   }
 
@@ -309,6 +312,7 @@ function instructionsFor(context: McpContext): string {
     `Dates are read and given in ${timeZone} unless a call names another timeZone; today there is ${localDay(new Date(), timeZone)}.`,
     'Transactions dated after now are planned: scheduled, or the next of a repeating series. Balances and totals count what is dated up to now, unless they say otherwise.',
     "Some amounts are worked out by the app from the account balance, a percentage of it or a rounding (amountFrom); planned ones with followsBalance are recalculated whenever that balance changes, until their date, so they move on their own.",
+    'A repeating series keeps one planned payment at a time, its next; a transaction from one names it under series. list_series shows the series themselves, and their ends.',
     'Accounts and categories can be named by their name or their id.',
   ];
   if (apiKey.scopes.length === 0) {

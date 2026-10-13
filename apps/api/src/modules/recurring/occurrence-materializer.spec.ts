@@ -114,6 +114,7 @@ function monthlyRule(startsAt: string): RecurringRule {
     intervalValue: 1,
     startsAt: at(startsAt),
     nextRunDate: at(startsAt),
+    endsOn: null,
     timezone: 'UTC',
     active: true,
     createdBy: 'user',
@@ -436,5 +437,48 @@ describe('nextOccurrence', () => {
     const rule = monthlyRule('2027-01-10T12:00:00Z');
     rule.active = false;
     expect(nextOccurrence(rule, undefined, now)).toBeNull();
+  });
+});
+
+describe('a series with an end', () => {
+  it('writes nothing dated after its last day, and has no next date then', async () => {
+    const series = new FakeSeries();
+    const rule = { ...monthlyRule('2027-01-10T12:00:00Z'), endsOn: '2027-02-28' } as RecurringRule;
+
+    await materializeOccurrences(series.manager, rule, at('2027-03-15T00:00:00Z'), noRate);
+
+    expect(days(series.live())).toEqual(['2027-01-10', '2027-02-10']);
+    expect(nextOccurrence(rule, undefined, at('2027-03-15T00:00:00Z'))).toBeNull();
+  });
+
+  it('still makes the payment that falls on its last day', async () => {
+    const series = new FakeSeries();
+    const rule = { ...monthlyRule('2027-03-10T12:00:00Z'), endsOn: '2027-04-10' } as RecurringRule;
+
+    await materializeOccurrences(series.manager, rule, at('2027-03-15T00:00:00Z'), noRate);
+
+    expect(days(series.live())).toEqual(['2027-03-10', '2027-04-10']);
+  });
+
+  it('counts its last day in its own time zone', async () => {
+    const series = new FakeSeries();
+    // 22:30 UTC on the 10th is already 00:30 on the 11th in Kyiv (UTC+2 until late March): past an
+    // end on the 10th.
+    const rule = { ...monthlyRule('2027-03-10T22:30:00Z'), timezone: 'Europe/Kyiv', endsOn: '2027-03-10' } as RecurringRule;
+
+    await materializeOccurrences(series.manager, rule, at('2027-03-01T00:00:00Z'), noRate);
+
+    expect(days(series.live())).toEqual([]);
+  });
+
+  it('carries on when its end moves later', async () => {
+    const series = new FakeSeries();
+    const rule = { ...monthlyRule('2027-01-10T12:00:00Z'), endsOn: '2027-02-28' } as RecurringRule;
+    await materializeOccurrences(series.manager, rule, at('2027-03-15T00:00:00Z'), noRate);
+
+    rule.endsOn = '2027-12-31';
+    await regenerateOccurrences(series.manager, rule, at('2027-03-15T00:00:00Z'), noRate);
+
+    expect(days(series.live())).toEqual(['2027-01-10', '2027-02-10', '2027-04-10']);
   });
 });

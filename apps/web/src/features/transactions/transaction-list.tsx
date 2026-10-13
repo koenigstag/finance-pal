@@ -12,7 +12,7 @@ import { cn } from '@/lib/utils';
 import { useAmountSourceLabel } from './amount-source-label';
 import { filedUnder } from './filed-under';
 import type { RecurringRule, Transaction } from './queries';
-import { repeatOf, useRepeatLabel } from './repeat';
+import { repeatOf, useRepeatLabel, useUntilLabel } from './repeat';
 
 interface TransactionListProps {
   transactions: Transaction[];
@@ -117,11 +117,13 @@ function TransactionRow({ transaction, planned, accountsById, categoriesById, ru
   const { t, i18n } = useTranslation();
   const currencyCodes = useCurrencyCodes();
   const repeatLabel = useRepeatLabel();
+  const untilLabel = useUntilLabel();
   const amountSourceLabel = useAmountSourceLabel();
   // A planned occurrence stands for its series, so it says how often that repeats, on a line of
   // its own; another row still to come carries the mark by its name. Once one is recorded it says
   // nothing of the series: what happened happened, however it came about.
   const repeats = planned && rule ? repeatLabel(repeatOf(rule)) : null;
+  const until = planned && rule?.endsOn ? untilLabel(rule.endsOn) : null;
   // A percentage or a rounding, short: the account whose balance it's of is on the line above.
   const source = amountSourceLabel(transaction);
   const account = accountsById.get(transaction.accountId);
@@ -182,6 +184,7 @@ function TransactionRow({ transaction, planned, accountsById, categoriesById, ru
             <span className="truncate">{repeats}</span>
           </p>
         )}
+        {until && <p className="truncate ps-4.5 text-sm text-muted-foreground">{until}</p>}
       </div>
       <div className="text-right">
         <p

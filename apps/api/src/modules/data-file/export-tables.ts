@@ -68,8 +68,10 @@ export interface SnapshotSeries extends MoneyMovement {
   intervalUnit: RecurrenceUnit;
   intervalValue: number;
   startsAt: Date;
-  // The date it next produces a transaction; null while paused.
+  // The date it next produces a transaction; null while paused, and once past its end.
   nextOccurrence: Date | null;
+  // Its last day, YYYY-MM-DD; null for one that never ends.
+  endsOn: string | null;
   timezone: string;
   active: boolean;
   reminderDaysBefore: number | null;
@@ -186,6 +188,7 @@ export function exportTables(snapshot: GroupSnapshot, { timezone, now }: ExportO
         // In the series' own zone: "the 1st of every month" is the 1st there.
         start: wallClock(series.startsAt, series.timezone),
         nextDate: series.nextOccurrence ? wallClock(series.nextOccurrence, series.timezone) : null,
+        ends: series.endsOn,
         timezone: series.timezone,
         active: series.active,
         remindDaysBefore: series.reminderDaysBefore === null ? null : String(series.reminderDaysBefore),

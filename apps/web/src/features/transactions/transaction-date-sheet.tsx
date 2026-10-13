@@ -43,8 +43,8 @@ export function TransactionDateSheet({ groupId, transaction, rule, accounts, ope
   const planned = !!transaction && isPlannedDay(transaction.date);
   const series = planned ? rule : undefined;
   const value: DateChoice = series
-    ? { day: toDayInput(nextDateOf(series)), repeat: toRepeatKey(repeatOf(series)) }
-    : { day: transaction ? toDayInput(transaction.date) : '', repeat: '' };
+    ? { day: toDayInput(nextDateOf(series)), repeat: toRepeatKey(repeatOf(series)), endsOn: series.endsOn ?? '' }
+    : { day: transaction ? toDayInput(transaction.date) : '', repeat: '', endsOn: '' };
   // A one-off still to come can start repeating; an occurrence of a series that no longer runs
   // can't be taken over by a new one.
   const canStartSeries =
@@ -66,7 +66,10 @@ export function TransactionDateSheet({ groupId, transaction, rule, accounts, ope
       if (series) {
         const patch = schedulePatch(series, choice);
         const rescheduled =
-          patch.startsAt !== undefined || patch.intervalUnit !== series.intervalUnit || patch.intervalValue !== series.intervalValue;
+          patch.startsAt !== undefined ||
+          patch.intervalUnit !== series.intervalUnit ||
+          patch.intervalValue !== series.intervalValue ||
+          (patch.endsOn ?? null) !== series.endsOn;
         if (rescheduled) {
           await saveRule.mutateAsync({ ruleId: series.id, body: patch });
         }
@@ -98,6 +101,7 @@ export function TransactionDateSheet({ groupId, transaction, rule, accounts, ope
       canRepeat={!!series || canStartSeries}
       repeatBlocked={!series && acrossCurrencies ? t('transactions.errors.repeatCurrency') : undefined}
       currentRepeat={series ? repeatOf(series) : null}
+      anchorDay={series ? toDayInput(series.startsAt) : undefined}
       // A series moves on from today: its next date can't be in the past.
       minDay={series ? todayInput() : undefined}
       pending={pending}

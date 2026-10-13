@@ -31,6 +31,7 @@ import {
   removeFutureOccurrences,
 } from './occurrence-materializer';
 import { reworkRateEstimates } from './rate-estimates';
+import { localDayOf } from './recurrence-dates';
 import { ExchangeRatesService } from '../ledger/exchange-rates/exchange-rates.service';
 
 // The shared string unions, not api-database's TypeORM enums — see the identical comment on
@@ -50,6 +51,8 @@ export interface CreateRecurringRuleInput {
   intervalUnit: (typeof RECURRENCE_UNITS)[number];
   intervalValue?: number;
   startsAt: string;
+  // YYYY-MM-DD, the last day a payment may fall on; null never ends.
+  endsOn?: string | null;
   reminderDaysBefore?: number | null;
   timezone?: string;
   replacesTransactionId?: string;
@@ -99,8 +102,16 @@ function occurrencesAffected(before: RecurringRule, after: RecurringRule): boole
     before.intervalUnit !== after.intervalUnit ||
     before.intervalValue !== after.intervalValue ||
     before.startsAt.getTime() !== after.startsAt.getTime() ||
+    before.endsOn !== after.endsOn ||
     before.timezone !== after.timezone
   );
+}
+
+// A series can't end before its first payment: there would be nothing to it.
+function assertEndsAfterStart(rule: RecurringRule): void {
+  if (rule.endsOn !== null && rule.endsOn < localDayOf(rule.startsAt, rule.timezone)) {
+    throw new BadRequestException('A series can’t end before its first payment');
+  }
 }
 
 // A new schedule rather than a new template: the series starts afresh from it.
@@ -176,12 +187,14 @@ export class RecurringRulesService {
       intervalUnit: input.intervalUnit as RecurrenceUnit,
       intervalValue: input.intervalValue ?? 1,
       startsAt,
+      endsOn: input.endsOn ?? null,
       nextRunDate: startsAt,
       reminderDaysBefore: input.reminderDaysBefore ?? null,
       timezone: input.timezone ?? 'UTC',
       active: true,
       createdBy: userId,
     });
+    assertEndsAfterStart(rule);
     // Before the insert: the table's own check constraints and group trigger would reject bad
     // input too, but as a bare 500 instead of a 400/404. The category pair is stored the way the
     // validator settles it (a subcategory sent as the category lands under its parent).
@@ -223,10 +236,12 @@ export class RecurringRulesService {
       intervalUnit: (patch.intervalUnit as RecurrenceUnit | undefined) ?? before.intervalUnit,
       intervalValue: patch.intervalValue ?? before.intervalValue,
       startsAt: patch.startsAt !== undefined ? new Date(patch.startsAt) : before.startsAt,
+      endsOn: patch.endsOn !== undefined ? patch.endsOn : before.endsOn,
       reminderDaysBefore: patch.reminderDaysBefore !== undefined ? patch.reminderDaysBefore : before.reminderDaysBefore,
       timezone: patch.timezone ?? before.timezone,
       active: patch.active ?? before.active,
     });
+    assertEndsAfterStart(after);
     await this.settle(after, await this.validator.validate(groupId, shapeOf(after), { estimate: true }));
     await this.rules.save(after);
 

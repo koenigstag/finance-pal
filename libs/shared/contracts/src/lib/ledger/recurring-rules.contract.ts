@@ -13,6 +13,16 @@ const c = initContract();
 export const RECURRENCE_UNITS = ['day', 'week', 'month', 'year'] as const;
 export const recurrenceUnitSchema = z.enum(RECURRENCE_UNITS);
 
+// A series' last day, as a calendar date: what a payment's day is compared with, in its time zone.
+export const seriesEndSchema = z
+  .string()
+  .regex(/^\d{4}-\d{2}-\d{2}$/, 'endsOn must be YYYY-MM-DD')
+  // A day that exists: February 30th reads back as March 2nd, and is refused.
+  .refine((value) => {
+    const date = new Date(`${value}T00:00:00Z`);
+    return !Number.isNaN(date.getTime()) && date.toISOString().startsWith(value);
+  }, 'endsOn must be a date');
+
 export const recurringRuleSchema = z.object({
   id: z.string().uuid(),
   groupId: z.string().uuid(),
@@ -37,6 +47,9 @@ export const recurringRuleSchema = z.object({
   intervalValue: z.number().int(),
   // Anchor of the series: occurrence k = startsAt + k·interval.
   startsAt: z.string().datetime(),
+  // The last calendar day, in the series' time zone, a payment may fall on; null runs on until
+  // paused or deleted. A series past it produces nothing more, and its nextOccurrence is null.
+  endsOn: z.string().regex(/^\d{4}-\d{2}-\d{2}$/).nullable(),
   // First occurrence not yet materialized as a transaction — an implementation detail of the
   // scheduler, not "the next payment": that one is nextOccurrence.
   nextRunDate: z.string().datetime(),
@@ -69,6 +82,8 @@ const createRecurringRuleBodySchema = z.object({
   intervalUnit: recurrenceUnitSchema,
   intervalValue: z.number().int().min(1).optional(),
   startsAt: z.string().datetime(),
+  // YYYY-MM-DD: no payment after this day. Not before the start; null (or left out) never ends.
+  endsOn: seriesEndSchema.nullable().optional(),
   reminderDaysBefore: z.number().int().min(0).nullable().optional(),
   timezone: timezoneSchema.optional(),
   // A planned one-off transaction the series takes the place of, usually the one dated startsAt:

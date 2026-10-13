@@ -114,6 +114,11 @@ export class RecurringRule {
   @Column({ type: 'timestamptz', name: 'starts_at' })
   startsAt!: Date;
 
+  // the last calendar day, in the rule's zone, a payment may fall on; null runs on until paused.
+  // A date as Postgres keeps it, YYYY-MM-DD, never a moment.
+  @Column({ type: 'date', name: 'ends_on', nullable: true })
+  endsOn!: string | null;
+
   // first occurrence not yet materialized as a transaction (the scheduler's frontier)
   @Column({ type: 'timestamptz', name: 'next_run_date' })
   nextRunDate!: Date;

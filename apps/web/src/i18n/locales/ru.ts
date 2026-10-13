@@ -297,8 +297,22 @@ export const ru: Catalog<typeof en> = {
     percentageSeriesOnTheDay: 'Пересчитывается в день каждой операции',
     note: 'Заметка',
     recurring: 'Повторяющаяся',
+    ends: {
+      label: 'Окончание',
+      never: 'Никогда',
+      onDate: 'В дату',
+      afterCount: 'После N раз',
+      payments_one: '{{count}} платёж',
+      payments_few: '{{count}} платежа',
+      payments_many: '{{count}} платежей',
+      payments_other: '{{count}} платежа',
+      fewer: 'На платёж меньше',
+      more: 'На платёж больше',
+      lastPayment: 'Последний платёж: {{date}}',
+    },
     repeat: {
       label: 'Повтор',
+      until: 'До {{date}}',
       never: 'Не повторять',
       every: {
         day: 'Каждый день',

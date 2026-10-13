@@ -76,6 +76,8 @@ export interface TransactionFormValues {
   note: string;
   // How often it repeats, as toRepeatKey writes it; '' for a one-off transaction.
   repeat: string;
+  // A series' last day, yyyy-MM-dd; '' for one that never ends.
+  endsOn: string;
 }
 
 // The figures the Amount sheet edits, and the sides that decide which of them a transaction needs.
@@ -216,6 +218,7 @@ export function transactionFormSchema(
       roundBalanceTo: z.string(),
       note: z.string().max(1000),
       repeat: z.string(),
+      endsOn: z.string(),
     })
     .superRefine((values, ctx) => {
       const { seriesNextDay, today = todayInput(), conversionOf, categories = [] } = context;
@@ -290,6 +293,7 @@ export function defaultTransactionFormValues(defaults: {
     roundBalanceTo: '',
     note: '',
     repeat: '',
+    endsOn: '',
   };
 }
 
@@ -310,6 +314,7 @@ export function transactionToFormValues(transaction: Transaction): TransactionFo
     roundBalanceTo: transaction.roundBalanceTo ? String(transaction.roundBalanceTo) : '',
     note: transaction.note ?? '',
     repeat: '',
+    endsOn: '',
   };
 }
 
@@ -373,6 +378,7 @@ export function ruleToFormValues(rule: RecurringRule): TransactionFormValues {
     roundBalanceTo: rule.roundBalanceTo ? String(rule.roundBalanceTo) : '',
     note: rule.note ?? '',
     repeat: toRepeatKey(repeatOf(rule)),
+    endsOn: rule.endsOn ?? '',
   };
 }
 
@@ -444,6 +450,7 @@ export function toRecurringRuleBody(
     intervalValue: repeat.value,
     // A planned transaction keeps its time of day when it stays on its day.
     startsAt: seriesStartFromDayInput(values.day, replaces?.date, now),
+    endsOn: values.endsOn || null,
     timezone,
     ...(replaces ? { replacesTransactionId: replaces.id } : {}),
   };
@@ -467,11 +474,11 @@ export function toRecurringRulePatch(
  * A series' schedule after a new next date or repeat. Its start is only sent when either changed:
  * the series then starts afresh from that date, which becomes its first occurrence, so "every
  * month" from a new next date keeps to that date's day. No repeat ('') keeps the series' own: how
- * a series stops is up to the caller.
+ * a series stops is up to the caller. Its end goes as chosen, null for none.
  */
 export function schedulePatch(
   rule: RecurringRule,
-  choice: Pick<TransactionFormValues, 'day' | 'repeat'>,
+  choice: Pick<TransactionFormValues, 'day' | 'repeat' | 'endsOn'>,
   now = new Date(),
   timezone = deviceTimezone(),
 ): RecurringRulePatch {
@@ -480,6 +487,7 @@ export function schedulePatch(
   return {
     intervalUnit: repeat.unit,
     intervalValue: repeat.value,
+    endsOn: choice.endsOn || null,
     ...(rescheduled ? { startsAt: seriesStartFromDayInput(choice.day, nextDateOf(rule), now), timezone } : {}),
   };
 }
@@ -487,7 +495,7 @@ export function schedulePatch(
 /** A planned one-off transaction as the series that takes its place, repeating as chosen. */
 export function plannedToRecurringRuleBody(
   transaction: Transaction,
-  choice: Pick<TransactionFormValues, 'day' | 'repeat'>,
+  choice: Pick<TransactionFormValues, 'day' | 'repeat' | 'endsOn'>,
   now = new Date(),
   timezone = deviceTimezone(),
 ): RecurringRuleBody {
@@ -510,6 +518,7 @@ export function plannedToRecurringRuleBody(
     intervalUnit: repeat.unit,
     intervalValue: repeat.value,
     startsAt: seriesStartFromDayInput(choice.day, transaction.date, now),
+    endsOn: choice.endsOn || null,
     timezone,
     replacesTransactionId: transaction.id,
   };
